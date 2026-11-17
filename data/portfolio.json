@@ -1,0 +1,167 @@
+{
+  "auth": {
+    "passwordHash": "a0a3ba07967f310e5bfef09a2d755ed5b84d7a4685d524cf15eb0fb292442765",
+    "requireAuth": false
+  },
+  "settings": {
+    "primaryCurrency": "UAH",
+    "manualFxOverride": false,
+    "fxRates": {
+      "USD_UAH": 41.65,
+      "EUR_UAH": 44.8
+    },
+    "depositTaxDefault": true,
+    "depositTaxRate": 23
+  },
+  "positions": [
+    {
+      "id": "crypto-btc-1",
+      "category": "crypto",
+      "ticker": "BTC",
+      "name": "Bitcoin",
+      "quantity": 0.125,
+      "buyPriceUsd": 64200,
+      "platform": "Ledger Nano X",
+      "notes": "Довгостроковий холодний гаманець",
+      "createdAt": "2025-11-10"
+    },
+    {
+      "id": "crypto-eth-2",
+      "category": "crypto",
+      "ticker": "ETH",
+      "name": "Ethereum",
+      "quantity": 1.5,
+      "buyPriceUsd": 2580,
+      "platform": "Binance",
+      "notes": "Стейкінг ETH",
+      "createdAt": "2026-01-15"
+    },
+    {
+      "id": "crypto-sol-3",
+      "category": "crypto",
+      "ticker": "SOL",
+      "name": "Solana",
+      "quantity": 18,
+      "buyPriceUsd": 148.5,
+      "platform": "Phantom",
+      "notes": "Ліквідний стейкінг",
+      "createdAt": "2026-03-04"
+    },
+    {
+      "id": "stock-voo-1",
+      "category": "stocks",
+      "ticker": "VOO",
+      "name": "Vanguard S&P 500 ETF",
+      "quantity": 12,
+      "buyPriceUsd": 472,
+      "platform": "Interactive Brokers",
+      "notes": "Базовий індексний фонд США",
+      "createdAt": "2025-09-20"
+    },
+    {
+      "id": "stock-nvda-2",
+      "category": "stocks",
+      "ticker": "NVDA",
+      "name": "NVIDIA Corp.",
+      "quantity": 20,
+      "buyPriceUsd": 108.5,
+      "platform": "Interactive Brokers",
+      "notes": "AI та напівпровідники",
+      "createdAt": "2026-02-12"
+    },
+    {
+      "id": "stock-vwce-3",
+      "category": "stocks",
+      "ticker": "VWCE",
+      "name": "Vanguard FTSE All-World UCITS",
+      "quantity": 25,
+      "buyPriceUsd": 124,
+      "platform": "Freedom24",
+      "notes": "Глобальний акумулюючий ETF (0% податку на дивіденди всередині фонду)",
+      "createdAt": "2026-01-08"
+    },
+    {
+      "id": "ovdp-uah-1",
+      "category": "ovdp",
+      "name": "Військові ОВДП «Симиренка» (UA4000231195)",
+      "currency": "UAH",
+      "bondsCount": 150,
+      "faceValue": 1000,
+      "principalAmount": 150000,
+      "annualRate": 16.25,
+      "startDate": "2026-02-01",
+      "maturityDate": "2027-06-16",
+      "platform": "Дія / ICU",
+      "notes": "0% податків (без ПДФО та військового збору), виплата кожні півроку"
+    },
+    {
+      "id": "ovdp-usd-2",
+      "category": "ovdp",
+      "name": "Валютні ОВДП у USD (UA4000229843)",
+      "currency": "USD",
+      "bondsCount": 4,
+      "faceValue": 1000,
+      "principalAmount": 4000,
+      "annualRate": 4.66,
+      "startDate": "2026-03-15",
+      "maturityDate": "2027-04-15",
+      "platform": "Монобанк",
+      "notes": "Валютний захист без оподаткування"
+    },
+    {
+      "id": "dep-mono-1",
+      "category": "deposits",
+      "name": "Строковий депозит (Монобанк)",
+      "bank": "Монобанк",
+      "currency": "UAH",
+      "principalAmount": 85000,
+      "annualRate": 14.5,
+      "applyTax": true,
+      "taxRate": 23,
+      "startDate": "2026-05-10",
+      "endDate": "2027-05-10",
+      "notes": "Без права дострокового розірвання, виплата щомісяця"
+    },
+    {
+      "id": "dep-pumb-2",
+      "category": "deposits",
+      "name": "Валютний депозит «Дохідний»",
+      "bank": "ПУМБ",
+      "currency": "USD",
+      "principalAmount": 2500,
+      "annualRate": 2.5,
+      "applyTax": true,
+      "taxRate": 23,
+      "startDate": "2026-04-01",
+      "endDate": "2026-12-31",
+      "notes": "Резерв у доларі на банківському рахунку"
+    },
+    {
+      "id": "cash-usd-1",
+      "category": "cash",
+      "name": "Готівковий резерв вдома (USD)",
+      "location": "Сейф / Готівка",
+      "currency": "USD",
+      "amount": 3500,
+      "notes": "Фінансова подушка безпеки (недоторканний запас)"
+    },
+    {
+      "id": "cash-uah-2",
+      "category": "cash",
+      "name": "Банка та поточна картка (UAH)",
+      "location": "Монобанк / ПриватБанк",
+      "currency": "UAH",
+      "amount": 42000,
+      "notes": "Оперативні кошти на поточні витрати"
+    },
+    {
+      "id": "cash-eur-3",
+      "category": "cash",
+      "name": "Готівка та рахунок Wise (EUR)",
+      "location": "Wise / Готівка",
+      "currency": "EUR",
+      "amount": 1200,
+      "notes": "Євровий резерв для поїздок"
+    }
+  ]
+}

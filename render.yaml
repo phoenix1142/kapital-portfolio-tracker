@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: kapital-portfolio-tracker
+    runtime: node
+    plan: free
+    buildCommand: echo "No external build dependencies required"
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORTFOLIO_PASSWORD
+        generateValue: true

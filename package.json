@@ -1,0 +1,14 @@
+{
+  "name": "kapital-portfolio-tracker",
+  "version": "1.0.0",
+  "description": "Персональний трекер інвестиційного портфеля (Крипто, Фондовий ринок, ОВДП, Депозити, Готівка) з автооновленням цін та мультивалютним обліком (UAH / USD)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}
