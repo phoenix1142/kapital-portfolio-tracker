@@ -44,11 +44,25 @@
   const QUICK_CRYPTO = ['BTC', 'ETH', 'SOL', 'USDT', 'TON', 'BNB', 'XRP', 'ADA', 'SUI', 'DOGE', 'LINK', 'AVAX'];
   const QUICK_STOCKS = ['VOO', 'SPY', 'VWCE', 'CSP1', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'GLD'];
 
+  function safeGetItem(key) {
+    try {
+      return window.localStorage ? window.localStorage.getItem(key) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function safeSetItem(key, val) {
+    try {
+      if (window.localStorage) window.localStorage.setItem(key, val);
+    } catch (_) {}
+  }
+
   const state = {
     activeCategory: 'all',
     primaryCurrency: 'UAH',
     searchQuery: '',
-    token: localStorage.getItem('kapital_auth_token') || '',
+    token: safeGetItem('kapital_auth_token') || '',
     settings: {
       primaryCurrency: 'UAH',
       manualFxOverride: false,
@@ -1298,7 +1312,7 @@
       });
       if (authRes.token) {
         state.token = authRes.token;
-        localStorage.setItem('kapital_auth_token', authRes.token);
+        safeSetItem('kapital_auth_token', authRes.token);
       }
       state.auth.requireAuth = requireAuth;
     } catch (_) {}
@@ -1318,10 +1332,10 @@
       const html = document.documentElement;
       const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
       html.setAttribute('data-theme', next);
-      localStorage.setItem('kapital_theme', next);
+      safeSetItem('kapital_theme', next);
     });
 
-    const savedTheme = localStorage.getItem('kapital_theme');
+    const savedTheme = safeGetItem('kapital_theme');
     if (savedTheme) {
       document.documentElement.setAttribute('data-theme', savedTheme);
     }
@@ -1364,6 +1378,7 @@
     // Settings & FX Modal
     document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
     document.getElementById('btn-edit-fx').addEventListener('click', openSettingsModal);
+    document.getElementById('btn-close-settings-modal').addEventListener('click', closePositionModal);
     document.getElementById('btn-close-settings-modal').addEventListener('click', closeSettingsModal);
     document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
     document.getElementById('form-settings').addEventListener('submit', handleSaveSettings);
@@ -1453,7 +1468,7 @@
         const data = await res.json();
         if (res.ok && data.token) {
           state.token = data.token;
-          localStorage.setItem('kapital_auth_token', data.token);
+          safeSetItem('kapital_auth_token', data.token);
           document.getElementById('modal-login').classList.remove('open');
           loadPortfolioFromServer();
         } else {
@@ -1465,6 +1480,25 @@
     });
   }
 
+  // Render initial state immediately so the UI is never blank while server/Drive loads
+  const initialCached = safeGetItem('kapital_backup_state');
+  if (initialCached) {
+    try {
+      const parsed = JSON.parse(initialCached);
+      if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
+      if (Array.isArray(parsed.positions) && parsed.positions.length > 0) {
+        state.positions = parsed.positions;
+      } else {
+        state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+      }
+    } catch (_) {
+      state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+    }
+  } else {
+    state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+  }
+
   initEvents();
+  renderAll();
   loadPortfolioFromServer();
 })();

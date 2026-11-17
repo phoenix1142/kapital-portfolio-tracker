@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="uk" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>КАПІТАЛ — Персональний трекер інвестиційного портфеля (UAH / USD)</title>
+  <meta name="description" content="Персональний трекер інвестицій: Криптовалюта, Фондовий ринок, ОВДП, Депозити та Готівка. Автоматичні котирування та облік у гривні (₴) і доларах ($)." />
+  <link rel="stylesheet" href="./index.css" />
+</head>
+<body>
+  <div class="app-shell" id="app-shell">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" aria-label="Категорії портфеля">
+      <div class="brand-header">
+        <a href="#all" class="brand-logo" id="brand-home-link">
+          <div class="brand-mark">К</div>
+          <div>
+            <div class="brand-title">КАПІТАЛ</div>
+            <span class="brand-subtitle">Трекер інвестицій</span>
+          </div>
+        </a>
+        <button type="button" class="btn btn-ghost" id="btn-theme-toggle" title="Змінити тему (Темна / Світла)" aria-label="Перемкнути тему">
+          ◐
+        </button>
+      </div>
+
+      <div class="nav-section-label">Огляд та активи</div>
+      <ul class="nav-list" id="sidebar-nav-list">
+        <li>
+          <button type="button" class="nav-btn active" data-category="all" id="nav-cat-all">
+            <span class="nav-btn-left">
+              <span class="cat-dot" style="background: var(--accent-primary)"></span>
+              <span>Загальна картина</span>
+            </span>
+            <span class="nav-badge" id="badge-count-all">0</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-btn" data-category="crypto" id="nav-cat-crypto">
+            <span class="nav-btn-left">
+              <span class="cat-dot" style="background: var(--cat-crypto)"></span>
+              <span>Криптовалюта</span>
+            </span>
+            <span class="nav-badge" id="badge-count-crypto">0</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-btn" data-category="stocks" id="nav-cat-stocks">
+            <span class="nav-btn-left">
+              <span class="cat-dot" style="background: var(--cat-stocks)"></span>
+              <span>Фондовий ринок</span>
+            </span>
+            <span class="nav-badge" id="badge-count-stocks">0</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-btn" data-category="ovdp" id="nav-cat-ovdp">
+            <span class="nav-btn-left">
+              <span class="cat-dot" style="background: var(--cat-ovdp)"></span>
+              <span>ОВДП (Облігації)</span>
+            </span>
+            <span class="nav-badge" id="badge-count-ovdp">0</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-btn" data-category="deposits" id="nav-cat-deposits">
+            <span class="nav-btn-left">
+              <span class="cat-dot" style="background: var(--cat-deposits)"></span>
+              <span>Депозити</span>
+            </span>
+            <span class="nav-badge" id="badge-count-deposits">0</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-btn" data-category="cash" id="nav-cat-cash">
+            <span class="nav-btn-left">
+              <span class="cat-dot" style="background: var(--cat-cash)"></span>
+              <span>Готівка та рахунки</span>
+            </span>
+            <span class="nav-badge" id="badge-count-cash">0</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="fx-Rate-box" id="sidebar-fx-box">
+          <div class="fx-rate-header">
+            <span>Курс валют</span>
+            <button type="button" class="btn-ghost" id="btn-edit-fx" style="font-size:11px; padding:1px 5px; border-radius:4px;">Змінити</button>
+          </div>
+          <div class="fx-rate-row tabular">
+            <span>🇺🇸 USD / UAH</span>
+            <span id="fx-usd-uah">41.65 ₴</span>
+          </div>
+          <div class="fx-rate-row tabular">
+            <span>🇪🇺 EUR / UAH</span>
+            <span id="fx-eur-uah">44.80 ₴</span>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-secondary" id="btn-open-settings" style="width:100%;">
+          ⚙ Налаштування та Пароль
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="main-area">
+      <!-- Sticky Topbar -->
+      <header class="topbar">
+        <div class="topbar-title-group">
+          <h1 id="page-main-heading">Загальна картина портфеля</h1>
+          <div class="topbar-subtitle">
+            <span class="live-pulse" id="quote-status-dot"></span>
+            <span id="quote-status-text">Котирування активів оновлено автоматично</span>
+          </div>
+        </div>
+
+        <div class="topbar-controls">
+          <div class="segmented-control" role="group" aria-label="Пріоритетна валюта відображення">
+            <button type="button" class="seg-btn active" data-currency="UAH" id="btn-curr-uah">₴ UAH + $ USD</button>
+            <button type="button" class="seg-btn" data-currency="USD" id="btn-curr-usd">$ USD + ₴ UAH</button>
+          </div>
+
+          <button type="button" class="btn btn-secondary" id="btn-refresh-quotes" title="Оновити ринкові ціни крипти, акцій та курсу валют">
+            ↻ Оновити ціни
+          </button>
+
+          <button type="button" class="btn btn-primary" id="btn-add-position">
+            + Додати актив
+          </button>
+        </div>
+      </header>
+
+      <div class="page-content">
+        <!-- Hero Dual-Currency Summary Strip -->
+        <section class="wealth-hero" aria-label="Підсумок капіталу">
+          <div class="wealth-primary-block">
+            <div class="metric-eyebrow">
+              <span id="hero-scope-label">Сукупний капітал (Усі активи)</span>
+            </div>
+            <div class="wealth-dual-values">
+              <div class="wealth-main-amount" id="hero-primary-total">0 ₴</div>
+              <div class="wealth-secondary-amount" id="hero-secondary-total">$0.00</div>
+            </div>
+            <div class="wealth-stat-sub" id="hero-fx-caption">
+              Перераховано за курсом 1$ = 41.65 ₴ · 1€ = 44.80 ₴
+            </div>
+          </div>
+
+          <div class="wealth-stat-block">
+            <div class="metric-eyebrow">Сукупний прибуток (PnL + Нараховані %)</div>
+            <div class="wealth-stat-value" id="hero-pnl-primary">+0 ₴</div>
+            <div class="wealth-stat-sub">
+              <span id="hero-pnl-secondary">+$0.00</span>
+              <span class="pill-badge pill-positive" id="hero-pnl-pct">+0.00%</span>
+            </div>
+          </div>
+
+          <div class="wealth-stat-block">
+            <div class="metric-eyebrow">Пасивний дохід (ОВДП + Депозити)</div>
+            <div class="wealth-stat-value" id="hero-yield-accrued">+0 ₴</div>
+            <div class="wealth-stat-sub">
+              <span id="hero-yield-sub">Накопичено на сьогодні · Прогноз за рік: <strong id="hero-annual-passive">0 ₴</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Overview Breakdown Section (Shown on 'all' view) -->
+        <section class="overview-grid" id="overview-breakdown-section" aria-label="Структура портфеля">
+          <div class="panel-card">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Розподіл за категоріями активів</div>
+                <div class="panel-subtitle">Натисніть на категорію для детального перегляду та керування</div>
+              </div>
+            </div>
+            <div class="allocation-bar-track" id="allocation-stacked-bar"></div>
+            <div class="allocation-list" id="allocation-cards-grid"></div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Валютна структура капіталу</div>
+                <div class="panel-subtitle">Фактична валюта активів (крипта та акції США = USD)</div>
+              </div>
+            </div>
+            <div class="currency-bars" id="currency-exposure-list"></div>
+          </div>
+        </section>
+
+        <!-- Positions Table Panel -->
+        <section class="panel-card" aria-label="Список активів">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title" id="table-section-title">Усі активи портфеля</div>
+              <div class="panel-subtitle" id="table-section-subtitle">Автоматичний розрахунок поточної вартості в ₴ UAH та $ USD</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input
+                type="search"
+                id="input-search-positions"
+                class="form-input"
+                placeholder="Пошук за назвою або тікером..."
+                style="width:230px; padding:6px 11px; font-size:12.5px;"
+              />
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="positions-table" id="positions-table">
+              <thead id="positions-table-head"></thead>
+              <tbody id="positions-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Mobile Bottom Bar -->
+    <nav class="mobile-nav" aria-label="Мобільна навігація">
+      <button type="button" class="mobile-nav-btn active" data-category="all" id="mob-cat-all">Всі</button>
+      <button type="button" class="mobile-nav-btn" data-category="crypto" id="mob-cat-crypto">Крипта</button>
+      <button type="button" class="mobile-nav-btn" data-category="stocks" id="mob-cat-stocks">Акції</button>
+      <button type="button" class="mobile-nav-btn" data-category="ovdp" id="mob-cat-ovdp">ОВДП</button>
+      <button type="button" class="mobile-nav-btn" data-category="deposits" id="mob-cat-deposits">Депозит</button>
+      <button type="button" class="mobile-nav-btn" data-category="cash" id="mob-cat-cash">Готівка</button>
+    </nav>
+  </div>
+
+  <!-- Add / Edit Position Modal -->
+  <div class="modal-backdrop" id="modal-position" role="dialog" aria-modal="true" aria-labelledby="modal-position-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-position-title">Додати інвестиційний актив</h2>
+        <button type="button" class="btn btn-ghost" id="btn-close-position-modal">✕</button>
+      </div>
+
+      <form id="form-position">
+        <input type="hidden" id="pos-id" value="" />
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label class="form-label" for="pos-category">Категорія інвестиції</label>
+            <select class="form-select" id="pos-category" required>
+              <option value="crypto">Криптовалюта (Автопідтягування ціни)</option>
+              <option value="stocks">Фондовий ринок — Акції та ETF (Автопідтягування ціни)</option>
+              <option value="ovdp">ОВДП — Військові та держоблігації (Авторозрахунок % доходу)</option>
+              <option value="deposits">Банківський депозит (Авторозрахунок % доходу)</option>
+              <option value="cash">Готівка / Картковий рахунок</option>
+            </select>
+          </div>
+
+          <div id="dynamic-form-fields" class="form-grid full-width" style="grid-column: 1 / -1;"></div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-position">Скасувати</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-position">Зберегти актив</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Settings, FX & Password Auth Modal -->
+  <div class="modal-backdrop" id="modal-settings" role="dialog" aria-modal="true" aria-labelledby="modal-settings-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-settings-title">Налаштування, Курси валют та Безпека</h2>
+        <button type="button" class="btn btn-ghost" id="btn-close-settings-modal">✕</button>
+      </div>
+
+      <form id="form-settings">
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label class="form-label">
+              <input type="checkbox" id="set-manual-fx" />
+              Використовувати власний фіксований курс валют (замість автокурсу НБУ)
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="set-usd-uah">Курс USD → UAH (₴ за 1$)</label>
+            <input type="number" step="0.01" min="1" class="form-input tabular" id="set-usd-uah" required />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="set-eur-uah">Курс EUR → UAH (₴ за 1€)</label>
+            <input type="number" step="0.01" min="1" class="form-input tabular" id="set-eur-uah" required />
+          </div>
+
+          <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
+            <label class="form-label">
+              <input type="checkbox" id="set-require-auth" />
+              Запитувати пароль при відкритті сайту в інтернеті
+            </label>
+          </div>
+
+          <div class="form-group full-width">
+            <label class="form-label" for="set-new-password">Новий пароль власника (за замовчуванням: admin123)</label>
+            <input type="password" class="form-input" id="set-new-password" placeholder="Залиште порожнім, щоб не змінювати" />
+          </div>
+
+          <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
+            <div class="form-label">Резервне копіювання та дані портфеля</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+              <button type="button" class="btn btn-secondary" id="btn-export-json">⬇ Експорт JSON</button>
+              <button type="button" class="btn btn-secondary" id="btn-import-json">⬆ Імпорт JSON</button>
+              <input type="file" id="input-import-json-file" accept=".json,application/json" style="display:none;" />
+              <button type="button" class="btn btn-secondary" id="btn-reset-demo">Відновити приклади активів</button>
+              <button type="button" class="btn btn-danger" id="btn-clear-all-data">Очистити всі позиції</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-settings">Закрити</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-settings">Зберегти налаштування</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Login Lock Screen Modal (When requireAuth is enabled) -->
+  <div class="modal-backdrop" id="modal-login" role="dialog" aria-modal="true" aria-labelledby="modal-login-title">
+    <div class="modal-dialog" style="max-width: 400px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-login-title">🔒 Вхід до персонального портфеля</h2>
+      </div>
+      <form id="form-login">
+        <div class="form-group">
+          <label class="form-label" for="login-password">Введіть пароль власника</label>
+          <input type="password" class="form-input" id="login-password" placeholder="Пароль (напр. admin123)" required />
+          <div id="login-error-msg" style="color: var(--negative); font-size: 12px; display:none;">Невірний пароль</div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary" style="width:100%;">Увійти</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

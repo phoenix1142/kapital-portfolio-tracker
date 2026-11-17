@@ -1,0 +1,1504 @@
+/* КАПІТАЛ — Персональний трекер інвестиційного портфеля */
+(function () {
+  'use strict';
+
+  const CATEGORY_META = {
+    all: {
+      title: 'Загальна картина портфеля',
+      subtitle: 'Усі активи з автоматичним перерахунком у Гривню (₴) та Долар США ($)',
+      color: 'var(--accent-primary)',
+      shortName: 'Усі активи'
+    },
+    crypto: {
+      title: 'Криптовалютні активи',
+      subtitle: 'Автоматичне підтягування котирувань (Binance / CoinGecko) та розрахунок PnL',
+      color: 'var(--cat-crypto)',
+      shortName: 'Криптовалюта'
+    },
+    stocks: {
+      title: 'Фондовий ринок (Акції та ETF)',
+      subtitle: 'Автоматичне підтягування ринкових цін акцій США та світових ETF',
+      color: 'var(--cat-stocks)',
+      shortName: 'Фондовий ринок'
+    },
+    ovdp: {
+      title: 'ОВДП (Державні та військові облігації)',
+      subtitle: 'Автоматичний розрахунок накопиченого доходу за річною ставкою (0% податків)',
+      color: 'var(--cat-ovdp)',
+      shortName: 'ОВДП'
+    },
+    deposits: {
+      title: 'Банківські депозити',
+      subtitle: 'Автоматичний підрахунок нарахованих відсотків з урахуванням податку або чистої ставки',
+      color: 'var(--cat-deposits)',
+      shortName: 'Депозити'
+    },
+    cash: {
+      title: 'Готівка та поточні рахунки',
+      subtitle: 'Облік готівкових заощаджень, сейфу та банківських карток у різних валютах',
+      color: 'var(--cat-cash)',
+      shortName: 'Готівка'
+    }
+  };
+
+  const QUICK_CRYPTO = ['BTC', 'ETH', 'SOL', 'USDT', 'TON', 'BNB', 'XRP', 'ADA', 'SUI', 'DOGE', 'LINK', 'AVAX'];
+  const QUICK_STOCKS = ['VOO', 'SPY', 'VWCE', 'CSP1', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'GLD'];
+
+  function safeGetItem(key) {
+    try {
+      return window.localStorage ? window.localStorage.getItem(key) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function safeSetItem(key, val) {
+    try {
+      if (window.localStorage) window.localStorage.setItem(key, val);
+    } catch (_) {}
+  }
+
+  const state = {
+    activeCategory: 'all',
+    primaryCurrency: 'UAH',
+    searchQuery: '',
+    token: safeGetItem('kapital_auth_token') || '',
+    settings: {
+      primaryCurrency: 'UAH',
+      manualFxOverride: false,
+      fxRates: {
+        USD_UAH: 41.65,
+        EUR_UAH: 44.80
+      },
+      depositTaxDefault: true,
+      depositTaxRate: 23.0
+    },
+    auth: {
+      requireAuth: false
+    },
+    quotes: {
+      fx: {
+        USD_UAH: 41.65,
+        EUR_UAH: 44.80,
+        GBP_UAH: 52.80,
+        PLN_UAH: 10.35,
+        updatedAt: new Date().toISOString(),
+        source: 'Автокотирування'
+      },
+      crypto: {},
+      stocks: {}
+    },
+    positions: []
+  };
+
+  // Formatters
+  function fmtUah(val, showSign = false) {
+    const num = Number(val) || 0;
+    const sign = showSign && num > 0 ? '+' : '';
+    return sign + new Intl.NumberFormat('uk-UA', {
+      minimumFractionDigits: Math.abs(num) < 100 ? 2 : 0,
+      maximumFractionDigits: Math.abs(num) < 100 ? 2 : 0
+    }).format(num) + ' ₴';
+  }
+
+  function fmtUsd(val, showSign = false) {
+    const num = Number(val) || 0;
+    const sign = showSign && num > 0 ? '+' : (num < 0 ? '-' : '');
+    const abs = Math.abs(num);
+    const decimals = abs > 0 && abs < 1 ? 4 : 2;
+    return sign + '$' + new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    }).format(abs);
+  }
+
+  function fmtCurr(val, currency = 'UAH') {
+    const num = Number(val) || 0;
+    if (currency === 'UAH') return fmtUah(num);
+    if (currency === 'USD') return fmtUsd(num);
+    const symbols = { EUR: '€', GBP: '£', PLN: 'zł' };
+    const sym = symbols[currency] || currency + ' ';
+    return sym + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+  }
+
+  function fmtPct(val, showSign = true) {
+    const num = Number(val) || 0;
+    const sign = showSign && num > 0 ? '+' : '';
+    return sign + num.toFixed(2) + '%';
+  }
+
+  // Exchange rate conversions
+  function getEffectiveRates() {
+    const usdUah = state.settings.manualFxOverride
+      ? (Number(state.settings.fxRates?.USD_UAH) || 41.65)
+      : (Number(state.quotes.fx?.USD_UAH) || 41.65);
+    const eurUah = state.settings.manualFxOverride
+      ? (Number(state.settings.fxRates?.EUR_UAH) || 44.80)
+      : (Number(state.quotes.fx?.EUR_UAH) || 44.80);
+    const gbpUah = Number(state.quotes.fx?.GBP_UAH) || (usdUah * 1.27);
+    const plnUah = Number(state.quotes.fx?.PLN_UAH) || (usdUah * 0.25);
+
+    return { USD_UAH: usdUah, EUR_UAH: eurUah, GBP_UAH: gbpUah, PLN_UAH: plnUah };
+  }
+
+  function toUah(amount, currency) {
+    const rates = getEffectiveRates();
+    const val = Number(amount) || 0;
+    switch ((currency || 'UAH').toUpperCase()) {
+      case 'UAH': return val;
+      case 'USD': return val * rates.USD_UAH;
+      case 'EUR': return val * rates.EUR_UAH;
+      case 'GBP': return val * rates.GBP_UAH;
+      case 'PLN': return val * rates.PLN_UAH;
+      default: return val;
+    }
+  }
+
+  function toUsd(amount, currency) {
+    const rates = getEffectiveRates();
+    const uah = toUah(amount, currency);
+    return rates.USD_UAH > 0 ? uah / rates.USD_UAH : 0;
+  }
+
+  // Date helpers for OVDP and Deposits yield calculation
+  function computeFixedIncomeStats(startDateStr, endDateStr, principal, annualRatePct, taxPct = 0) {
+    const now = new Date();
+    const start = startDateStr ? new Date(startDateStr) : new Date(now.getFullYear(), 0, 1);
+    const end = endDateStr ? new Date(endDateStr) : new Date(now.getFullYear() + 1, 0, 1);
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const totalDays = Math.max(1, Math.round((end - start) / msPerDay));
+    const elapsedDaysRaw = Math.round((now - start) / msPerDay);
+    const elapsedDays = Math.max(0, Math.min(totalDays, elapsedDaysRaw));
+    const progressPct = Math.min(100, Math.max(0, (elapsedDays / totalDays) * 100));
+
+    const netRatePct = annualRatePct * (1 - (Number(taxPct) || 0) / 100);
+    const accruedInterest = principal * (netRatePct / 100) * (elapsedDays / 365);
+    const fullTermInterest = principal * (netRatePct / 100) * (totalDays / 365);
+    const annualPassive = principal * (netRatePct / 100);
+
+    return {
+      totalDays,
+      elapsedDays,
+      progressPct,
+      netRatePct,
+      accruedInterest,
+      fullTermInterest,
+      annualPassive,
+      currentTotal: principal + accruedInterest
+    };
+  }
+
+  // Enrich a position with live market values in both UAH and USD
+  function evaluatePosition(pos) {
+    const rates = getEffectiveRates();
+    const cat = pos.category;
+
+    if (cat === 'crypto' || cat === 'stocks') {
+      const ticker = (pos.ticker || '').toUpperCase().trim();
+      const quoteBook = cat === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
+      const quote = quoteBook?.[ticker];
+      const livePriceUsd = quote?.priceUsd !== undefined
+        ? Number(quote.priceUsd)
+        : (Number(pos.customCurrentPriceUsd) || Number(pos.buyPriceUsd) || 0);
+      const change24h = quote?.change24h !== undefined ? Number(quote.change24h) : 0;
+
+      const qty = Number(pos.quantity) || 0;
+      const buyPriceUsd = Number(pos.buyPriceUsd) || 0;
+      const investedUsd = qty * buyPriceUsd;
+      const currentValUsd = qty * livePriceUsd;
+      const currentValUah = currentValUsd * rates.USD_UAH;
+      const investedUah = investedUsd * rates.USD_UAH;
+      const pnlUsd = currentValUsd - investedUsd;
+      const pnlUah = currentValUah - investedUah;
+      const pnlPct = investedUsd > 0 ? (pnlUsd / investedUsd) * 100 : 0;
+
+      return {
+        ...pos,
+        ticker,
+        displayName: pos.name || quote?.name || ticker,
+        nativeCurrency: 'USD',
+        livePriceUsd,
+        change24h,
+        investedUsd,
+        investedUah,
+        currentValUsd,
+        currentValUah,
+        pnlUsd,
+        pnlUah,
+        pnlPct,
+        accruedUah: 0,
+        annualPassiveUah: 0
+      };
+    }
+
+    if (cat === 'ovdp') {
+      const curr = (pos.currency || 'UAH').toUpperCase();
+      const principal = Number(pos.principalAmount) || ((Number(pos.bondsCount) || 1) * (Number(pos.faceValue) || 1000));
+      const rate = Number(pos.annualRate) || 16.0;
+      const stats = computeFixedIncomeStats(pos.startDate, pos.maturityDate, principal, rate, 0);
+
+      const investedUah = toUah(principal, curr);
+      const investedUsd = toUsd(principal, curr);
+      const currentValUah = toUah(stats.currentTotal, curr);
+      const currentValUsd = toUsd(stats.currentTotal, curr);
+      const pnlUah = toUah(stats.accruedInterest, curr);
+      const pnlUsd = toUsd(stats.accruedInterest, curr);
+      const pnlPct = principal > 0 ? (stats.accruedInterest / principal) * 100 : 0;
+
+      return {
+        ...pos,
+        displayName: pos.name || 'ОВДП України',
+        nativeCurrency: curr,
+        principalNative: principal,
+        accruedNative: stats.accruedInterest,
+        fullTermNative: stats.fullTermInterest,
+        netRatePct: stats.netRatePct,
+        elapsedDays: stats.elapsedDays,
+        totalDays: stats.totalDays,
+        progressPct: stats.progressPct,
+        investedUah,
+        investedUsd,
+        currentValUah,
+        currentValUsd,
+        pnlUah,
+        pnlUsd,
+        pnlPct,
+        accruedUah: pnlUah,
+        annualPassiveUah: toUah(stats.annualPassive, curr)
+      };
+    }
+
+    if (cat === 'deposits') {
+      const curr = (pos.currency || 'UAH').toUpperCase();
+      const principal = Number(pos.principalAmount) || 0;
+      const rate = Number(pos.annualRate) || 14.0;
+      const taxPct = pos.applyTax ? (Number(pos.taxRate) || 23.0) : 0;
+      const stats = computeFixedIncomeStats(pos.startDate, pos.endDate, principal, rate, taxPct);
+
+      const investedUah = toUah(principal, curr);
+      const investedUsd = toUsd(principal, curr);
+      const currentValUah = toUah(stats.currentTotal, curr);
+      const currentValUsd = toUsd(stats.currentTotal, curr);
+      const pnlUah = toUah(stats.accruedInterest, curr);
+      const pnlUsd = toUsd(stats.accruedInterest, curr);
+      const pnlPct = principal > 0 ? (stats.accruedInterest / principal) * 100 : 0;
+
+      return {
+        ...pos,
+        displayName: pos.name || `Депозит (${pos.bank || 'Банк'})`,
+        nativeCurrency: curr,
+        principalNative: principal,
+        accruedNative: stats.accruedInterest,
+        fullTermNative: stats.fullTermInterest,
+        netRatePct: stats.netRatePct,
+        elapsedDays: stats.elapsedDays,
+        totalDays: stats.totalDays,
+        progressPct: stats.progressPct,
+        investedUah,
+        investedUsd,
+        currentValUah,
+        currentValUsd,
+        pnlUah,
+        pnlUsd,
+        pnlPct,
+        accruedUah: pnlUah,
+        annualPassiveUah: toUah(stats.annualPassive, curr)
+      };
+    }
+
+    // Cash
+    const curr = (pos.currency || 'USD').toUpperCase();
+    const amount = Number(pos.amount) || 0;
+    const currentValUah = toUah(amount, curr);
+    const currentValUsd = toUsd(amount, curr);
+
+    return {
+      ...pos,
+      displayName: pos.name || `Готівка (${curr})`,
+      nativeCurrency: curr,
+      amountNative: amount,
+      investedUah: currentValUah,
+      investedUsd: currentValUsd,
+      currentValUah,
+      currentValUsd,
+      pnlUah: 0,
+      pnlUsd: 0,
+      pnlPct: 0,
+      accruedUah: 0,
+      annualPassiveUah: 0
+    };
+  }
+
+  // Baseline quotes & demo positions for standalone / Google Drive fallback
+  const DEFAULT_QUOTES = {
+    fx: { USD_UAH: 41.65, EUR_UAH: 44.80, GBP_UAH: 52.80, PLN_UAH: 10.35, updatedAt: new Date().toISOString(), source: 'НБУ / Ринковий курс' },
+    crypto: {
+      BTC: { priceUsd: 91450.00, change24h: 2.84, name: 'Bitcoin' },
+      ETH: { priceUsd: 3120.50, change24h: 1.45, name: 'Ethereum' },
+      SOL: { priceUsd: 214.80, change24h: 4.92, name: 'Solana' },
+      USDT: { priceUsd: 1.00, change24h: 0.01, name: 'Tether USDT' },
+      USDC: { priceUsd: 1.00, change24h: 0.00, name: 'USD Coin' },
+      BNB: { priceUsd: 642.30, change24h: 0.85, name: 'BNB' },
+      XRP: { priceUsd: 1.12, change24h: 6.10, name: 'XRP' },
+      TON: { priceUsd: 5.48, change24h: 1.90, name: 'Toncoin' },
+      ADA: { priceUsd: 0.78, change24h: 3.20, name: 'Cardano' },
+      DOGE: { priceUsd: 0.37, change24h: 5.15, name: 'Dogecoin' },
+      AVAX: { priceUsd: 34.90, change24h: 2.10, name: 'Avalanche' },
+      LINK: { priceUsd: 14.95, change24h: 1.75, name: 'Chainlink' },
+      SUI: { priceUsd: 3.28, change24h: 7.40, name: 'Sui' }
+    },
+    stocks: {
+      VOO: { priceUsd: 548.60, change24h: 0.62, name: 'Vanguard S&P 500 ETF' },
+      SPY: { priceUsd: 596.40, change24h: 0.61, name: 'SPDR S&P 500 ETF Trust' },
+      CSP1: { priceUsd: 612.80, change24h: 0.58, name: 'iShares Core S&P 500 UCITS (Acc)' },
+      VUAA: { priceUsd: 112.40, change24h: 0.60, name: 'Vanguard S&P 500 UCITS ETF (Acc)' },
+      VWCE: { priceUsd: 138.90, change24h: 0.48, name: 'Vanguard FTSE All-World UCITS ETF' },
+      QQQ: { priceUsd: 511.20, change24h: 0.94, name: 'Invesco QQQ (Nasdaq-100)' },
+      NVDA: { priceUsd: 144.80, change24h: 2.65, name: 'NVIDIA Corp.' },
+      AAPL: { priceUsd: 228.50, change24h: 1.12, name: 'Apple Inc.' },
+      MSFT: { priceUsd: 426.90, change24h: 0.84, name: 'Microsoft Corp.' },
+      GOOGL: { priceUsd: 181.30, change24h: 0.92, name: 'Alphabet Inc.' },
+      AMZN: { priceUsd: 210.40, change24h: 1.38, name: 'Amazon.com Inc.' },
+      META: { priceUsd: 589.20, change24h: 1.15, name: 'Meta Platforms Inc.' },
+      TSLA: { priceUsd: 332.10, change24h: 3.45, name: 'Tesla Inc.' },
+      GLD: { priceUsd: 242.70, change24h: 0.75, name: 'SPDR Gold Shares ETF' }
+    }
+  };
+
+  const DEFAULT_DEMO_POSITIONS = [
+    { id: 'crypto-btc-1', category: 'crypto', ticker: 'BTC', name: 'Bitcoin', quantity: 0.125, buyPriceUsd: 64200, platform: 'Ledger Nano X', notes: 'Довгостроковий холодний гаманець', createdAt: '2025-11-10' },
+    { id: 'crypto-eth-2', category: 'crypto', ticker: 'ETH', name: 'Ethereum', quantity: 1.5, buyPriceUsd: 2580, platform: 'Binance', notes: 'Стейкінг ETH', createdAt: '2026-01-15' },
+    { id: 'crypto-sol-3', category: 'crypto', ticker: 'SOL', name: 'Solana', quantity: 18, buyPriceUsd: 148.5, platform: 'Phantom', notes: 'Ліквідний стейкінг', createdAt: '2026-03-04' },
+    { id: 'stock-voo-1', category: 'stocks', ticker: 'VOO', name: 'Vanguard S&P 500 ETF', quantity: 12, buyPriceUsd: 472.00, platform: 'Interactive Brokers', notes: 'Базовий індексний фонд США', createdAt: '2025-09-20' },
+    { id: 'stock-nvda-2', category: 'stocks', ticker: 'NVDA', name: 'NVIDIA Corp.', quantity: 20, buyPriceUsd: 108.50, platform: 'Interactive Brokers', notes: 'AI та напівпровідники', createdAt: '2026-02-12' },
+    { id: 'stock-vwce-3', category: 'stocks', ticker: 'VWCE', name: 'Vanguard FTSE All-World UCITS', quantity: 25, buyPriceUsd: 124.00, platform: 'Freedom24', notes: 'Глобальний акумулюючий ETF (0% податку на дивіденди всередині фонду)', createdAt: '2026-01-08' },
+    { id: 'ovdp-uah-1', category: 'ovdp', name: 'Військові ОВДП «Симиренка» (UA4000231195)', currency: 'UAH', bondsCount: 150, faceValue: 1000, principalAmount: 150000, annualRate: 16.25, startDate: '2026-02-01', maturityDate: '2027-06-16', platform: 'Дія / ICU', notes: '0% податків (без ПДФО та військового збору), виплата кожні півроку' },
+    { id: 'ovdp-usd-2', category: 'ovdp', name: 'Валютні ОВДП у USD (UA4000229843)', currency: 'USD', bondsCount: 4, faceValue: 1000, principalAmount: 4000, annualRate: 4.66, startDate: '2026-03-15', maturityDate: '2027-04-15', platform: 'Монобанк', notes: 'Валютний захист без оподаткування' },
+    { id: 'dep-mono-1', category: 'deposits', name: 'Строковий депозит (Монобанк)', bank: 'Монобанк', currency: 'UAH', principalAmount: 85000, annualRate: 14.5, applyTax: true, taxRate: 23.0, startDate: '2026-05-10', endDate: '2027-05-10', notes: 'Без права дострокового розірвання, виплата щомісяця' },
+    { id: 'dep-pumb-2', category: 'deposits', name: 'Валютний депозит «Дохідний»', bank: 'ПУМБ', currency: 'USD', principalAmount: 2500, annualRate: 2.5, applyTax: true, taxRate: 23.0, startDate: '2026-04-01', endDate: '2026-12-31', notes: 'Резерв у доларі на банківському рахунку' },
+    { id: 'cash-usd-1', category: 'cash', name: 'Готівковий резерв вдома (USD)', location: 'Сейф / Готівка', currency: 'USD', amount: 3500, notes: 'Фінансова подушка безпеки (недоторканний запас)' },
+    { id: 'cash-uah-2', category: 'cash', name: 'Банка та поточна картка (UAH)', location: 'Монобанк / ПриватБанк', currency: 'UAH', amount: 42000, notes: 'Оперативні кошти на поточні витрати' },
+    { id: 'cash-eur-3', category: 'cash', name: 'Готівка та рахунок Wise (EUR)', location: 'Wise / Готівка', currency: 'EUR', amount: 1200, notes: 'Євровий резерв для поїздок' }
+  ];
+
+  state.quotes = JSON.parse(JSON.stringify(DEFAULT_QUOTES));
+
+  function isGoogleAppsScript() {
+    return typeof window !== 'undefined' && Boolean(window.google && window.google.script && window.google.script.run);
+  }
+
+  function gasCall(methodName, ...args) {
+    return new Promise((resolve, reject) => {
+      window.google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[methodName](...args);
+    });
+  }
+
+  // API / Storage Sync
+  async function apiFetch(url, options = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    };
+    if (state.token) {
+      headers['Authorization'] = `Bearer ${state.token}`;
+    }
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      openLoginModal();
+      throw new Error('Unauthorized');
+    }
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async function loadPortfolioFromServer() {
+    try {
+      const data = isGoogleAppsScript()
+        ? await gasCall('gasGetPortfolio')
+        : await apiFetch('/api/portfolio');
+
+      if (data && data.settings) {
+        state.settings = { ...state.settings, ...data.settings };
+        state.primaryCurrency = state.settings.primaryCurrency || 'UAH';
+      }
+      if (data && Array.isArray(data.positions)) {
+        state.positions = data.positions;
+      }
+      if (data && data.quotes) {
+        state.quotes = {
+          fx: { ...DEFAULT_QUOTES.fx, ...(data.quotes.fx || {}) },
+          crypto: { ...DEFAULT_QUOTES.crypto, ...(data.quotes.crypto || {}) },
+          stocks: { ...DEFAULT_QUOTES.stocks, ...(data.quotes.stocks || {}) }
+        };
+      }
+      if (data && data.auth) {
+        state.auth = data.auth;
+      }
+      localStorage.setItem('kapital_backup_state', JSON.stringify({
+        settings: state.settings,
+        positions: state.positions
+      }));
+      renderAll();
+      refreshBrowserQuotesQuietly();
+    } catch (err) {
+      if (err && err.message !== 'Unauthorized') {
+        const cached = localStorage.getItem('kapital_backup_state');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
+            if (Array.isArray(parsed.positions)) state.positions = parsed.positions;
+          } catch (_) {}
+        } else {
+          state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+        }
+        renderAll();
+        refreshBrowserQuotesQuietly();
+      }
+    }
+  }
+
+  async function persistPortfolio() {
+    localStorage.setItem('kapital_backup_state', JSON.stringify({
+      settings: state.settings,
+      positions: state.positions
+    }));
+    try {
+      if (isGoogleAppsScript()) {
+        await gasCall('gasSavePortfolio', {
+          settings: state.settings,
+          positions: state.positions
+        });
+      } else {
+        await apiFetch('/api/portfolio', {
+          method: 'PUT',
+          body: JSON.stringify({
+            settings: state.settings,
+            positions: state.positions
+          })
+        });
+      }
+    } catch (_) {
+      // Saved in localStorage backup if offline
+    }
+  }
+
+  async function refreshQuotesNow() {
+    const statusText = document.getElementById('quote-status-text');
+    if (statusText) statusText.textContent = 'Оновлення ринкових котирувань...';
+
+    const cryptoTickers = state.positions.filter(p => p.category === 'crypto').map(p => p.ticker).join(',');
+    const stockTickers = state.positions.filter(p => p.category === 'stocks').map(p => p.ticker).join(',');
+
+    try {
+      const quotes = isGoogleAppsScript()
+        ? await gasCall('gasRefreshQuotes', cryptoTickers, stockTickers)
+        : await apiFetch(`/api/quotes?crypto=${encodeURIComponent(cryptoTickers)}&stocks=${encodeURIComponent(stockTickers)}`);
+      if (quotes && quotes.fx) {
+        state.quotes = {
+          fx: { ...state.quotes.fx, ...quotes.fx },
+          crypto: { ...state.quotes.crypto, ...(quotes.crypto || {}) },
+          stocks: { ...state.quotes.stocks, ...(quotes.stocks || {}) }
+        };
+      }
+    } catch (_) {}
+
+    await refreshBrowserQuotesQuietly();
+    renderAll();
+  }
+
+  // Direct browser fetch for NBU FX + Binance public API
+  async function refreshBrowserQuotesQuietly() {
+    let updatedAny = false;
+    try {
+      const nbuRes = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json');
+      if (nbuRes.ok) {
+        const nbu = await nbuRes.json();
+        if (Array.isArray(nbu)) {
+          const usd = nbu.find(r => r.cc === 'USD');
+          const eur = nbu.find(r => r.cc === 'EUR');
+          const gbp = nbu.find(r => r.cc === 'GBP');
+          const pln = nbu.find(r => r.cc === 'PLN');
+          if (usd && usd.rate) state.quotes.fx.USD_UAH = Number(usd.rate.toFixed(2));
+          if (eur && eur.rate) state.quotes.fx.EUR_UAH = Number(eur.rate.toFixed(2));
+          if (gbp && gbp.rate) state.quotes.fx.GBP_UAH = Number(gbp.rate.toFixed(2));
+          if (pln && pln.rate) state.quotes.fx.PLN_UAH = Number(pln.rate.toFixed(2));
+          updatedAny = true;
+        }
+      }
+    } catch (_) {}
+
+    try {
+      const cryptoPositions = state.positions.filter(p => p.category === 'crypto');
+      for (const pos of cryptoPositions) {
+        const sym = (pos.ticker || '').toUpperCase().trim();
+        if (sym && sym !== 'USDT' && sym !== 'USDC') {
+          const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}USDT`);
+          if (res.ok) {
+            const item = await res.json();
+            const price = parseFloat(item.lastPrice);
+            const change = parseFloat(item.priceChangePercent);
+            if (!isNaN(price) && price > 0) {
+              state.quotes.crypto[sym] = {
+                ...(state.quotes.crypto[sym] || { name: sym }),
+                priceUsd: price,
+                change24h: isNaN(change) ? 0 : change
+              };
+              updatedAny = true;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (updatedAny) {
+      state.quotes.fx.source = isGoogleAppsScript()
+        ? 'Google Cloud + Live (НБУ / Binance)'
+        : 'Live (НБУ / Binance)';
+      renderAll();
+    }
+  }
+
+  // Main UI Rendering
+  function renderAll() {
+    const rates = getEffectiveRates();
+    const evaluated = state.positions.map(evaluatePosition);
+
+    // Update FX sidebar box
+    document.getElementById('fx-usd-uah').textContent = `${rates.USD_UAH.toFixed(2)} ₴`;
+    document.getElementById('fx-eur-uah').textContent = `${rates.EUR_UAH.toFixed(2)} ₴`;
+
+    // Update currency switcher active state
+    document.getElementById('btn-curr-uah').classList.toggle('active', state.primaryCurrency === 'UAH');
+    document.getElementById('btn-curr-usd').classList.toggle('active', state.primaryCurrency === 'USD');
+
+    // Update category counts in sidebar & active state
+    const counts = { all: evaluated.length, crypto: 0, stocks: 0, ovdp: 0, deposits: 0, cash: 0 };
+    evaluated.forEach(p => {
+      if (counts[p.category] !== undefined) counts[p.category]++;
+    });
+    Object.keys(counts).forEach(cat => {
+      const badge = document.getElementById(`badge-count-${cat}`);
+      if (badge) badge.textContent = counts[cat];
+      const navBtn = document.getElementById(`nav-cat-${cat}`);
+      if (navBtn) navBtn.classList.toggle('active', state.activeCategory === cat);
+      const mobBtn = document.getElementById(`mob-cat-${cat}`);
+      if (mobBtn) mobBtn.classList.toggle('active', state.activeCategory === cat);
+    });
+
+    // Update page heading
+    const meta = CATEGORY_META[state.activeCategory] || CATEGORY_META.all;
+    document.getElementById('page-main-heading').textContent = meta.title;
+    const statusText = document.getElementById('quote-status-text');
+    const timeStr = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+    statusText.textContent = `${state.quotes.fx?.source || 'Автокотирування'} · Станом на ${timeStr}`;
+
+    // Filter positions for active category
+    const scopedPositions = state.activeCategory === 'all'
+      ? evaluated
+      : evaluated.filter(p => p.category === state.activeCategory);
+
+    // Compute Hero Totals for current scope
+    let totalUah = 0;
+    let totalUsd = 0;
+    let totalInvestedUah = 0;
+    let totalPnlUah = 0;
+    let totalPnlUsd = 0;
+    let totalAccruedUah = 0;
+    let totalAnnualPassiveUah = 0;
+
+    scopedPositions.forEach(p => {
+      totalUah += p.currentValUah;
+      totalUsd += p.currentValUsd;
+      totalInvestedUah += p.investedUah;
+      totalPnlUah += p.pnlUah;
+      totalPnlUsd += p.pnlUsd;
+      totalAccruedUah += p.accruedUah;
+      totalAnnualPassiveUah += p.annualPassiveUah;
+    });
+
+    const totalPnlPct = totalInvestedUah > 0 ? (totalPnlUah / totalInvestedUah) * 100 : 0;
+
+    // Render Hero Strip (Always shows both UAH & USD side-by-side!)
+    document.getElementById('hero-scope-label').textContent =
+      state.activeCategory === 'all'
+        ? 'Сукупний капітал (Усі інвестиції та готівка)'
+        : `Капітал категорії: ${meta.shortName}`;
+
+    const heroPrimary = document.getElementById('hero-primary-total');
+    const heroSecondary = document.getElementById('hero-secondary-total');
+    const pnlPrimary = document.getElementById('hero-pnl-primary');
+    const pnlSecondary = document.getElementById('hero-pnl-secondary');
+
+    if (state.primaryCurrency === 'UAH') {
+      heroPrimary.textContent = fmtUah(totalUah);
+      heroSecondary.textContent = fmtUsd(totalUsd);
+      pnlPrimary.textContent = fmtUah(totalPnlUah, true);
+      pnlSecondary.textContent = fmtUsd(totalPnlUsd, true);
+    } else {
+      heroPrimary.textContent = fmtUsd(totalUsd);
+      heroSecondary.textContent = fmtUah(totalUah);
+      pnlPrimary.textContent = fmtUsd(totalPnlUsd, true);
+      pnlSecondary.textContent = fmtUah(totalPnlUah, true);
+    }
+
+    pnlPrimary.style.color = totalPnlUah >= 0 ? 'var(--positive)' : 'var(--negative)';
+    const pnlBadge = document.getElementById('hero-pnl-pct');
+    pnlBadge.textContent = fmtPct(totalPnlPct, true);
+    pnlBadge.className = 'pill-badge ' + (totalPnlUah >= 0 ? 'pill-positive' : 'pill-negative');
+
+    document.getElementById('hero-fx-caption').textContent =
+      `Курс перерахунку: 1$ = ${rates.USD_UAH.toFixed(2)} ₴ · 1€ = ${rates.EUR_UAH.toFixed(2)} ₴`;
+
+    const yieldAccruedEl = document.getElementById('hero-yield-accrued');
+    const annualPassiveEl = document.getElementById('hero-annual-passive');
+    if (state.primaryCurrency === 'UAH') {
+      yieldAccruedEl.textContent = fmtUah(totalAccruedUah, true);
+      annualPassiveEl.textContent = fmtUah(totalAnnualPassiveUah);
+    } else {
+      yieldAccruedEl.textContent = fmtUsd(totalAccruedUah / rates.USD_UAH, true);
+      annualPassiveEl.textContent = fmtUsd(totalAnnualPassiveUah / rates.USD_UAH);
+    }
+
+    // Show/hide overview breakdown section
+    const overviewSection = document.getElementById('overview-breakdown-section');
+    if (state.activeCategory === 'all') {
+      overviewSection.style.display = 'grid';
+      renderOverviewBreakdown(evaluated, totalUah);
+    } else {
+      overviewSection.style.display = 'none';
+    }
+
+    // Render Positions Table
+    renderPositionsTable(scopedPositions);
+  }
+
+  function renderOverviewBreakdown(allEvaluated, grandTotalUah) {
+    const categoriesOrder = ['crypto', 'stocks', 'ovdp', 'deposits', 'cash'];
+    const catTotals = {};
+    categoriesOrder.forEach(c => {
+      catTotals[c] = { uah: 0, usd: 0, count: 0 };
+    });
+
+    const currTotals = { UAH: 0, USD: 0, EUR: 0 };
+
+    allEvaluated.forEach(p => {
+      if (catTotals[p.category]) {
+        catTotals[p.category].uah += p.currentValUah;
+        catTotals[p.category].usd += p.currentValUsd;
+        catTotals[p.category].count += 1;
+      }
+      const c = p.nativeCurrency || 'UAH';
+      currTotals[c] = (currTotals[c] || 0) + p.currentValUah;
+    });
+
+    // 1. Stacked Bar & Category Cards
+    const barEl = document.getElementById('allocation-stacked-bar');
+    const cardsEl = document.getElementById('allocation-cards-grid');
+    barEl.innerHTML = '';
+    cardsEl.innerHTML = '';
+
+    categoriesOrder.forEach(cat => {
+      const info = CATEGORY_META[cat];
+      const stats = catTotals[cat];
+      const sharePct = grandTotalUah > 0 ? (stats.uah / grandTotalUah) * 100 : 0;
+
+      if (sharePct > 0) {
+        const seg = document.createElement('div');
+        seg.className = 'allocation-segment';
+        seg.style.width = `${Math.max(2, sharePct)}%`;
+        seg.style.backgroundColor = info.color;
+        seg.title = `${info.shortName}: ${sharePct.toFixed(1)}%`;
+        barEl.appendChild(seg);
+      }
+
+      const card = document.createElement('div');
+      card.className = 'allocation-item';
+      card.innerHTML = `
+        <div class="allocation-item-left">
+          <span class="cat-dot" style="background: ${info.color}; width:10px; height:10px;"></span>
+          <div>
+            <div class="allocation-item-name">${info.shortName}</div>
+            <div class="allocation-item-share tabular">${sharePct.toFixed(1)}% портфеля · ${stats.count} поз.</div>
+          </div>
+        </div>
+        <div class="allocation-item-right">
+          <div class="allocation-item-uah">${fmtUah(stats.uah)}</div>
+          <div class="allocation-item-usd">${fmtUsd(stats.usd)}</div>
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        setActiveCategory(cat);
+      });
+      cardsEl.appendChild(card);
+    });
+
+    // 2. Currency Exposure Bars
+    const currEl = document.getElementById('currency-exposure-list');
+    currEl.innerHTML = '';
+    const currencyLabels = {
+      USD: '🇺🇸 Долар США (USD — Крипта, Акції, Валюта)',
+      UAH: '🇺🇦 Українська гривня (UAH — ОВДП, Депозити, Картки)',
+      EUR: '🇪🇺 Євро (EUR — Готівка та рахунки)'
+    };
+
+    Object.keys(currTotals).sort((a, b) => currTotals[b] - currTotals[a]).forEach(curr => {
+      const valUah = currTotals[curr];
+      if (valUah <= 0 && curr !== 'UAH' && curr !== 'USD') return;
+      const pct = grandTotalUah > 0 ? (valUah / grandTotalUah) * 100 : 0;
+      const row = document.createElement('div');
+      row.className = 'currency-row';
+      row.innerHTML = `
+        <div class="currency-row-top">
+          <span>${currencyLabels[curr] || curr}</span>
+          <span class="tabular"><strong>${pct.toFixed(1)}%</strong> (${fmtUah(valUah)})</span>
+        </div>
+        <div class="currency-progress-bg">
+          <div class="currency-progress-fill" style="width: ${pct.toFixed(1)}%;"></div>
+        </div>
+      `;
+      currEl.appendChild(row);
+    });
+  }
+
+  function renderPositionsTable(positions) {
+    const query = state.searchQuery.trim().toLowerCase();
+    const filtered = query
+      ? positions.filter(p =>
+          (p.displayName || '').toLowerCase().includes(query) ||
+          (p.ticker || '').toLowerCase().includes(query) ||
+          (p.platform || '').toLowerCase().includes(query) ||
+          (p.bank || '').toLowerCase().includes(query) ||
+          (p.notes || '').toLowerCase().includes(query)
+        )
+      : positions;
+
+    const meta = CATEGORY_META[state.activeCategory] || CATEGORY_META.all;
+    document.getElementById('table-section-title').textContent =
+      state.activeCategory === 'all' ? 'Усі активи портфеля' : meta.title;
+    document.getElementById('table-section-subtitle').textContent = meta.subtitle;
+
+    const thead = document.getElementById('positions-table-head');
+    const tbody = document.getElementById('positions-table-body');
+
+    thead.innerHTML = `
+      <tr>
+        <th>Актив / Деталі</th>
+        <th>Категорія / Платформа</th>
+        <th class="text-right">Кількість / Ставка</th>
+        <th class="text-right">Ціна купівлі → Поточна</th>
+        <th class="text-right">Вартість (₴ UAH / $ USD)</th>
+        <th class="text-right">Прибуток / Нараховано</th>
+        <th class="text-right">Дії</th>
+      </tr>
+    `;
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align:center; padding: 36px 16px; color: var(--text-muted);">
+            Позицій у цій категорії ще немає. Натисніть <strong>«+ Додати актив»</strong>, щоб додати першу інвестицію.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    // Sort by UAH value descending
+    const sorted = [...filtered].sort((a, b) => b.currentValUah - a.currentValUah);
+
+    tbody.innerHTML = sorted.map(pos => {
+      const catInfo = CATEGORY_META[pos.category] || CATEGORY_META.all;
+      let badgeCode = '';
+      let qtyOrRateHtml = '';
+      let priceComparisonHtml = '';
+      let pnlHtml = '';
+
+      if (pos.category === 'crypto' || pos.category === 'stocks') {
+        badgeCode = pos.ticker || 'ASSET';
+        const chgSign = pos.change24h >= 0 ? '+' : '';
+        const chgColor = pos.change24h >= 0 ? 'var(--positive)' : 'var(--negative)';
+        qtyOrRateHtml = `
+          <div class="dual-val-primary">${pos.quantity} шт.</div>
+          <div class="dual-val-sub">Вкладено: ${fmtUsd(pos.investedUsd)}</div>
+        `;
+        priceComparisonHtml = `
+          <div class="dual-val-primary">${fmtUsd(pos.livePriceUsd)} <span style="font-size:11px; color:${chgColor};">(${chgSign}${pos.change24h.toFixed(2)}%)</span></div>
+          <div class="dual-val-sub">Купівля: ${fmtUsd(pos.buyPriceUsd)}</div>
+        `;
+        const pnlClass = pos.pnlUsd >= 0 ? 'pill-positive' : 'pill-negative';
+        pnlHtml = `
+          <div class="dual-val-primary" style="color:${pos.pnlUsd >= 0 ? 'var(--positive)' : 'var(--negative)'}">
+            ${fmtUah(pos.pnlUah, true)}
+          </div>
+          <div class="dual-val-sub">
+            ${fmtUsd(pos.pnlUsd, true)} <span class="pill-badge ${pnlClass}">${fmtPct(pos.pnlPct)}</span>
+          </div>
+        `;
+      } else if (pos.category === 'ovdp') {
+        badgeCode = 'ОВДП';
+        qtyOrRateHtml = `
+          <div class="dual-val-primary">${pos.annualRate}% річних (${pos.nativeCurrency})</div>
+          <div class="dual-val-sub">${pos.bondsCount ? `${pos.bondsCount} шт. · ` : ''}Тіло: ${fmtCurr(pos.principalNative, pos.nativeCurrency)}</div>
+        `;
+        priceComparisonHtml = `
+          <div class="dual-val-primary">Погашення: ${pos.maturityDate || '—'}</div>
+          <div class="dual-val-sub">Пройшло ${pos.elapsedDays} з ${pos.totalDays} дн. (0% податку)</div>
+          <div class="maturity-progress"><div class="maturity-progress-bar" style="width:${pos.progressPct.toFixed(0)}%"></div></div>
+        `;
+        pnlHtml = `
+          <div class="dual-val-primary" style="color:var(--positive)">+${fmtCurr(pos.accruedNative, pos.nativeCurrency)}</div>
+          <div class="dual-val-sub">Вже нараховано (${fmtUah(pos.pnlUah, true)})</div>
+        `;
+      } else if (pos.category === 'deposits') {
+        badgeCode = 'ДЕП';
+        const taxLabel = pos.applyTax ? `Чистими ${pos.netRatePct.toFixed(2)}%` : 'Без податку';
+        qtyOrRateHtml = `
+          <div class="dual-val-primary">${pos.annualRate}% річних (${pos.nativeCurrency})</div>
+          <div class="dual-val-sub">${taxLabel} · Вклад: ${fmtCurr(pos.principalNative, pos.nativeCurrency)}</div>
+        `;
+        priceComparisonHtml = `
+          <div class="dual-val-primary">До: ${pos.endDate || '—'}</div>
+          <div class="dual-val-sub">Пройшло ${pos.elapsedDays} з ${pos.totalDays} дн.</div>
+          <div class="maturity-progress"><div class="maturity-progress-bar" style="width:${pos.progressPct.toFixed(0)}%"></div></div>
+        `;
+        pnlHtml = `
+          <div class="dual-val-primary" style="color:var(--positive)">+${fmtCurr(pos.accruedNative, pos.nativeCurrency)}</div>
+          <div class="dual-val-sub">Накопичено (${fmtUah(pos.pnlUah, true)})</div>
+        `;
+      } else {
+        // Cash
+        badgeCode = pos.nativeCurrency || 'CASH';
+        qtyOrRateHtml = `
+          <div class="dual-val-primary">${fmtCurr(pos.amountNative, pos.nativeCurrency)}</div>
+          <div class="dual-val-sub">Ліквідний резерв</div>
+        `;
+        priceComparisonHtml = `
+          <div class="dual-val-primary">100% ліквідність</div>
+          <div class="dual-val-sub">Валюта: ${pos.nativeCurrency}</div>
+        `;
+        pnlHtml = `
+          <div class="dual-val-sub">Готівковий залишок</div>
+        `;
+      }
+
+      const primaryValueStr = state.primaryCurrency === 'UAH' ? fmtUah(pos.currentValUah) : fmtUsd(pos.currentValUsd);
+      const secondaryValueStr = state.primaryCurrency === 'UAH' ? fmtUsd(pos.currentValUsd) : fmtUah(pos.currentValUah);
+      const platformText = pos.platform || pos.bank || pos.location || 'Особистий рахунок';
+
+      return `
+        <tr data-pos-id="${pos.id}">
+          <td>
+            <div class="asset-cell">
+              <span class="ticker-badge" style="border-left: 3px solid ${catInfo.color}">${badgeCode}</span>
+              <div>
+                <div class="asset-name-primary">${escapeHtml(pos.displayName)}</div>
+                <div class="asset-name-sub">${escapeHtml(pos.notes || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="dual-val-primary">${catInfo.shortName}</div>
+            <div class="dual-val-sub">${escapeHtml(platformText)}</div>
+          </td>
+          <td class="text-right">${qtyOrRateHtml}</td>
+          <td class="text-right">${priceComparisonHtml}</td>
+          <td class="text-right">
+            <div class="dual-val-primary">${primaryValueStr}</div>
+            <div class="dual-val-sub">${secondaryValueStr}</div>
+          </td>
+          <td class="text-right">${pnlHtml}</td>
+          <td class="text-right">
+            <div class="row-actions">
+              <button type="button" class="btn btn-ghost btn-edit-pos" data-id="${pos.id}" title="Редагувати">✎</button>
+              <button type="button" class="btn btn-ghost btn-delete-pos" data-id="${pos.id}" title="Видалити" style="color:var(--negative);">✕</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Attach Edit / Delete handlers
+    tbody.querySelectorAll('.btn-edit-pos').forEach(btn => {
+      btn.addEventListener('click', () => openPositionModal(btn.dataset.id));
+    });
+    tbody.querySelectorAll('.btn-delete-pos').forEach(btn => {
+      btn.addEventListener('click', () => deletePosition(btn.dataset.id));
+    });
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function setActiveCategory(cat) {
+    state.activeCategory = cat;
+    renderAll();
+  }
+
+  // Dynamic Form Fields inside Add/Edit Modal
+  function renderModalFormFields(category, existing = null) {
+    const container = document.getElementById('dynamic-form-fields');
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const nextYearStr = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+
+    if (category === 'crypto' || category === 'stocks') {
+      const isCrypto = category === 'crypto';
+      const quickList = isCrypto ? QUICK_CRYPTO : QUICK_STOCKS;
+      const tickerVal = existing?.ticker || (isCrypto ? 'BTC' : 'VOO');
+      const nameVal = existing?.name || '';
+      const qtyVal = existing?.quantity ?? (isCrypto ? 0.1 : 10);
+      const buyVal = existing?.buyPriceUsd ?? (isCrypto ? 85000 : 520);
+      const platVal = existing?.platform || (isCrypto ? 'Binance / Ledger' : 'Interactive Brokers');
+      const notesVal = existing?.notes || '';
+
+      container.innerHTML = `
+        <div class="form-group full-width">
+          <label class="form-label" for="f-ticker">${isCrypto ? 'Тікер криптовалюти (напр. BTC, ETH, SOL, TON)' : 'Біржовий тікер акції або ETF (напр. VOO, SPY, NVDA, AAPL)'}</label>
+          <input type="text" class="form-input mono" id="f-ticker" value="${escapeHtml(tickerVal)}" required placeholder="${isCrypto ? 'BTC' : 'VOO'}" />
+          <div class="quick-tickers">
+            ${quickList.map(t => `<button type="button" class="chip-btn" data-pick-ticker="${t}">${t}</button>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-name">Назва активу (необов'язково)</label>
+          <input type="text" class="form-input" id="f-name" value="${escapeHtml(nameVal)}" placeholder="Підтягнеться автоматично" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-platform">${isCrypto ? 'Гаманець / Біржа' : 'Брокер'}</label>
+          <input type="text" class="form-input" id="f-platform" value="${escapeHtml(platVal)}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-quantity">Кількість (${isCrypto ? 'монет' : 'акцій / лотів'})</label>
+          <input type="number" step="any" min="0.00000001" class="form-input tabular" id="f-quantity" value="${qtyVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-buy-price">Середня ціна купівлі за 1 шт. ($ USD)</label>
+          <input type="number" step="any" min="0" class="form-input tabular" id="f-buy-price" value="${buyVal}" required />
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label" for="f-notes">Коментар / Нотатка</label>
+          <input type="text" class="form-input" id="f-notes" value="${escapeHtml(notesVal)}" placeholder="Напр. Довгостроковий портфель" />
+        </div>
+      `;
+
+      container.querySelectorAll('[data-pick-ticker]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sym = btn.dataset.pickTicker;
+          document.getElementById('f-ticker').value = sym;
+          const quoteBook = isCrypto ? state.quotes.crypto : state.quotes.stocks;
+          if (quoteBook?.[sym]) {
+            document.getElementById('f-name').value = quoteBook[sym].name || sym;
+            if (!existing) {
+              document.getElementById('f-buy-price').value = quoteBook[sym].priceUsd;
+            }
+          }
+        });
+      });
+      return;
+    }
+
+    if (category === 'ovdp') {
+      const currVal = existing?.currency || 'UAH';
+      const nameVal = existing?.name || 'Військові ОВДП (Дія / ICU)';
+      const countVal = existing?.bondsCount ?? 50;
+      const principalVal = existing?.principalAmount ?? 50000;
+      const rateVal = existing?.annualRate ?? 16.2;
+      const startVal = existing?.startDate || todayStr;
+      const matVal = existing?.maturityDate || nextYearStr;
+      const platVal = existing?.platform || 'Дія / ICU / Монобанк';
+      const notesVal = existing?.notes || '0% податків з інвестиційного доходу';
+
+      container.innerHTML = `
+        <div class="form-group full-width">
+          <label class="form-label" for="f-name">Назва випуску або ISIN ОВДП</label>
+          <input type="text" class="form-input" id="f-name" value="${escapeHtml(nameVal)}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-currency">Валюта облігації</label>
+          <select class="form-select" id="f-currency">
+            <option value="UAH" ${currVal === 'UAH' ? 'selected' : ''}>🇺🇦 Гривня (UAH)</option>
+            <option value="USD" ${currVal === 'USD' ? 'selected' : ''}>🇺🇸 Долар США (USD)</option>
+            <option value="EUR" ${currVal === 'EUR' ? 'selected' : ''}>🇪🇺 Євро (EUR)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-bonds-count">Кількість облігацій (шт.)</label>
+          <input type="number" step="1" min="1" class="form-input tabular" id="f-bonds-count" value="${countVal}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-principal">Загальна сума вкладу (Номінал у валюті)</label>
+          <input type="number" step="any" min="1" class="form-input tabular" id="f-principal" value="${principalVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-rate">Річна дохідність (% річних, 0% податку)</label>
+          <input type="number" step="0.01" min="0.1" class="form-input tabular" id="f-rate" value="${rateVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-start-date">Дата купівлі</label>
+          <input type="date" class="form-input tabular" id="f-start-date" value="${startVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-maturity-date">Дата погашення</label>
+          <input type="date" class="form-input tabular" id="f-maturity-date" value="${matVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-platform">Де придбано (Банк / Брокер)</label>
+          <input type="text" class="form-input" id="f-platform" value="${escapeHtml(platVal)}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-notes">Нотатка</label>
+          <input type="text" class="form-input" id="f-notes" value="${escapeHtml(notesVal)}" />
+        </div>
+      `;
+
+      const countInput = document.getElementById('f-bonds-count');
+      const principalInput = document.getElementById('f-principal');
+      countInput.addEventListener('input', () => {
+        const c = Number(countInput.value) || 0;
+        if (c > 0) principalInput.value = c * 1000;
+      });
+      return;
+    }
+
+    if (category === 'deposits') {
+      const currVal = existing?.currency || 'UAH';
+      const nameVal = existing?.name || 'Строковий банківський депозит';
+      const bankVal = existing?.bank || 'Монобанк';
+      const principalVal = existing?.principalAmount ?? 50000;
+      const rateVal = existing?.annualRate ?? 14.5;
+      const applyTax = existing?.applyTax !== undefined ? existing.applyTax : true;
+      const taxRateVal = existing?.taxRate ?? 23.0;
+      const startVal = existing?.startDate || todayStr;
+      const endVal = existing?.endDate || nextYearStr;
+      const notesVal = existing?.notes || '';
+
+      container.innerHTML = `
+        <div class="form-group">
+          <label class="form-label" for="f-name">Назва депозиту</label>
+          <input type="text" class="form-input" id="f-name" value="${escapeHtml(nameVal)}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-bank">Банк</label>
+          <input type="text" class="form-input" id="f-bank" value="${escapeHtml(bankVal)}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-currency">Валюта вкладу</label>
+          <select class="form-select" id="f-currency">
+            <option value="UAH" ${currVal === 'UAH' ? 'selected' : ''}>🇺🇦 Гривня (UAH)</option>
+            <option value="USD" ${currVal === 'USD' ? 'selected' : ''}>🇺🇸 Долар США (USD)</option>
+            <option value="EUR" ${currVal === 'EUR' ? 'selected' : ''}>🇪🇺 Євро (EUR)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-principal">Сума вкладу (Тіло депозиту)</label>
+          <input type="number" step="any" min="1" class="form-input tabular" id="f-principal" value="${principalVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-rate">Річна ставка банку (% річних)</label>
+          <input type="number" step="0.01" min="0.01" class="form-input tabular" id="f-rate" value="${rateVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-tax-rate">Податок на відсотки (% ПДФО + ВЗ)</label>
+          <input type="number" step="0.1" min="0" max="50" class="form-input tabular" id="f-tax-rate" value="${applyTax ? taxRateVal : 0}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-start-date">Дата відкриття</label>
+          <input type="date" class="form-input tabular" id="f-start-date" value="${startVal}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-end-date">Дата завершення</label>
+          <input type="date" class="form-input tabular" id="f-end-date" value="${endVal}" required />
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label" for="f-notes">Коментар</label>
+          <input type="text" class="form-input" id="f-notes" value="${escapeHtml(notesVal)}" />
+        </div>
+      `;
+      return;
+    }
+
+    // Cash
+    const currVal = existing?.currency || 'USD';
+    const nameVal = existing?.name || 'Готівкові заощадження';
+    const locVal = existing?.location || 'Готівка / Сейф / Картка';
+    const amtVal = existing?.amount ?? 1000;
+    const notesVal = existing?.notes || '';
+
+    container.innerHTML = `
+      <div class="form-group full-width">
+        <label class="form-label" for="f-name">Назва рахунку або готівки</label>
+        <input type="text" class="form-input" id="f-name" value="${escapeHtml(nameVal)}" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="f-currency">Валюта</label>
+        <select class="form-select" id="f-currency">
+          <option value="USD" ${currVal === 'USD' ? 'selected' : ''}>🇺🇸 Долар США (USD)</option>
+          <option value="UAH" ${currVal === 'UAH' ? 'selected' : ''}>🇺🇦 Гривня (UAH)</option>
+          <option value="EUR" ${currVal === 'EUR' ? 'selected' : ''}>🇪🇺 Євро (EUR)</option>
+          <option value="GBP" ${currVal === 'GBP' ? 'selected' : ''}>🇬🇧 Фунт стерлінгів (GBP)</option>
+          <option value="PLN" ${currVal === 'PLN' ? 'selected' : ''}>🇵🇱 Польський злотий (PLN)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="f-amount">Сума у валюті</label>
+        <input type="number" step="any" min="0" class="form-input tabular" id="f-amount" value="${amtVal}" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="f-location">Де зберігається (Банк / Сейф / Гаманець)</label>
+        <input type="text" class="form-input" id="f-location" value="${escapeHtml(locVal)}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="f-notes">Нотатка</label>
+        <input type="text" class="form-input" id="f-notes" value="${escapeHtml(notesVal)}" />
+      </div>
+    `;
+  }
+
+  function openPositionModal(editId = null) {
+    const modal = document.getElementById('modal-position');
+    const posIdInput = document.getElementById('pos-id');
+    const catSelect = document.getElementById('pos-category');
+    const titleEl = document.getElementById('modal-position-title');
+
+    let existing = null;
+    if (editId) {
+      existing = state.positions.find(p => p.id === editId) || null;
+    }
+
+    if (existing) {
+      titleEl.textContent = 'Редагувати актив';
+      posIdInput.value = existing.id;
+      catSelect.value = existing.category;
+      renderModalFormFields(existing.category, existing);
+    } else {
+      titleEl.textContent = 'Додати інвестиційний актив';
+      posIdInput.value = '';
+      const defaultCat = state.activeCategory === 'all' ? 'crypto' : state.activeCategory;
+      catSelect.value = defaultCat;
+      renderModalFormFields(defaultCat, null);
+    }
+
+    modal.classList.add('open');
+  }
+
+  function closePositionModal() {
+    document.getElementById('modal-position').classList.remove('open');
+  }
+
+  async function handleSavePosition(e) {
+    e.preventDefault();
+    const id = document.getElementById('pos-id').value || ('pos-' + Date.now());
+    const category = document.getElementById('pos-category').value;
+
+    let newPos = { id, category };
+
+    if (category === 'crypto' || category === 'stocks') {
+      const ticker = document.getElementById('f-ticker').value.toUpperCase().trim();
+      const quoteBook = category === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
+      const defaultName = quoteBook?.[ticker]?.name || ticker;
+      newPos = {
+        ...newPos,
+        ticker,
+        name: document.getElementById('f-name').value.trim() || defaultName,
+        platform: document.getElementById('f-platform').value.trim(),
+        quantity: parseFloat(document.getElementById('f-quantity').value) || 0,
+        buyPriceUsd: parseFloat(document.getElementById('f-buy-price').value) || 0,
+        notes: document.getElementById('f-notes').value.trim()
+      };
+    } else if (category === 'ovdp') {
+      newPos = {
+        ...newPos,
+        name: document.getElementById('f-name').value.trim(),
+        currency: document.getElementById('f-currency').value,
+        bondsCount: parseInt(document.getElementById('f-bonds-count').value, 10) || 1,
+        faceValue: 1000,
+        principalAmount: parseFloat(document.getElementById('f-principal').value) || 0,
+        annualRate: parseFloat(document.getElementById('f-rate').value) || 0,
+        startDate: document.getElementById('f-start-date').value,
+        maturityDate: document.getElementById('f-maturity-date').value,
+        platform: document.getElementById('f-platform').value.trim(),
+        notes: document.getElementById('f-notes').value.trim()
+      };
+    } else if (category === 'deposits') {
+      const taxRate = parseFloat(document.getElementById('f-tax-rate').value) || 0;
+      newPos = {
+        ...newPos,
+        name: document.getElementById('f-name').value.trim(),
+        bank: document.getElementById('f-bank').value.trim(),
+        currency: document.getElementById('f-currency').value,
+        principalAmount: parseFloat(document.getElementById('f-principal').value) || 0,
+        annualRate: parseFloat(document.getElementById('f-rate').value) || 0,
+        applyTax: taxRate > 0,
+        taxRate,
+        startDate: document.getElementById('f-start-date').value,
+        endDate: document.getElementById('f-end-date').value,
+        notes: document.getElementById('f-notes').value.trim()
+      };
+    } else {
+      newPos = {
+        ...newPos,
+        name: document.getElementById('f-name').value.trim(),
+        currency: document.getElementById('f-currency').value,
+        amount: parseFloat(document.getElementById('f-amount').value) || 0,
+        location: document.getElementById('f-location').value.trim(),
+        notes: document.getElementById('f-notes').value.trim()
+      };
+    }
+
+    const idx = state.positions.findIndex(p => p.id === id);
+    if (idx >= 0) {
+      state.positions[idx] = newPos;
+    } else {
+      state.positions.push(newPos);
+    }
+
+    closePositionModal();
+    await persistPortfolio();
+    if (category === 'crypto' || category === 'stocks') {
+      await refreshQuotesNow();
+    } else {
+      renderAll();
+    }
+  }
+
+  async function deletePosition(id) {
+    state.positions = state.positions.filter(p => p.id !== id);
+    await persistPortfolio();
+    renderAll();
+  }
+
+  // Settings Modal
+  function openSettingsModal() {
+    const rates = getEffectiveRates();
+    document.getElementById('set-manual-fx').checked = Boolean(state.settings.manualFxOverride);
+    document.getElementById('set-usd-uah').value = rates.USD_UAH;
+    document.getElementById('set-eur-uah').value = rates.EUR_UAH;
+    document.getElementById('set-require-auth').checked = Boolean(state.auth?.requireAuth);
+    document.getElementById('set-new-password').value = '';
+    document.getElementById('modal-settings').classList.add('open');
+  }
+
+  function closeSettingsModal() {
+    document.getElementById('modal-settings').classList.remove('open');
+  }
+
+  async function handleSaveSettings(e) {
+    e.preventDefault();
+    state.settings.manualFxOverride = document.getElementById('set-manual-fx').checked;
+    state.settings.fxRates = {
+      USD_UAH: parseFloat(document.getElementById('set-usd-uah').value) || 41.65,
+      EUR_UAH: parseFloat(document.getElementById('set-eur-uah').value) || 44.80
+    };
+
+    const requireAuth = document.getElementById('set-require-auth').checked;
+    const newPassword = document.getElementById('set-new-password').value.trim();
+
+    await persistPortfolio();
+
+    try {
+      const authRes = await apiFetch('/api/auth/settings', {
+        method: 'POST',
+        body: JSON.stringify({ requireAuth, newPassword })
+      });
+      if (authRes.token) {
+        state.token = authRes.token;
+        safeSetItem('kapital_auth_token', authRes.token);
+      }
+      state.auth.requireAuth = requireAuth;
+    } catch (_) {}
+
+    closeSettingsModal();
+    renderAll();
+  }
+
+  function openLoginModal() {
+    document.getElementById('modal-login').classList.add('open');
+  }
+
+  // Wire up Event Listeners
+  function initEvents() {
+    // Theme toggle
+    document.getElementById('btn-theme-toggle').addEventListener('click', () => {
+      const html = document.documentElement;
+      const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', next);
+      safeSetItem('kapital_theme', next);
+    });
+
+    const savedTheme = safeGetItem('kapital_theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+
+    // Category navigation
+    document.querySelectorAll('[data-category]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setActiveCategory(btn.dataset.category);
+      });
+    });
+
+    // Currency switcher
+    document.querySelectorAll('[data-currency]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.primaryCurrency = btn.dataset.currency;
+        state.settings.primaryCurrency = state.primaryCurrency;
+        persistPortfolio();
+        renderAll();
+      });
+    });
+
+    // Search filter
+    document.getElementById('input-search-positions').addEventListener('input', (e) => {
+      state.searchQuery = e.target.value;
+      renderAll();
+    });
+
+    // Refresh quotes
+    document.getElementById('btn-refresh-quotes').addEventListener('click', refreshQuotesNow);
+
+    // Add Position Modal
+    document.getElementById('btn-add-position').addEventListener('click', () => openPositionModal(null));
+    document.getElementById('btn-close-position-modal').addEventListener('click', closePositionModal);
+    document.getElementById('btn-cancel-position').addEventListener('click', closePositionModal);
+    document.getElementById('pos-category').addEventListener('change', (e) => {
+      renderModalFormFields(e.target.value, null);
+    });
+    document.getElementById('form-position').addEventListener('submit', handleSavePosition);
+
+    // Settings & FX Modal
+    document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
+    document.getElementById('btn-edit-fx').addEventListener('click', openSettingsModal);
+    document.getElementById('btn-close-settings-modal').addEventListener('click', closePositionModal);
+    document.getElementById('btn-close-settings-modal').addEventListener('click', closeSettingsModal);
+    document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
+    document.getElementById('form-settings').addEventListener('submit', handleSaveSettings);
+
+    // Export / Import JSON backup
+    const exportBtn = document.getElementById('btn-export-json');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        const payload = {
+          exportedAt: new Date().toISOString(),
+          settings: state.settings,
+          positions: state.positions
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `kapital-portfolio-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    const importBtn = document.getElementById('btn-import-json');
+    const importInput = document.getElementById('input-import-json-file');
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+      importInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed.positions)) {
+            state.positions = parsed.positions;
+          }
+          if (parsed.settings && typeof parsed.settings === 'object') {
+            state.settings = { ...state.settings, ...parsed.settings };
+          }
+          await persistPortfolio();
+          closeSettingsModal();
+          renderAll();
+        } catch (_) {}
+        importInput.value = '';
+      });
+    }
+
+    // Demo reset & clear all
+    document.getElementById('btn-reset-demo').addEventListener('click', async () => {
+      try {
+        if (isGoogleAppsScript()) {
+          const res = await gasCall('gasResetDemo');
+          if (res && res.positions) state.positions = res.positions;
+        } else {
+          const res = await apiFetch('/api/portfolio/reset-demo', { method: 'POST' });
+          if (res.positions) state.positions = res.positions;
+        }
+      } catch (_) {
+        state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+        await persistPortfolio();
+      }
+      closeSettingsModal();
+      renderAll();
+    });
+
+    document.getElementById('btn-clear-all-data').addEventListener('click', async () => {
+      state.positions = [];
+      await persistPortfolio();
+      closeSettingsModal();
+      renderAll();
+    });
+
+    // Login Form
+    document.getElementById('form-login').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('login-password').value;
+      const errEl = document.getElementById('login-error-msg');
+      errEl.style.display = 'none';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        if (res.ok && data.token) {
+          state.token = data.token;
+          safeSetItem('kapital_auth_token', data.token);
+          document.getElementById('modal-login').classList.remove('open');
+          loadPortfolioFromServer();
+        } else {
+          errEl.style.display = 'block';
+        }
+      } catch (_) {
+        errEl.style.display = 'block';
+      }
+    });
+  }
+
+  // Render initial state immediately so the UI is never blank while server/Drive loads
+  const initialCached = safeGetItem('kapital_backup_state');
+  if (initialCached) {
+    try {
+      const parsed = JSON.parse(initialCached);
+      if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
+      if (Array.isArray(parsed.positions) && parsed.positions.length > 0) {
+        state.positions = parsed.positions;
+      } else {
+        state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+      }
+    } catch (_) {
+      state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+    }
+  } else {
+    state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+  }
+
+  initEvents();
+  renderAll();
+  loadPortfolioFromServer();
+})();
