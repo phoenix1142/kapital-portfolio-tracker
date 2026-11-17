@@ -382,10 +382,19 @@
     { id: 'cash-eur-3', category: 'cash', name: 'Готівка та рахунок Wise (EUR)', location: 'Wise / Готівка', currency: 'EUR', amount: 1200, notes: 'Євровий резерв для поїздок' }
   ];
 
+  const DEFAULT_CLOUD_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwoxq-PirVnix_5jvyuama9S_UBc187LwDRMk4moSg9RwhE3LyquTRu-r8VhfJdbqX8/exec';
+  state.cloudSyncUrl = safeGetItem('kapital_cloud_sync_url') || DEFAULT_CLOUD_SYNC_URL;
+  state.cloudSynced = false;
   state.quotes = JSON.parse(JSON.stringify(DEFAULT_QUOTES));
 
   function isGoogleAppsScript() {
     return typeof window !== 'undefined' && Boolean(window.google && window.google.script && window.google.script.run);
+  }
+
+  function isStaticHost() {
+    if (isGoogleAppsScript()) return false;
+    const host = (window.location && window.location.hostname) || '';
+    return host.endsWith('github.io') || window.location.protocol === 'file:';
   }
 
   function gasCall(methodName, ...args) {
@@ -394,6 +403,30 @@
         .withSuccessHandler(resolve)
         .withFailureHandler(reject)[methodName](...args);
     });
+  }
+
+  async function cloudSyncGet(paramsObj = {}) {
+    const baseUrl = (state.cloudSyncUrl || '').trim();
+    if (!baseUrl) throw new Error('No cloud sync URL configured');
+    const url = new URL(baseUrl);
+    Object.keys(paramsObj).forEach(k => url.searchParams.set(k, paramsObj[k]));
+    url.searchParams.set('_t', String(Date.now()));
+    const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow' });
+    if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async function cloudSyncPost(payloadObj) {
+    const baseUrl = (state.cloudSyncUrl || '').trim();
+    if (!baseUrl) throw new Error('No cloud sync URL configured');
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payloadObj),
+      redirect: 'follow'
+    });
+    if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
+    return res.json();
   }
 
   // API / Storage Sync
@@ -418,15 +451,32 @@
 
   async function loadPortfolioFromServer() {
     try {
-      const data = isGoogleAppsScript()
-        ? await gasCall('gasGetPortfolio')
-        : await apiFetch('/api/portfolio');
+      let data;
+      if (isGoogleAppsScript()) {
+        data = await gasCall('gasGetPortfolio');
+        state.cloudSynced = true;
+      } else if (isStaticHost() && state.cloudSyncUrl) {
+        data = await cloudSyncGet({ action: 'get' });
+        state.cloudSynced = true;
+      } else {
+        try {
+          data = await apiFetch('/api/portfolio');
+        } catch (localErr) {
+          if (localErr && localErr.message === 'Unauthorized') throw localErr;
+          if (state.cloudSyncUrl) {
+            data = await cloudSyncGet({ action: 'get' });
+            state.cloudSynced = true;
+          } else {
+            throw localErr;
+          }
+        }
+      }
 
       if (data && data.settings) {
         state.settings = { ...state.settings, ...data.settings };
         state.primaryCurrency = state.settings.primaryCurrency || 'UAH';
       }
-      if (data && Array.isArray(data.positions)) {
+      if (data && Array.isArray(data.positions) && data.positions.length > 0) {
         state.positions = data.positions;
       }
       if (data && data.quotes) {
@@ -439,7 +489,7 @@
       if (data && data.auth) {
         state.auth = data.auth;
       }
-      localStorage.setItem('kapital_backup_state', JSON.stringify({
+      safeSetItem('kapital_backup_state', JSON.stringify({
         settings: state.settings,
         positions: state.positions
       }));
@@ -447,14 +497,16 @@
       refreshBrowserQuotesQuietly();
     } catch (err) {
       if (err && err.message !== 'Unauthorized') {
-        const cached = localStorage.getItem('kapital_backup_state');
+        const cached = safeGetItem('kapital_backup_state');
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
             if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
-            if (Array.isArray(parsed.positions)) state.positions = parsed.positions;
+            if (Array.isArray(parsed.positions) && parsed.positions.length > 0) {
+              state.positions = parsed.positions;
+            }
           } catch (_) {}
-        } else {
+        } else if (!state.positions || state.positions.length === 0) {
           state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
         }
         renderAll();
@@ -464,7 +516,7 @@
   }
 
   async function persistPortfolio() {
-    localStorage.setItem('kapital_backup_state', JSON.stringify({
+    safeSetItem('kapital_backup_state', JSON.stringify({
       settings: state.settings,
       positions: state.positions
     }));
@@ -474,6 +526,14 @@
           settings: state.settings,
           positions: state.positions
         });
+        state.cloudSynced = true;
+      } else if (isStaticHost() && state.cloudSyncUrl) {
+        await cloudSyncPost({
+          action: 'save',
+          settings: state.settings,
+          positions: state.positions
+        });
+        state.cloudSynced = true;
       } else {
         await apiFetch('/api/portfolio', {
           method: 'PUT',
@@ -496,9 +556,14 @@
     const stockTickers = state.positions.filter(p => p.category === 'stocks').map(p => p.ticker).join(',');
 
     try {
-      const quotes = isGoogleAppsScript()
-        ? await gasCall('gasRefreshQuotes', cryptoTickers, stockTickers)
-        : await apiFetch(`/api/quotes?crypto=${encodeURIComponent(cryptoTickers)}&stocks=${encodeURIComponent(stockTickers)}`);
+      let quotes;
+      if (isGoogleAppsScript()) {
+        quotes = await gasCall('gasRefreshQuotes', cryptoTickers, stockTickers);
+      } else if (isStaticHost() && state.cloudSyncUrl) {
+        quotes = await cloudSyncGet({ action: 'quotes', crypto: cryptoTickers, stocks: stockTickers });
+      } else {
+        quotes = await apiFetch(`/api/quotes?crypto=${encodeURIComponent(cryptoTickers)}&stocks=${encodeURIComponent(stockTickers)}`);
+      }
       if (quotes && quotes.fx) {
         state.quotes = {
           fx: { ...state.quotes.fx, ...quotes.fx },
@@ -1283,6 +1348,8 @@
     document.getElementById('set-manual-fx').checked = Boolean(state.settings.manualFxOverride);
     document.getElementById('set-usd-uah').value = rates.USD_UAH;
     document.getElementById('set-eur-uah').value = rates.EUR_UAH;
+    const cloudInput = document.getElementById('set-cloud-sync-url');
+    if (cloudInput) cloudInput.value = state.cloudSyncUrl || '';
     document.getElementById('set-require-auth').checked = Boolean(state.auth?.requireAuth);
     document.getElementById('set-new-password').value = '';
     document.getElementById('modal-settings').classList.add('open');
@@ -1299,6 +1366,12 @@
       USD_UAH: parseFloat(document.getElementById('set-usd-uah').value) || 41.65,
       EUR_UAH: parseFloat(document.getElementById('set-eur-uah').value) || 44.80
     };
+
+    const cloudInput = document.getElementById('set-cloud-sync-url');
+    if (cloudInput) {
+      state.cloudSyncUrl = cloudInput.value.trim();
+      safeSetItem('kapital_cloud_sync_url', state.cloudSyncUrl);
+    }
 
     const requireAuth = document.getElementById('set-require-auth').checked;
     const newPassword = document.getElementById('set-new-password').value.trim();

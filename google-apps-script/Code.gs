@@ -1,6 +1,6 @@
 /**
  * КАПІТАЛ — Персональний трекер інвестиційного портфеля (UAH / USD)
- * Google Apps Script (Вставте цей код у файл Код.gs / Code.gs — інших файлів створювати не потрібно!)
+ * Google Apps Script (Хмарна база даних на Google Диску для https://phoenix1142.github.io/kapital-portfolio-tracker/ + власний інтерфейс)
  */
 
 const DRIVE_FOLDER_ID = '1X_VHDRMMMszQhb_0TFPg-64joSRfcgaO';
@@ -8,11 +8,29 @@ const DRIVE_INDEX_HTML_ID = '19jktydYnWk6NB-rhp_Fni4QO8tqcGlMh';
 const GITHUB_HTML_URL = 'https://raw.githubusercontent.com/phoenix1142/kapital-portfolio-tracker/main/google-apps-script/Index.html';
 const PORTFOLIO_FILE_NAME = 'portfolio.json';
 
-function doGet() {
+function jsonOutput_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action) : '';
+
+  if (action === 'get') {
+    return jsonOutput_(gasGetPortfolio());
+  }
+
+  if (action === 'quotes') {
+    var cryptoParam = (e && e.parameter && e.parameter.crypto) || '';
+    var stocksParam = (e && e.parameter && e.parameter.stocks) || '';
+    return jsonOutput_(gasRefreshQuotes(cryptoParam, stocksParam));
+  }
+
   var htmlContent = '';
   try {
     htmlContent = DriveApp.getFileById(DRIVE_INDEX_HTML_ID).getBlob().getDataAsString('UTF-8');
-  } catch (e) {
+  } catch (err) {
     var res = UrlFetchApp.fetch(GITHUB_HTML_URL, { muteHttpExceptions: true });
     htmlContent = res.getContentText('UTF-8');
   }
@@ -21,6 +39,19 @@ function doGet() {
     .setTitle('КАПІТАЛ — Персональний трекер інвестиційного портфеля (UAH / USD)')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) {
+  try {
+    var raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '{}';
+    var body = JSON.parse(raw);
+    if (body.action === 'reset') {
+      return jsonOutput_(gasResetDemo());
+    }
+    return jsonOutput_(gasSavePortfolio(body));
+  } catch (err) {
+    return jsonOutput_({ ok: false, error: String(err) });
+  }
 }
 
 function getOrCreatePortfolioFolder_() {

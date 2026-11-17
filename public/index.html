@@ -290,6 +290,14 @@
           </div>
 
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
+            <label class="form-label" for="set-cloud-sync-url">☁️ Хмарна синхронізація з Google Диском (URL веб-додатка script.google.com/.../exec)</label>
+            <input type="url" class="form-input mono" id="set-cloud-sync-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px;" />
+            <div id="cloud-sync-hint" style="font-size:11.5px; color: var(--text-muted); margin-top:2px;">
+              Коли вказано посилання `/exec` (з доступом «Усі / Anyone»), портфель автоматично синхронізується з вашим Google Диском на всіх пристроях.
+            </div>
+          </div>
+
+          <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
             <label class="form-label">
               <input type="checkbox" id="set-require-auth" />
               Запитувати пароль при відкритті сайту в інтернеті
