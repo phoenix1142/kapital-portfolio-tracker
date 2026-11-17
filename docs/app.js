@@ -1451,10 +1451,58 @@
     // Settings & FX Modal
     document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
     document.getElementById('btn-edit-fx').addEventListener('click', openSettingsModal);
-    document.getElementById('btn-close-settings-modal').addEventListener('click', closePositionModal);
+    const topbarCloudBtn = document.getElementById('btn-topbar-cloud');
+    if (topbarCloudBtn) topbarCloudBtn.addEventListener('click', openSettingsModal);
     document.getElementById('btn-close-settings-modal').addEventListener('click', closeSettingsModal);
     document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
     document.getElementById('form-settings').addEventListener('submit', handleSaveSettings);
+
+    const testCloudBtn = document.getElementById('btn-test-cloud-sync');
+    if (testCloudBtn) {
+      testCloudBtn.addEventListener('click', async () => {
+        const hintEl = document.getElementById('cloud-sync-hint');
+        const inputEl = document.getElementById('set-cloud-sync-url');
+        const urlVal = (inputEl && inputEl.value.trim()) || '';
+        if (!urlVal) {
+          if (hintEl) {
+            hintEl.style.color = 'var(--warning)';
+            hintEl.textContent = 'Вставте посилання Web App URL (https://script.google.com/macros/s/.../exec)';
+          }
+          return;
+        }
+        state.cloudSyncUrl = urlVal;
+        safeSetItem('kapital_cloud_sync_url', urlVal);
+        if (hintEl) {
+          hintEl.style.color = 'var(--text-secondary)';
+          hintEl.textContent = 'Перевірка зв\'язку з Google Диском...';
+        }
+        try {
+          const data = await cloudSyncGet({ action: 'get' });
+          if (data && (data.positions || data.settings)) {
+            state.cloudSynced = true;
+            if (Array.isArray(data.positions) && data.positions.length > 0) {
+              state.positions = data.positions;
+            } else {
+              await cloudSyncPost({ action: 'save', settings: state.settings, positions: state.positions });
+            }
+            if (hintEl) {
+              hintEl.style.color = 'var(--positive)';
+              hintEl.textContent = '✅ Зв\'язок встановлено! Дані портфеля синхронізуються з вашим Google Диском.';
+            }
+            renderAll();
+          } else {
+            throw new Error('Unexpected response');
+          }
+        } catch (err) {
+          state.cloudSynced = false;
+          if (hintEl) {
+            hintEl.style.color = 'var(--warning)';
+            hintEl.textContent = '⚠️ Google не пускає зовнішній запит. Перевірте у script.google.com: Розгорнути → Керувати розгортаннями → ✎ → Версія: «Нова версія» та Хто має доступ: «Усі» (Anyone).';
+          }
+          renderAll();
+        }
+      });
+    }
 
     // Export / Import JSON backup
     const exportBtn = document.getElementById('btn-export-json');

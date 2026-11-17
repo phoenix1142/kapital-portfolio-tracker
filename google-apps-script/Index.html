@@ -195,7 +195,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  flex: 1;
 }
 
 .nav-btn {
@@ -1102,6 +1101,10 @@ body {
             <button type="button" class="seg-btn" data-currency="USD" id="btn-curr-usd">$ USD + ₴ UAH</button>
           </div>
 
+          <button type="button" class="btn btn-secondary" id="btn-topbar-cloud" title="Налаштування хмарної синхронізації з Google Диском та параметрів портфеля">
+            <span id="topbar-cloud-label">☁️ Google Диск</span>
+          </button>
+
           <button type="button" class="btn btn-secondary" id="btn-refresh-quotes" title="Оновити ринкові ціни крипти, акцій та курсу валют">
             ↻ Оновити ціни
           </button>
@@ -1271,9 +1274,12 @@ body {
 
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
             <label class="form-label" for="set-cloud-sync-url">☁️ Хмарна синхронізація з Google Диском (URL веб-додатка script.google.com/.../exec)</label>
-            <input type="url" class="form-input mono" id="set-cloud-sync-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px;" />
-            <div id="cloud-sync-hint" style="font-size:11.5px; color: var(--text-muted); margin-top:2px;">
-              Коли вказано посилання `/exec` (з доступом «Усі / Anyone»), портфель автоматично синхронізується з вашим Google Диском на всіх пристроях.
+            <div style="display:flex; gap:8px;">
+              <input type="url" class="form-input mono" id="set-cloud-sync-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px; flex:1;" />
+              <button type="button" class="btn btn-secondary" id="btn-test-cloud-sync">Перевірити зв'язок</button>
+            </div>
+            <div id="cloud-sync-hint" style="font-size:11.5px; color: var(--text-muted); margin-top:4px;">
+              Коли вказано посилання <code>/exec</code> (з доступом «Усі / Anyone»), портфель автоматично синхронізується з вашим Google Диском на всіх пристроях.
             </div>
           </div>
 
@@ -2782,10 +2788,58 @@ body {
     // Settings & FX Modal
     document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
     document.getElementById('btn-edit-fx').addEventListener('click', openSettingsModal);
-    document.getElementById('btn-close-settings-modal').addEventListener('click', closePositionModal);
+    const topbarCloudBtn = document.getElementById('btn-topbar-cloud');
+    if (topbarCloudBtn) topbarCloudBtn.addEventListener('click', openSettingsModal);
     document.getElementById('btn-close-settings-modal').addEventListener('click', closeSettingsModal);
     document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
     document.getElementById('form-settings').addEventListener('submit', handleSaveSettings);
+
+    const testCloudBtn = document.getElementById('btn-test-cloud-sync');
+    if (testCloudBtn) {
+      testCloudBtn.addEventListener('click', async () => {
+        const hintEl = document.getElementById('cloud-sync-hint');
+        const inputEl = document.getElementById('set-cloud-sync-url');
+        const urlVal = (inputEl && inputEl.value.trim()) || '';
+        if (!urlVal) {
+          if (hintEl) {
+            hintEl.style.color = 'var(--warning)';
+            hintEl.textContent = 'Вставте посилання Web App URL (https://script.google.com/macros/s/.../exec)';
+          }
+          return;
+        }
+        state.cloudSyncUrl = urlVal;
+        safeSetItem('kapital_cloud_sync_url', urlVal);
+        if (hintEl) {
+          hintEl.style.color = 'var(--text-secondary)';
+          hintEl.textContent = 'Перевірка зв\'язку з Google Диском...';
+        }
+        try {
+          const data = await cloudSyncGet({ action: 'get' });
+          if (data && (data.positions || data.settings)) {
+            state.cloudSynced = true;
+            if (Array.isArray(data.positions) && data.positions.length > 0) {
+              state.positions = data.positions;
+            } else {
+              await cloudSyncPost({ action: 'save', settings: state.settings, positions: state.positions });
+            }
+            if (hintEl) {
+              hintEl.style.color = 'var(--positive)';
+              hintEl.textContent = '✅ Зв\'язок встановлено! Дані портфеля синхронізуються з вашим Google Диском.';
+            }
+            renderAll();
+          } else {
+            throw new Error('Unexpected response');
+          }
+        } catch (err) {
+          state.cloudSynced = false;
+          if (hintEl) {
+            hintEl.style.color = 'var(--warning)';
+            hintEl.textContent = '⚠️ Google не пускає зовнішній запит. Перевірте у script.google.com: Розгорнути → Керувати розгортаннями → ✎ → Версія: «Нова версія» та Хто має доступ: «Усі» (Anyone).';
+          }
+          renderAll();
+        }
+      });
+    }
 
     // Export / Import JSON backup
     const exportBtn = document.getElementById('btn-export-json');
