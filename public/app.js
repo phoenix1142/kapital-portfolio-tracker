@@ -316,6 +316,72 @@
     };
   }
 
+  // Baseline quotes & demo positions for standalone / Google Drive fallback
+  const DEFAULT_QUOTES = {
+    fx: { USD_UAH: 41.65, EUR_UAH: 44.80, GBP_UAH: 52.80, PLN_UAH: 10.35, updatedAt: new Date().toISOString(), source: 'НБУ / Ринковий курс' },
+    crypto: {
+      BTC: { priceUsd: 91450.00, change24h: 2.84, name: 'Bitcoin' },
+      ETH: { priceUsd: 3120.50, change24h: 1.45, name: 'Ethereum' },
+      SOL: { priceUsd: 214.80, change24h: 4.92, name: 'Solana' },
+      USDT: { priceUsd: 1.00, change24h: 0.01, name: 'Tether USDT' },
+      USDC: { priceUsd: 1.00, change24h: 0.00, name: 'USD Coin' },
+      BNB: { priceUsd: 642.30, change24h: 0.85, name: 'BNB' },
+      XRP: { priceUsd: 1.12, change24h: 6.10, name: 'XRP' },
+      TON: { priceUsd: 5.48, change24h: 1.90, name: 'Toncoin' },
+      ADA: { priceUsd: 0.78, change24h: 3.20, name: 'Cardano' },
+      DOGE: { priceUsd: 0.37, change24h: 5.15, name: 'Dogecoin' },
+      AVAX: { priceUsd: 34.90, change24h: 2.10, name: 'Avalanche' },
+      LINK: { priceUsd: 14.95, change24h: 1.75, name: 'Chainlink' },
+      SUI: { priceUsd: 3.28, change24h: 7.40, name: 'Sui' }
+    },
+    stocks: {
+      VOO: { priceUsd: 548.60, change24h: 0.62, name: 'Vanguard S&P 500 ETF' },
+      SPY: { priceUsd: 596.40, change24h: 0.61, name: 'SPDR S&P 500 ETF Trust' },
+      CSP1: { priceUsd: 612.80, change24h: 0.58, name: 'iShares Core S&P 500 UCITS (Acc)' },
+      VUAA: { priceUsd: 112.40, change24h: 0.60, name: 'Vanguard S&P 500 UCITS ETF (Acc)' },
+      VWCE: { priceUsd: 138.90, change24h: 0.48, name: 'Vanguard FTSE All-World UCITS ETF' },
+      QQQ: { priceUsd: 511.20, change24h: 0.94, name: 'Invesco QQQ (Nasdaq-100)' },
+      NVDA: { priceUsd: 144.80, change24h: 2.65, name: 'NVIDIA Corp.' },
+      AAPL: { priceUsd: 228.50, change24h: 1.12, name: 'Apple Inc.' },
+      MSFT: { priceUsd: 426.90, change24h: 0.84, name: 'Microsoft Corp.' },
+      GOOGL: { priceUsd: 181.30, change24h: 0.92, name: 'Alphabet Inc.' },
+      AMZN: { priceUsd: 210.40, change24h: 1.38, name: 'Amazon.com Inc.' },
+      META: { priceUsd: 589.20, change24h: 1.15, name: 'Meta Platforms Inc.' },
+      TSLA: { priceUsd: 332.10, change24h: 3.45, name: 'Tesla Inc.' },
+      GLD: { priceUsd: 242.70, change24h: 0.75, name: 'SPDR Gold Shares ETF' }
+    }
+  };
+
+  const DEFAULT_DEMO_POSITIONS = [
+    { id: 'crypto-btc-1', category: 'crypto', ticker: 'BTC', name: 'Bitcoin', quantity: 0.125, buyPriceUsd: 64200, platform: 'Ledger Nano X', notes: 'Довгостроковий холодний гаманець', createdAt: '2025-11-10' },
+    { id: 'crypto-eth-2', category: 'crypto', ticker: 'ETH', name: 'Ethereum', quantity: 1.5, buyPriceUsd: 2580, platform: 'Binance', notes: 'Стейкінг ETH', createdAt: '2026-01-15' },
+    { id: 'crypto-sol-3', category: 'crypto', ticker: 'SOL', name: 'Solana', quantity: 18, buyPriceUsd: 148.5, platform: 'Phantom', notes: 'Ліквідний стейкінг', createdAt: '2026-03-04' },
+    { id: 'stock-voo-1', category: 'stocks', ticker: 'VOO', name: 'Vanguard S&P 500 ETF', quantity: 12, buyPriceUsd: 472.00, platform: 'Interactive Brokers', notes: 'Базовий індексний фонд США', createdAt: '2025-09-20' },
+    { id: 'stock-nvda-2', category: 'stocks', ticker: 'NVDA', name: 'NVIDIA Corp.', quantity: 20, buyPriceUsd: 108.50, platform: 'Interactive Brokers', notes: 'AI та напівпровідники', createdAt: '2026-02-12' },
+    { id: 'stock-vwce-3', category: 'stocks', ticker: 'VWCE', name: 'Vanguard FTSE All-World UCITS', quantity: 25, buyPriceUsd: 124.00, platform: 'Freedom24', notes: 'Глобальний акумулюючий ETF (0% податку на дивіденди всередині фонду)', createdAt: '2026-01-08' },
+    { id: 'ovdp-uah-1', category: 'ovdp', name: 'Військові ОВДП «Симиренка» (UA4000231195)', currency: 'UAH', bondsCount: 150, faceValue: 1000, principalAmount: 150000, annualRate: 16.25, startDate: '2026-02-01', maturityDate: '2027-06-16', platform: 'Дія / ICU', notes: '0% податків (без ПДФО та військового збору), виплата кожні півроку' },
+    { id: 'ovdp-usd-2', category: 'ovdp', name: 'Валютні ОВДП у USD (UA4000229843)', currency: 'USD', bondsCount: 4, faceValue: 1000, principalAmount: 4000, annualRate: 4.66, startDate: '2026-03-15', maturityDate: '2027-04-15', platform: 'Монобанк', notes: 'Валютний захист без оподаткування' },
+    { id: 'dep-mono-1', category: 'deposits', name: 'Строковий депозит (Монобанк)', bank: 'Монобанк', currency: 'UAH', principalAmount: 85000, annualRate: 14.5, applyTax: true, taxRate: 23.0, startDate: '2026-05-10', endDate: '2027-05-10', notes: 'Без права дострокового розірвання, виплата щомісяця' },
+    { id: 'dep-pumb-2', category: 'deposits', name: 'Валютний депозит «Дохідний»', bank: 'ПУМБ', currency: 'USD', principalAmount: 2500, annualRate: 2.5, applyTax: true, taxRate: 23.0, startDate: '2026-04-01', endDate: '2026-12-31', notes: 'Резерв у доларі на банківському рахунку' },
+    { id: 'cash-usd-1', category: 'cash', name: 'Готівковий резерв вдома (USD)', location: 'Сейф / Готівка', currency: 'USD', amount: 3500, notes: 'Фінансова подушка безпеки (недоторканний запас)' },
+    { id: 'cash-uah-2', category: 'cash', name: 'Банка та поточна картка (UAH)', location: 'Монобанк / ПриватБанк', currency: 'UAH', amount: 42000, notes: 'Оперативні кошти на поточні витрати' },
+    { id: 'cash-eur-3', category: 'cash', name: 'Готівка та рахунок Wise (EUR)', location: 'Wise / Готівка', currency: 'EUR', amount: 1200, notes: 'Євровий резерв для поїздок' }
+  ];
+
+  state.quotes = JSON.parse(JSON.stringify(DEFAULT_QUOTES));
+
+  function isGoogleAppsScript() {
+    return typeof window !== 'undefined' && Boolean(window.google && window.google.script && window.google.script.run);
+  }
+
+  function gasCall(methodName, ...args) {
+    return new Promise((resolve, reject) => {
+      window.google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[methodName](...args);
+    });
+  }
+
   // API / Storage Sync
   async function apiFetch(url, options = {}) {
     const headers = {
@@ -330,23 +396,33 @@
       openLoginModal();
       throw new Error('Unauthorized');
     }
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
     return res.json();
   }
 
   async function loadPortfolioFromServer() {
     try {
-      const data = await apiFetch('/api/portfolio');
-      if (data.settings) {
+      const data = isGoogleAppsScript()
+        ? await gasCall('gasGetPortfolio')
+        : await apiFetch('/api/portfolio');
+
+      if (data && data.settings) {
         state.settings = { ...state.settings, ...data.settings };
         state.primaryCurrency = state.settings.primaryCurrency || 'UAH';
       }
-      if (Array.isArray(data.positions)) {
+      if (data && Array.isArray(data.positions)) {
         state.positions = data.positions;
       }
-      if (data.quotes) {
-        state.quotes = data.quotes;
+      if (data && data.quotes) {
+        state.quotes = {
+          fx: { ...DEFAULT_QUOTES.fx, ...(data.quotes.fx || {}) },
+          crypto: { ...DEFAULT_QUOTES.crypto, ...(data.quotes.crypto || {}) },
+          stocks: { ...DEFAULT_QUOTES.stocks, ...(data.quotes.stocks || {}) }
+        };
       }
-      if (data.auth) {
+      if (data && data.auth) {
         state.auth = data.auth;
       }
       localStorage.setItem('kapital_backup_state', JSON.stringify({
@@ -354,19 +430,21 @@
         positions: state.positions
       }));
       renderAll();
-      // Also attempt direct browser quote enrichment for crypto if user has internet
       refreshBrowserQuotesQuietly();
     } catch (err) {
-      if (err.message !== 'Unauthorized') {
+      if (err && err.message !== 'Unauthorized') {
         const cached = localStorage.getItem('kapital_backup_state');
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
-            if (parsed.settings) state.settings = parsed.settings;
-            if (parsed.positions) state.positions = parsed.positions;
+            if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
+            if (Array.isArray(parsed.positions)) state.positions = parsed.positions;
           } catch (_) {}
+        } else {
+          state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
         }
         renderAll();
+        refreshBrowserQuotesQuietly();
       }
     }
   }
@@ -377,13 +455,20 @@
       positions: state.positions
     }));
     try {
-      await apiFetch('/api/portfolio', {
-        method: 'PUT',
-        body: JSON.stringify({
+      if (isGoogleAppsScript()) {
+        await gasCall('gasSavePortfolio', {
           settings: state.settings,
           positions: state.positions
-        })
-      });
+        });
+      } else {
+        await apiFetch('/api/portfolio', {
+          method: 'PUT',
+          body: JSON.stringify({
+            settings: state.settings,
+            positions: state.positions
+          })
+        });
+      }
     } catch (_) {
       // Saved in localStorage backup if offline
     }
@@ -397,9 +482,15 @@
     const stockTickers = state.positions.filter(p => p.category === 'stocks').map(p => p.ticker).join(',');
 
     try {
-      const quotes = await apiFetch(`/api/quotes?crypto=${encodeURIComponent(cryptoTickers)}&stocks=${encodeURIComponent(stockTickers)}`);
+      const quotes = isGoogleAppsScript()
+        ? await gasCall('gasRefreshQuotes', cryptoTickers, stockTickers)
+        : await apiFetch(`/api/quotes?crypto=${encodeURIComponent(cryptoTickers)}&stocks=${encodeURIComponent(stockTickers)}`);
       if (quotes && quotes.fx) {
-        state.quotes = quotes;
+        state.quotes = {
+          fx: { ...state.quotes.fx, ...quotes.fx },
+          crypto: { ...state.quotes.crypto, ...(quotes.crypto || {}) },
+          stocks: { ...state.quotes.stocks, ...(quotes.stocks || {}) }
+        };
       }
     } catch (_) {}
 
@@ -407,8 +498,27 @@
     renderAll();
   }
 
-  // Optional direct browser fetch for Binance public API if user's browser is online
+  // Direct browser fetch for NBU FX + Binance public API
   async function refreshBrowserQuotesQuietly() {
+    let updatedAny = false;
+    try {
+      const nbuRes = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json');
+      if (nbuRes.ok) {
+        const nbu = await nbuRes.json();
+        if (Array.isArray(nbu)) {
+          const usd = nbu.find(r => r.cc === 'USD');
+          const eur = nbu.find(r => r.cc === 'EUR');
+          const gbp = nbu.find(r => r.cc === 'GBP');
+          const pln = nbu.find(r => r.cc === 'PLN');
+          if (usd && usd.rate) state.quotes.fx.USD_UAH = Number(usd.rate.toFixed(2));
+          if (eur && eur.rate) state.quotes.fx.EUR_UAH = Number(eur.rate.toFixed(2));
+          if (gbp && gbp.rate) state.quotes.fx.GBP_UAH = Number(gbp.rate.toFixed(2));
+          if (pln && pln.rate) state.quotes.fx.PLN_UAH = Number(pln.rate.toFixed(2));
+          updatedAny = true;
+        }
+      }
+    } catch (_) {}
+
     try {
       const cryptoPositions = state.positions.filter(p => p.category === 'crypto');
       for (const pos of cryptoPositions) {
@@ -425,13 +535,18 @@
                 priceUsd: price,
                 change24h: isNaN(change) ? 0 : change
               };
+              updatedAny = true;
             }
           }
         }
       }
+    } catch (_) {}
+
+    if (updatedAny) {
+      state.quotes.fx.source = isGoogleAppsScript()
+        ? 'Google Cloud + Live (НБУ / Binance)'
+        : 'Live (НБУ / Binance)';
       renderAll();
-    } catch (_) {
-      // Server quotes already loaded
     }
   }
 
@@ -1253,14 +1368,67 @@
     document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
     document.getElementById('form-settings').addEventListener('submit', handleSaveSettings);
 
+    // Export / Import JSON backup
+    const exportBtn = document.getElementById('btn-export-json');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        const payload = {
+          exportedAt: new Date().toISOString(),
+          settings: state.settings,
+          positions: state.positions
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `kapital-portfolio-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    const importBtn = document.getElementById('btn-import-json');
+    const importInput = document.getElementById('input-import-json-file');
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+      importInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed.positions)) {
+            state.positions = parsed.positions;
+          }
+          if (parsed.settings && typeof parsed.settings === 'object') {
+            state.settings = { ...state.settings, ...parsed.settings };
+          }
+          await persistPortfolio();
+          closeSettingsModal();
+          renderAll();
+        } catch (_) {}
+        importInput.value = '';
+      });
+    }
+
     // Demo reset & clear all
     document.getElementById('btn-reset-demo').addEventListener('click', async () => {
       try {
-        const res = await apiFetch('/api/portfolio/reset-demo', { method: 'POST' });
-        if (res.positions) state.positions = res.positions;
-        closeSettingsModal();
-        renderAll();
-      } catch (_) {}
+        if (isGoogleAppsScript()) {
+          const res = await gasCall('gasResetDemo');
+          if (res && res.positions) state.positions = res.positions;
+        } else {
+          const res = await apiFetch('/api/portfolio/reset-demo', { method: 'POST' });
+          if (res.positions) state.positions = res.positions;
+        }
+      } catch (_) {
+        state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
+        await persistPortfolio();
+      }
+      closeSettingsModal();
+      renderAll();
     });
 
     document.getElementById('btn-clear-all-data').addEventListener('click', async () => {

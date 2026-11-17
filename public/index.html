@@ -302,10 +302,13 @@
           </div>
 
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
-            <div class="form-label">Керування демо-даними</div>
+            <div class="form-label">Резервне копіювання та дані портфеля</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+              <button type="button" class="btn btn-secondary" id="btn-export-json">⬇ Експорт JSON</button>
+              <button type="button" class="btn btn-secondary" id="btn-import-json">⬆ Імпорт JSON</button>
+              <input type="file" id="input-import-json-file" accept=".json,application/json" style="display:none;" />
               <button type="button" class="btn btn-secondary" id="btn-reset-demo">Відновити приклади активів</button>
-              <button type="button" class="btn btn-danger" id="btn-clear-all-data">Очистити всі позиції (Почати з нуля)</button>
+              <button type="button" class="btn btn-danger" id="btn-clear-all-data">Очистити всі позиції</button>
             </div>
           </div>
         </div>
