@@ -114,7 +114,11 @@
     investCurrency: 'USD',
     rebalanceMode: 'buy_only', // 'buy_only' | 'with_sell'
     tickerSplitMode: 'custom', // 'custom' | 'proportional' | 'equal'
-    tickerTargets: {} // { [posId]: targetPctWithinClass }
+    tickerTargets: {}, // { [posId]: targetPctWithinClass }
+    forecastEquitiesCagr: 8.0, // Консервативний складний ріст акцій (% річних у USD)
+    forecastBondsCagr: 4.2,    // Консервативний складний ріст облігацій (% річних у USD)
+    forecastMetalsCagr: 5.0,   // Консервативний складний ріст золота/срібла (% річних у USD)
+    forecastIncludeMonthly: false // false = тільки те, що вже є (без нових вкладень), true = + щомісячні інвестиції
   };
 
   const state = {
@@ -1163,7 +1167,11 @@
       investCurrency: s.investCurrency === 'UAH' ? 'UAH' : 'USD',
       rebalanceMode: s.rebalanceMode === 'with_sell' ? 'with_sell' : 'buy_only',
       tickerSplitMode: splitMode,
-      tickerTargets: (s.tickerTargets && typeof s.tickerTargets === 'object') ? { ...s.tickerTargets } : {}
+      tickerTargets: (s.tickerTargets && typeof s.tickerTargets === 'object') ? { ...s.tickerTargets } : {},
+      forecastEquitiesCagr: s.forecastEquitiesCagr !== undefined ? Number(s.forecastEquitiesCagr) : 8.0,
+      forecastBondsCagr: s.forecastBondsCagr !== undefined ? Number(s.forecastBondsCagr) : 4.2,
+      forecastMetalsCagr: s.forecastMetalsCagr !== undefined ? Number(s.forecastMetalsCagr) : 5.0,
+      forecastIncludeMonthly: Boolean(s.forecastIncludeMonthly)
     };
   }
 
@@ -1328,6 +1336,9 @@
 
       <!-- Dynamic Calculation Results & Action Plan Table -->
       <div id="stocks-rebalance-results"></div>
+
+      <!-- Box 4: 25-Year Compound Growth Forecast Chart (Buy & Hold without selling) -->
+      <div class="forecast-chart-box" id="stocks-forecast-chart-box"></div>
     `;
 
     // Wire up live input events
@@ -2094,6 +2105,319 @@
           });
         }
       });
+    });
+
+    // Render 25-Year Compound Growth Forecast Chart
+    renderStockForecastChart(stockPositions, classValUsd, weights, investUsd);
+  }
+
+  let selectedForecastYear = 25;
+
+  function renderStockForecastChart(stockPositions, classValUsd, weights, monthlyInvestUsd) {
+    const forecastBox = document.getElementById('stocks-forecast-chart-box');
+    if (!forecastBox) return;
+
+    const strat = getStockStrategy();
+    const isFocusedInside = document.activeElement && forecastBox.contains(document.activeElement);
+
+    if (!forecastBox.dataset.initialized || !isFocusedInside) {
+      forecastBox.dataset.initialized = 'true';
+      forecastBox.innerHTML = `
+        <div class="strategy-box-title" style="flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span>📈 4. Прогноз росту фондового портфеля на 25 років (Складний % · Buy & Hold без продажу)</span>
+            <span class="pill-badge pill-positive" id="forecast-blended-cagr-badge">Середній CAGR: 7.0% річних</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="chip-btn" data-forecast-preset="6.5,3.5,4.0" title="Дуже обережний прогноз (6.5% Акції / 3.5% Облігації / 4% Золото)">🛡️ Супер-консервативний</button>
+            <button type="button" class="chip-btn" data-forecast-preset="8.0,4.2,5.0" title="Консервативний історичний прогноз з урахуванням реінвестування дивідендів (8% Акції / 4.2% Облігації / 5% Золото)">⚖️ Консервативний (Базовий)</button>
+            <button type="button" class="chip-btn" data-forecast-preset="10.0,4.8,6.0" title="Середньоісторичний номінальний ріст S&P 500 (10% Акції / 4.8% Облігації / 6% Золото)">🚀 Історичний S&P 500</button>
+          </div>
+        </div>
+        <div class="strategy-box-sub">
+          Моделювання капіталу на 25 років уперед за умови, що <strong>жоден наявний актив фондового ринку не продається роками</strong>, а прибуток та дивіденди працюють за формулою складного відсотка: <code>V(t) = V₀ · (1 + r)<sup>t</sup></code>.
+        </div>
+
+        <div class="forecast-rates-row">
+          <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <span style="font-size:12px; font-weight:600; color:var(--text-primary);">Консервативна дохідність (% річних у $):</span>
+            <label class="forecast-rate-item">
+              <span style="color:${STOCK_SUBTYPES_META.equities.color}; font-weight:700;">📈 Акції:</span>
+              <input type="number" step="0.1" min="0" max="30" id="forecast-cagr-equities" class="ticker-pct-inline-input" style="width:62px;" value="${strat.forecastEquitiesCagr}" />
+              <span>%</span>
+            </label>
+            <label class="forecast-rate-item">
+              <span style="color:${STOCK_SUBTYPES_META.bonds.color}; font-weight:700;">📜 Облігації:</span>
+              <input type="number" step="0.1" min="0" max="25" id="forecast-cagr-bonds" class="ticker-pct-inline-input" style="width:62px;" value="${strat.forecastBondsCagr}" />
+              <span>%</span>
+            </label>
+            <label class="forecast-rate-item">
+              <span style="color:${STOCK_SUBTYPES_META.metals.color}; font-weight:700;">🥇 Золото/Срібло:</span>
+              <input type="number" step="0.1" min="0" max="25" id="forecast-cagr-metals" class="ticker-pct-inline-input" style="width:62px;" value="${strat.forecastMetalsCagr}" />
+              <span>%</span>
+            </label>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="mode-switch-group" style="margin:0;">
+              <button type="button" class="mode-switch-btn ${!strat.forecastIncludeMonthly ? 'active' : ''}" id="btn-forecast-hold-only" style="padding:5px 10px; font-size:11.5px;">
+                🔒 Тільки те, що вже є (Без вкладень)
+              </button>
+              <button type="button" class="mode-switch-btn ${strat.forecastIncludeMonthly ? 'active' : ''}" id="btn-forecast-with-monthly" style="padding:5px 10px; font-size:11.5px;">
+                ➕ З урахуванням щомісячних +${fmtUsd(monthlyInvestUsd)}/міс
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="forecast-dynamic-view"></div>
+      `;
+
+      const eqCagrInp = document.getElementById('forecast-cagr-equities');
+      const bdCagrInp = document.getElementById('forecast-cagr-bonds');
+      const mtCagrInp = document.getElementById('forecast-cagr-metals');
+
+      const onForecastCagrInput = () => {
+        const s = getStockStrategy();
+        s.forecastEquitiesCagr = Math.max(0, parseFloat(eqCagrInp.value) || 0);
+        s.forecastBondsCagr = Math.max(0, parseFloat(bdCagrInp.value) || 0);
+        s.forecastMetalsCagr = Math.max(0, parseFloat(mtCagrInp.value) || 0);
+        state.settings.stockStrategy = s;
+        schedulePersistStrategy();
+        updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
+      };
+
+      [eqCagrInp, bdCagrInp, mtCagrInp].forEach(inp => {
+        inp?.addEventListener('input', onForecastCagrInput);
+      });
+
+      forecastBox.querySelectorAll('[data-forecast-preset]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const parts = (btn.dataset.forecastPreset || '8.0,4.2,5.0').split(',').map(Number);
+          if (eqCagrInp) eqCagrInp.value = parts[0] ?? 8.0;
+          if (bdCagrInp) bdCagrInp.value = parts[1] ?? 4.2;
+          if (mtCagrInp) mtCagrInp.value = parts[2] ?? 5.0;
+          onForecastCagrInput();
+        });
+      });
+
+      document.getElementById('btn-forecast-hold-only')?.addEventListener('click', () => {
+        const s = getStockStrategy();
+        s.forecastIncludeMonthly = false;
+        state.settings.stockStrategy = s;
+        schedulePersistStrategy();
+        document.getElementById('btn-forecast-hold-only')?.classList.add('active');
+        document.getElementById('btn-forecast-with-monthly')?.classList.remove('active');
+        updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
+      });
+
+      document.getElementById('btn-forecast-with-monthly')?.addEventListener('click', () => {
+        const s = getStockStrategy();
+        s.forecastIncludeMonthly = true;
+        state.settings.stockStrategy = s;
+        schedulePersistStrategy();
+        document.getElementById('btn-forecast-hold-only')?.classList.remove('active');
+        document.getElementById('btn-forecast-with-monthly')?.classList.add('active');
+        updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
+      });
+    } else {
+      // Update button caption for monthly amount if user changed investAmount
+      const monthlyBtn = document.getElementById('btn-forecast-with-monthly');
+      if (monthlyBtn) {
+        monthlyBtn.textContent = `➕ З урахуванням щомісячних +${fmtUsd(monthlyInvestUsd)}/міс`;
+      }
+    }
+
+    updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
+  }
+
+  function updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd) {
+    const viewEl = document.getElementById('forecast-dynamic-view');
+    if (!viewEl) return;
+
+    const strat = getStockStrategy();
+    const rates = getEffectiveRates();
+    const rEq = Math.max(0, Number(strat.forecastEquitiesCagr) || 0) / 100;
+    const rBd = Math.max(0, Number(strat.forecastBondsCagr) || 0) / 100;
+    const rMt = Math.max(0, Number(strat.forecastMetalsCagr) || 0) / 100;
+    const includeMonthly = Boolean(strat.forecastIncludeMonthly);
+
+    const startEq = classValUsd.equities || 0;
+    const startBd = classValUsd.bonds || 0;
+    const startMt = classValUsd.metals || 0;
+    const startTotal = startEq + startBd + startMt;
+
+    // Annual contribution per class if monthly investing is enabled
+    const annualAddTotal = includeMonthly ? (monthlyInvestUsd * 12) : 0;
+    const annualAddEq = annualAddTotal * (weights.equities || 0);
+    const annualAddBd = annualAddTotal * (weights.bonds || 0);
+    const annualAddMt = annualAddTotal * (weights.metals || 0);
+
+    // Helper for compound growth of initial lump sum + optional monthly DCA compounded monthly
+    function projectClassValue(v0, annualRate, annualContribution, years) {
+      const lumpSumFuture = v0 * Math.pow(1 + annualRate, years);
+      if (annualContribution <= 0 || years === 0) return lumpSumFuture;
+      const monthlyPayment = annualContribution / 12;
+      const monthlyRate = Math.pow(1 + annualRate, 1 / 12) - 1;
+      const months = years * 12;
+      if (monthlyRate <= 1e-8) {
+        return lumpSumFuture + monthlyPayment * months;
+      }
+      const dcaFuture = monthlyPayment * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate);
+      return lumpSumFuture + dcaFuture;
+    }
+
+    const currentCalendarYear = new Date().getFullYear();
+    const timeline = [];
+
+    for (let y = 0; y <= 25; y++) {
+      const eqUsd = projectClassValue(startEq, rEq, annualAddEq, y);
+      const bdUsd = projectClassValue(startBd, rBd, annualAddBd, y);
+      const mtUsd = projectClassValue(startMt, rMt, annualAddMt, y);
+      const totalUsd = eqUsd + bdUsd + mtUsd;
+      const contributedUsd = startTotal + (annualAddTotal * y);
+      const compoundProfitUsd = Math.max(0, totalUsd - contributedUsd);
+      const multiplier = contributedUsd > 0 ? (totalUsd / contributedUsd) : (startTotal > 0 ? totalUsd / startTotal : 1);
+
+      timeline.push({
+        yearOffset: y,
+        calendarYear: currentCalendarYear + y,
+        eqUsd,
+        bdUsd,
+        mtUsd,
+        totalUsd,
+        totalUah: totalUsd * rates.USD_UAH,
+        contributedUsd,
+        compoundProfitUsd,
+        compoundProfitUah: compoundProfitUsd * rates.USD_UAH,
+        multiplier
+      });
+    }
+
+    const y25 = timeline[25];
+    // Effective blended annual CAGR over 25 years for pure Buy & Hold
+    const pureHold25 = (startEq * Math.pow(1 + rEq, 25)) + (startBd * Math.pow(1 + rBd, 25)) + (startMt * Math.pow(1 + rMt, 25));
+    const blendedCagrPct = startTotal > 0
+      ? ((Math.pow(pureHold25 / startTotal, 1 / 25) - 1) * 100)
+      : ((rEq * weights.equities + rBd * weights.bonds + rMt * weights.metals) * 100);
+
+    const cagrBadge = document.getElementById('forecast-blended-cagr-badge');
+    if (cagrBadge) {
+      cagrBadge.textContent = `Ефективний CAGR портфеля: ${blendedCagrPct.toFixed(2)}% річних`;
+    }
+
+    const maxTotalUsd = Math.max(1, y25.totalUsd);
+    const milestoneOffsets = [0, 5, 10, 15, 20, 25];
+
+    if (selectedForecastYear < 0 || selectedForecastYear > 25) {
+      selectedForecastYear = 25;
+    }
+    const selPoint = timeline[selectedForecastYear] || y25;
+
+    viewEl.innerHTML = `
+      <!-- Milestone KPI Cards (0, 5, 10, 15, 20, 25 years) -->
+      <div class="forecast-kpi-grid">
+        ${milestoneOffsets.map(offset => {
+          const pt = timeline[offset];
+          const is25 = offset === 25;
+          const cardBorder = is25 ? 'border-color: var(--accent-primary); box-shadow: 0 0 0 1px rgba(56,189,248,0.25);' : '';
+          const titleText = offset === 0 ? `Зараз (${pt.calendarYear})` : `Через ${offset} р. (${pt.calendarYear})`;
+          const badgeHtml = offset === 0
+            ? `<span style="color:var(--text-muted);">Старт</span>`
+            : `<span style="color:var(--positive);">×${pt.multiplier.toFixed(2)}</span>`;
+          return `
+            <div class="forecast-kpi-card" data-select-forecast-year="${offset}" style="cursor:pointer; ${cardBorder}">
+              <div class="forecast-kpi-year">
+                <span>${titleText}</span>
+                ${badgeHtml}
+              </div>
+              <div class="forecast-kpi-val">${fmtUsd(pt.totalUsd)}</div>
+              <div class="forecast-kpi-sub">${fmtUah(pt.totalUah)}</div>
+              ${offset > 0 ? `<div class="forecast-kpi-sub" style="color:var(--positive); font-size:11px;">Складний %: +${fmtUsd(pt.compoundProfitUsd)}</div>` : `<div class="forecast-kpi-sub" style="font-size:11px;">База без продажу</div>`}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- 25-Year Stacked Bar Chart -->
+      <div class="forecast-chart-stage">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px; font-size:11.5px; color:var(--text-secondary);">
+          <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.equities.color}; margin-right:4px;"></span>Акції (${strat.forecastEquitiesCagr}% річних)</span>
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.bonds.color}; margin-right:4px;"></span>Облігації (${strat.forecastBondsCagr}% річних)</span>
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.metals.color}; margin-right:4px;"></span>Золото / Срібло (${strat.forecastMetalsCagr}% річних)</span>
+          </div>
+          <span style="color:var(--text-muted);">Наведіть або натисніть на стовпчик року для деталізації</span>
+        </div>
+
+        <div class="forecast-bars-grid">
+          ${timeline.map(pt => {
+            const totalHeightPct = maxTotalUsd > 0 ? Math.max(2, (pt.totalUsd / maxTotalUsd) * 100) : 2;
+            const eqShare = pt.totalUsd > 0 ? (pt.eqUsd / pt.totalUsd) * 100 : 0;
+            const bdShare = pt.totalUsd > 0 ? (pt.bdUsd / pt.totalUsd) * 100 : 0;
+            const mtShare = pt.totalUsd > 0 ? (pt.mtUsd / pt.totalUsd) * 100 : 0;
+            const isActive = pt.yearOffset === selectedForecastYear;
+
+            return `
+              <div
+                class="forecast-bar-col ${isActive ? 'active' : ''}"
+                data-forecast-year-bar="${pt.yearOffset}"
+                title="Рік +${pt.yearOffset} (${pt.calendarYear}): ${fmtUsd(pt.totalUsd)} (${fmtUah(pt.totalUah)}) · Чистий складний приріст: +${fmtUsd(pt.compoundProfitUsd)}"
+              >
+                <div class="forecast-bar-stack" style="height: ${totalHeightPct.toFixed(1)}%;">
+                  <div class="forecast-bar-seg" style="height: ${eqShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.equities.color};"></div>
+                  <div class="forecast-bar-seg" style="height: ${bdShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.bonds.color};"></div>
+                  <div class="forecast-bar-seg" style="height: ${mtShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.metals.color};"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div class="forecast-x-labels">
+          ${timeline.map(pt => {
+            const isMilestone = pt.yearOffset % 5 === 0;
+            const label = pt.yearOffset === 0 ? '0р' : `+${pt.yearOffset}р`;
+            return `<div class="forecast-x-label ${isMilestone ? 'milestone' : ''}">${label}</div>`;
+          }).join('')}
+        </div>
+
+        <!-- Selected Year Detailed Breakdown Banner -->
+        <div class="forecast-detail-banner" id="forecast-year-detail-banner">
+          <div>
+            <span style="color:var(--text-secondary);">Обраний горизонт:</span>
+            <strong style="font-size:13.5px; color:var(--text-primary); margin-left:4px;">
+              ${selPoint.yearOffset === 0 ? `Поточний стан (${selPoint.calendarYear} рік)` : `Через ${selPoint.yearOffset} р. (${selPoint.calendarYear} рік)`}
+            </strong>
+            <span class="pill-badge pill-positive" style="margin-left:6px;">×${selPoint.multiplier.toFixed(2)} до бази</span>
+          </div>
+
+          <div class="tabular" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <span>📈 Акції: <strong>${fmtUsd(selPoint.eqUsd)}</strong></span>
+            <span>📜 Облігації: <strong>${fmtUsd(selPoint.bdUsd)}</strong></span>
+            <span>🥇 Золото/Срібло: <strong>${fmtUsd(selPoint.mtUsd)}</strong></span>
+            <span>Чистий складний %: <strong style="color:var(--positive);">+${fmtUsd(selPoint.compoundProfitUsd)}</strong></span>
+            <span style="font-size:14px;">Разом: <strong style="color:var(--accent-primary);">${fmtUsd(selPoint.totalUsd)}</strong> <span style="color:var(--text-secondary);">(${fmtUah(selPoint.totalUah)})</span></span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Interactive hover & click on year bars and milestone cards
+    const bindYearSelection = (offset) => {
+      selectedForecastYear = offset;
+      updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
+    };
+
+    viewEl.querySelectorAll('[data-forecast-year-bar]').forEach(bar => {
+      const yr = parseInt(bar.dataset.forecastYearBar, 10) || 0;
+      bar.addEventListener('mouseenter', () => bindYearSelection(yr));
+      bar.addEventListener('click', () => bindYearSelection(yr));
+    });
+
+    viewEl.querySelectorAll('[data-select-forecast-year]').forEach(card => {
+      const yr = parseInt(card.dataset.selectForecastYear, 10) || 0;
+      card.addEventListener('click', () => bindYearSelection(yr));
     });
   }
 
