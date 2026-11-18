@@ -1242,6 +1242,57 @@ body {
   border-color: var(--accent-primary);
 }
 
+.equities-split-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.equities-tickers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.equity-ticker-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid #38bdf8;
+  border-radius: 9px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.equity-ticker-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ticker-pct-inline-input {
+  width: 68px;
+  padding: 4px 7px;
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-align: right;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.ticker-pct-inline-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
 /* Mobile Bottom Nav */
 .mobile-nav {
   display: none;
@@ -1786,7 +1837,8 @@ body {
     investAmount: 1000,
     investCurrency: 'USD',
     rebalanceMode: 'buy_only', // 'buy_only' | 'with_sell'
-    tickerSplitMode: 'proportional' // 'proportional' | 'equal'
+    tickerSplitMode: 'custom', // 'custom' | 'proportional' | 'equal'
+    tickerTargets: {} // { [posId]: targetPctWithinClass }
   };
 
   const state = {
@@ -2825,6 +2877,8 @@ body {
       state.settings.stockStrategy = { ...DEFAULT_STOCK_STRATEGY };
     }
     const s = state.settings.stockStrategy;
+    const validSplitModes = ['custom', 'proportional', 'equal'];
+    const splitMode = validSplitModes.includes(s.tickerSplitMode) ? s.tickerSplitMode : 'custom';
     return {
       equitiesPct: s.equitiesPct !== undefined ? Number(s.equitiesPct) : 70,
       bondsPct: s.bondsPct !== undefined ? Number(s.bondsPct) : 20,
@@ -2832,8 +2886,43 @@ body {
       investAmount: s.investAmount !== undefined ? Number(s.investAmount) : 1000,
       investCurrency: s.investCurrency === 'UAH' ? 'UAH' : 'USD',
       rebalanceMode: s.rebalanceMode === 'with_sell' ? 'with_sell' : 'buy_only',
-      tickerSplitMode: s.tickerSplitMode === 'equal' ? 'equal' : 'proportional'
+      tickerSplitMode: splitMode,
+      tickerTargets: (s.tickerTargets && typeof s.tickerTargets === 'object') ? { ...s.tickerTargets } : {}
     };
+  }
+
+  // Ensure every position in a class has a sensible default custom % target (summing to 100% per class)
+  function ensureClassTickerTargets(positionsInClass, strat) {
+    if (!positionsInClass || positionsInClass.length === 0) return;
+    if (!strat.tickerTargets || typeof strat.tickerTargets !== 'object') {
+      strat.tickerTargets = {};
+    }
+    const missing = positionsInClass.filter(p => strat.tickerTargets[p.id] === undefined || Number.isNaN(Number(strat.tickerTargets[p.id])));
+    if (missing.length === 0) return;
+
+    const existingDefined = positionsInClass.filter(p => !missing.includes(p));
+    if (existingDefined.length === 0) {
+      // Initialize all positions in this class based on current value weight (or equal if 0 value)
+      const totalVal = positionsInClass.reduce((acc, p) => acc + (p.currentValUsd || 0), 0);
+      let runningSum = 0;
+      positionsInClass.forEach((p, idx) => {
+        if (idx === positionsInClass.length - 1) {
+          strat.tickerTargets[p.id] = Number(Math.max(0, 100 - runningSum).toFixed(1));
+        } else {
+          const rawShare = totalVal > 0 ? ((p.currentValUsd || 0) / totalVal) * 100 : (100 / positionsInClass.length);
+          const rounded = Number(rawShare.toFixed(1));
+          strat.tickerTargets[p.id] = rounded;
+          runningSum += rounded;
+        }
+      });
+    } else {
+      // Only initialize newly added positions
+      const equalShare = Number((100 / positionsInClass.length).toFixed(1));
+      missing.forEach(p => {
+        strat.tickerTargets[p.id] = equalShare;
+      });
+    }
+    state.settings.stockStrategy = strat;
   }
 
   let strategySaveTimer = null;
@@ -2852,7 +2941,7 @@ body {
       <div class="panel-header" style="margin-bottom: 14px;">
         <div>
           <div class="panel-title">🎯 Цільова стратегія фондового портфеля та калькулятор докупівлі</div>
-          <div class="panel-subtitle">Задайте бажані пропорції (Акції / Облігації / Золото та Срібло) і розрахуйте, скільки та яких активів купити на суму щомісячної інвестиції</div>
+          <div class="panel-subtitle">Задайте пропорції між класами (Акції / Облігації / Золото), розбийте частки окремо по кожній акції та розрахуйте план купівлі</div>
         </div>
       </div>
 
@@ -2948,14 +3037,18 @@ body {
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="strat-ticker-split">Розподіл суми між тікерами всередині одного класу</label>
+            <label class="form-label" for="strat-ticker-split">Розподіл часток між окремими акціями (тікерами) всередині класу</label>
             <select id="strat-ticker-split" class="form-select">
-              <option value="proportional">⚖️ Пропорційно поточній вазі активу в цьому класі</option>
-              <option value="equal">➗ Порівну між усіма моїми активами цього класу</option>
+              <option value="custom">🎯 Власні частки % по кожній акції окремо (настроюваний розподіл)</option>
+              <option value="proportional">⚖️ Автоматично: пропорційно поточній вазі активу</option>
+              <option value="equal">➗ Автоматично: порівну між усіма активами класу</option>
             </select>
           </div>
         </div>
       </div>
+
+      <!-- Box 3: Per-Stock Allocation Breakdown inside Equities (and other multi-asset classes) -->
+      <div class="equities-split-box" id="equities-suballocation-box"></div>
 
       <!-- Dynamic Calculation Results & Action Plan Table -->
       <div id="stocks-rebalance-results"></div>
@@ -2970,26 +3063,29 @@ body {
     const splitSelect = document.getElementById('strat-ticker-split');
     const normBtn = document.getElementById('btn-strat-normalize');
 
-    function onStrategyInputChanged() {
+    function onStrategyInputChanged(rebuildEquitiesBox = false) {
       const strat = getStockStrategy();
       strat.equitiesPct = Math.max(0, parseFloat(eqInput.value) || 0);
       strat.bondsPct = Math.max(0, parseFloat(bdInput.value) || 0);
       strat.metalsPct = Math.max(0, parseFloat(mtInput.value) || 0);
       strat.investAmount = Math.max(0, parseFloat(amtInput.value) || 0);
       strat.investCurrency = currSelect.value === 'UAH' ? 'UAH' : 'USD';
-      strat.tickerSplitMode = splitSelect.value === 'equal' ? 'equal' : 'proportional';
+      const validModes = ['custom', 'proportional', 'equal'];
+      strat.tickerSplitMode = validModes.includes(splitSelect.value) ? splitSelect.value : 'custom';
       state.settings.stockStrategy = strat;
       schedulePersistStrategy();
       const stockPositions = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
+      if (rebuildEquitiesBox) {
+        renderEquitiesSubAllocationBox(stockPositions);
+      }
       updateStockStrategyCalculations(stockPositions);
     }
 
     [eqInput, bdInput, mtInput, amtInput].forEach(inp => {
-      inp?.addEventListener('input', onStrategyInputChanged);
+      inp?.addEventListener('input', () => onStrategyInputChanged(false));
     });
-    [currSelect, splitSelect].forEach(sel => {
-      sel?.addEventListener('change', onStrategyInputChanged);
-    });
+    currSelect?.addEventListener('change', () => onStrategyInputChanged(false));
+    splitSelect?.addEventListener('change', () => onStrategyInputChanged(true));
 
     sectionEl.querySelectorAll('[data-strat-preset]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2997,7 +3093,7 @@ body {
         eqInput.value = parts[0] ?? 70;
         bdInput.value = parts[1] ?? 20;
         mtInput.value = parts[2] ?? 10;
-        onStrategyInputChanged();
+        onStrategyInputChanged(false);
       });
     });
 
@@ -3016,7 +3112,7 @@ body {
         bdInput.value = 20;
         mtInput.value = 10;
       }
-      onStrategyInputChanged();
+      onStrategyInputChanged(false);
     });
 
     sectionEl.querySelectorAll('[data-rebalance-mode]').forEach(btn => {
@@ -3029,6 +3125,232 @@ body {
         const stockPositions = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
         updateStockStrategyCalculations(stockPositions);
       });
+    });
+  }
+
+  // Render Box 3: Per-stock allocation breakdown inside Equities
+  function renderEquitiesSubAllocationBox(stockPositions) {
+    const boxEl = document.getElementById('equities-suballocation-box');
+    if (!boxEl) return;
+
+    const strat = getStockStrategy();
+    const rawSumPct = strat.equitiesPct + strat.bondsPct + strat.metalsPct;
+    const equitiesMacroWeight = rawSumPct > 0 ? (strat.equitiesPct / rawSumPct) : 0;
+
+    const equityPositions = stockPositions.filter(p => {
+      const sub = p.stockSubType || inferStockSubType(p);
+      return sub === 'equities';
+    });
+
+    ensureClassTickerTargets(equityPositions, strat);
+    const totalEquitiesUsd = equityPositions.reduce((acc, p) => acc + p.currentValUsd, 0);
+
+    if (equityPositions.length === 0) {
+      boxEl.innerHTML = `
+        <div class="strategy-box-title">
+          <span>3. Розподіл окремо по акціях (всередині класу 📈 Акції)</span>
+        </div>
+        <div style="font-size:12.5px; color:var(--text-secondary);">
+          У вас ще немає доданих акцій у класі «📈 Акції». Додайте акції або ETF (напр. VOO, VWCE, QQQ, NVDA), щоб розбити їх на бажані частки у %.
+        </div>
+      `;
+      return;
+    }
+
+    const sumEquityTargets = equityPositions.reduce((acc, p) => acc + (Number(strat.tickerTargets[p.id]) || 0), 0);
+    const isSum100 = Math.abs(sumEquityTargets - 100) < 0.15;
+
+    boxEl.innerHTML = `
+      <div class="strategy-box-title" style="flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span>3. Розподіл окремо по акціях (всередині класу 📈 Акції — ${ (equitiesMacroWeight * 100).toFixed(1) }% портфеля)</span>
+          <span id="eq-tickers-sum-badge" class="pill-badge ${isSum100 ? 'pill-positive' : 'pill-negative'}">
+            Сума по акціях: ${Number(sumEquityTargets.toFixed(1))}%
+          </span>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="chip-btn" id="btn-eq-split-equal" title="Виставити рівні частки для кожної акції">➗ Порівну (${(100 / equityPositions.length).toFixed(1)}%)</button>
+          <button type="button" class="chip-btn" id="btn-eq-split-current" title="Підставити поточні ринкові частки акцій">⚖️ За поточною вагою</button>
+          <button type="button" class="chip-btn" id="btn-eq-split-norm" style="display:${isSum100 ? 'none' : 'inline-flex'}; border-color:var(--accent-primary); color:var(--accent-primary);">Вирівняти до 100%</button>
+        </div>
+      </div>
+      <div class="strategy-box-sub" style="margin-bottom:8px;">
+        Вкажіть, яку частку (%) від кошика <strong>«📈 Акції»</strong> має займати кожен окремий тікер (сума всіх акцій = 100% класу Акції). Калькулятор автоматично розрахує докупівлю або продаж по кожній акції окремо.
+      </div>
+
+      <div class="equities-tickers-grid">
+        ${equityPositions.map(pos => {
+          const curInEqPct = totalEquitiesUsd > 0 ? (pos.currentValUsd / totalEquitiesUsd) * 100 : 0;
+          const targetInEqPct = strat.tickerSplitMode === 'equal'
+            ? Number((100 / equityPositions.length).toFixed(1))
+            : (strat.tickerSplitMode === 'proportional'
+                ? Number(curInEqPct.toFixed(1))
+                : Number(strat.tickerTargets[pos.id] ?? 0));
+          const normWeightInEq = sumEquityTargets > 0 && strat.tickerSplitMode === 'custom'
+            ? (targetInEqPct / sumEquityTargets)
+            : (targetInEqPct / 100);
+          const globalPortfolioPct = equitiesMacroWeight * normWeightInEq * 100;
+
+          return `
+            <div class="equity-ticker-card" data-eq-card="${pos.id}">
+              <div class="equity-ticker-top">
+                <div style="display:flex; align-items:center; gap:7px; min-width:0;">
+                  <span class="ticker-badge" style="height:26px; min-width:38px; font-size:11.5px;">${escapeHtml(pos.ticker)}</span>
+                  <div style="min-width:0;">
+                    <div style="font-weight:600; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(pos.displayName)}">${escapeHtml(pos.displayName)}</div>
+                    <div class="tabular" style="font-size:11px; color:var(--text-secondary);">${fmtUsd(pos.currentValUsd)} · ${pos.quantity} шт.</div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-split-pos-trigger" data-split-id="${pos.id}" title="Розділити цю позицію на 2 окремі частини / лоти" style="padding:3px 6px; font-size:11.5px;">
+                  ✂️ Частини
+                </button>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:4px; padding-top:6px; border-top:1px solid var(--border-subtle);">
+                <div style="font-size:11.5px; color:var(--text-secondary);">
+                  <div>Зараз в Акціях: <strong class="tabular">${curInEqPct.toFixed(1)}%</strong></div>
+                  <div class="tabular" data-eq-global-pct="${pos.id}" style="color:var(--accent-primary);">У портфелі: <strong>${globalPortfolioPct.toFixed(1)}%</strong></div>
+                </div>
+                <div style="display:flex; align-items:center; gap:4px;">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="100"
+                    class="ticker-pct-inline-input"
+                    data-eq-target-input="${pos.id}"
+                    value="${targetInEqPct}"
+                    title="Цільова частка ${escapeHtml(pos.ticker)} всередині класу Акції (%)"
+                  />
+                  <span style="font-size:12.5px; font-weight:700; color:var(--text-secondary);">%</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    // Wire up live input on each equity card without losing focus!
+    boxEl.querySelectorAll('[data-eq-target-input]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const posId = inp.dataset.eqTargetInput;
+        const val = Math.max(0, parseFloat(inp.value) || 0);
+        const s = getStockStrategy();
+        s.tickerSplitMode = 'custom';
+        s.tickerTargets[posId] = val;
+        state.settings.stockStrategy = s;
+        const splitSel = document.getElementById('strat-ticker-split');
+        if (splitSel && splitSel.value !== 'custom') splitSel.value = 'custom';
+        schedulePersistStrategy();
+
+        const currentStocks = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
+        updateEquitiesSubAllocationBadgesOnly(currentStocks);
+        updateStockStrategyCalculations(currentStocks);
+      });
+    });
+
+    boxEl.querySelector('#btn-eq-split-equal')?.addEventListener('click', () => {
+      const s = getStockStrategy();
+      s.tickerSplitMode = 'custom';
+      let running = 0;
+      equityPositions.forEach((p, idx) => {
+        if (idx === equityPositions.length - 1) {
+          s.tickerTargets[p.id] = Number(Math.max(0, 100 - running).toFixed(1));
+        } else {
+          const share = Number((100 / equityPositions.length).toFixed(1));
+          s.tickerTargets[p.id] = share;
+          running += share;
+        }
+      });
+      state.settings.stockStrategy = s;
+      const splitSel = document.getElementById('strat-ticker-split');
+      if (splitSel) splitSel.value = 'custom';
+      schedulePersistStrategy();
+      const currentStocks = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
+      renderEquitiesSubAllocationBox(currentStocks);
+      updateStockStrategyCalculations(currentStocks);
+    });
+
+    boxEl.querySelector('#btn-eq-split-current')?.addEventListener('click', () => {
+      const s = getStockStrategy();
+      s.tickerSplitMode = 'custom';
+      let running = 0;
+      equityPositions.forEach((p, idx) => {
+        if (idx === equityPositions.length - 1) {
+          s.tickerTargets[p.id] = Number(Math.max(0, 100 - running).toFixed(1));
+        } else {
+          const share = totalEquitiesUsd > 0
+            ? Number(((p.currentValUsd / totalEquitiesUsd) * 100).toFixed(1))
+            : Number((100 / equityPositions.length).toFixed(1));
+          s.tickerTargets[p.id] = share;
+          running += share;
+        }
+      });
+      state.settings.stockStrategy = s;
+      const splitSel = document.getElementById('strat-ticker-split');
+      if (splitSel) splitSel.value = 'custom';
+      schedulePersistStrategy();
+      const currentStocks = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
+      renderEquitiesSubAllocationBox(currentStocks);
+      updateStockStrategyCalculations(currentStocks);
+    });
+
+    boxEl.querySelector('#btn-eq-split-norm')?.addEventListener('click', () => {
+      const s = getStockStrategy();
+      s.tickerSplitMode = 'custom';
+      const sum = equityPositions.reduce((acc, p) => acc + (Number(s.tickerTargets[p.id]) || 0), 0);
+      let running = 0;
+      equityPositions.forEach((p, idx) => {
+        if (idx === equityPositions.length - 1) {
+          s.tickerTargets[p.id] = Number(Math.max(0, 100 - running).toFixed(1));
+        } else {
+          const share = sum > 0
+            ? Number((((Number(s.tickerTargets[p.id]) || 0) / sum) * 100).toFixed(1))
+            : Number((100 / equityPositions.length).toFixed(1));
+          s.tickerTargets[p.id] = share;
+          running += share;
+        }
+      });
+      state.settings.stockStrategy = s;
+      schedulePersistStrategy();
+      const currentStocks = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
+      renderEquitiesSubAllocationBox(currentStocks);
+      updateStockStrategyCalculations(currentStocks);
+    });
+
+    boxEl.querySelectorAll('.btn-split-pos-trigger').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openSplitPositionPrompt(btn.dataset.splitId);
+      });
+    });
+  }
+
+  function updateEquitiesSubAllocationBadgesOnly(stockPositions) {
+    const strat = getStockStrategy();
+    const rawSumPct = strat.equitiesPct + strat.bondsPct + strat.metalsPct;
+    const equitiesMacroWeight = rawSumPct > 0 ? (strat.equitiesPct / rawSumPct) : 0;
+    const equityPositions = stockPositions.filter(p => (p.stockSubType || inferStockSubType(p)) === 'equities');
+    const sumEquityTargets = equityPositions.reduce((acc, p) => acc + (Number(strat.tickerTargets[p.id]) || 0), 0);
+    const isSum100 = Math.abs(sumEquityTargets - 100) < 0.15;
+
+    const sumBadge = document.getElementById('eq-tickers-sum-badge');
+    if (sumBadge) {
+      sumBadge.textContent = `Сума по акціях: ${Number(sumEquityTargets.toFixed(1))}%`;
+      sumBadge.className = 'pill-badge ' + (isSum100 ? 'pill-positive' : 'pill-negative');
+    }
+    const normBtn = document.getElementById('btn-eq-split-norm');
+    if (normBtn) {
+      normBtn.style.display = isSum100 ? 'none' : 'inline-flex';
+    }
+
+    equityPositions.forEach(p => {
+      const el = document.querySelector(`[data-eq-global-pct="${p.id}"]`);
+      if (el) {
+        const tPct = Number(strat.tickerTargets[p.id] || 0);
+        const normW = sumEquityTargets > 0 ? (tPct / sumEquityTargets) : 0;
+        const globPct = equitiesMacroWeight * normW * 100;
+        el.innerHTML = `У портфелі: <strong>${globPct.toFixed(1)}%</strong>`;
+      }
     });
   }
 
@@ -3051,6 +3373,14 @@ body {
     if (amtInput && document.activeElement !== amtInput) amtInput.value = strat.investAmount;
     if (currSelect && document.activeElement !== currSelect) currSelect.value = strat.investCurrency;
     if (splitSelect && document.activeElement !== splitSelect) splitSelect.value = strat.tickerSplitMode;
+
+    // Only rebuild Box 3 if no input inside Box 3 is currently focused
+    const boxEl = document.getElementById('equities-suballocation-box');
+    if (boxEl && (!document.activeElement || !boxEl.contains(document.activeElement))) {
+      renderEquitiesSubAllocationBox(stockPositions);
+    } else {
+      updateEquitiesSubAllocationBadgesOnly(stockPositions);
+    }
 
     updateStockStrategyCalculations(stockPositions);
   }
@@ -3095,8 +3425,9 @@ body {
       classValUsd[sub] += p.currentValUsd;
     });
 
+    classKeys.forEach(k => ensureClassTickerTargets(byClass[k], strat));
+
     const currentTotalUsd = classValUsd.equities + classValUsd.bonds + classValUsd.metals;
-    const currentTotalUah = currentTotalUsd * rates.USD_UAH;
 
     // Update per-class card metadata (Current % vs Target %)
     classKeys.forEach(k => {
@@ -3122,139 +3453,120 @@ body {
     const postTotalUsd = currentTotalUsd + investUsd;
     const postTotalUah = postTotalUsd * rates.USD_UAH;
 
-    // Calculate class-level deltaUsd for the active mode
-    const classDeltaUsd = { equities: 0, bonds: 0, metals: 0 };
-
-    if (strat.rebalanceMode === 'with_sell') {
-      // Full rebalancing: each class reaches exact target weight of (currentTotalUsd + investUsd)
-      classKeys.forEach(k => {
-        const targetPostUsd = weights[k] * postTotalUsd;
-        classDeltaUsd[k] = targetPostUsd - classValUsd[k];
-      });
-    } else {
-      // Buy-only mode ('buy_only'): no selling allowed (classDeltaUsd[k] >= 0, sum = investUsd)
-      // Constrained water-filling projection onto simplex
-      let active = classKeys.filter(k => weights[k] > 0);
-      if (active.length === 0 || investUsd <= 0) {
-        classKeys.forEach(k => { classDeltaUsd[k] = 0; });
-      } else {
-        for (let iter = 0; iter < 4; iter++) {
-          const sumV = active.reduce((acc, k) => acc + classValUsd[k], 0);
-          const sumW = active.reduce((acc, k) => acc + weights[k], 0);
-          const totalPool = investUsd + sumV;
-          let ClampedAny = false;
-          const nextActive = [];
-
-          active.forEach(k => {
-            const desiredTotal = sumW > 0 ? totalPool * (weights[k] / sumW) : classValUsd[k];
-            const delta = desiredTotal - classValUsd[k];
-            if (delta < -1e-6) {
-              classDeltaUsd[k] = 0;
-              ClampedAny = true;
-            } else {
-              classDeltaUsd[k] = Math.max(0, delta);
-              nextActive.push(k);
-            }
-          });
-
-          if (!ClampedAny || nextActive.length === 0) break;
-          active = nextActive;
-        }
-      }
-    }
-
-    // Build rows for the action plan (both existing positions & empty target classes)
-    const planRows = [];
-    let totalBuyUsd = 0;
-    let totalSellUsd = 0;
-
+    // Build unified list of rebalancing items (each existing stock position OR placeholder for an empty class)
+    // Each item has its own target global weight W_item in [0..1]
+    const items = [];
     classKeys.forEach(k => {
       const classMeta = STOCK_SUBTYPES_META[k];
       const positionsInClass = byClass[k];
       const cValUsd = classValUsd[k];
-      const cDeltaUsd = classDeltaUsd[k];
-      const cTargetPct = weights[k] * 100;
+      const cWeight = weights[k];
 
       if (positionsInClass.length === 0) {
-        if (cTargetPct > 0 || Math.abs(cDeltaUsd) > 0.01) {
-          if (cDeltaUsd > 0) totalBuyUsd += cDeltaUsd;
-          if (cDeltaUsd < 0) totalSellUsd += Math.abs(cDeltaUsd);
-          planRows.push({
+        if (cWeight > 0) {
+          items.push({
+            id: `placeholder-${k}`,
             isPlaceholderClass: true,
             subType: k,
             classMeta,
             currentValUsd: 0,
-            currentPct: 0,
-            targetPct: cTargetPct,
-            postValUsd: Math.max(0, cDeltaUsd),
-            postPct: postTotalUsd > 0 ? (Math.max(0, cDeltaUsd) / postTotalUsd) * 100 : cTargetPct,
-            deltaUsd: cDeltaUsd
+            intraClassPct: 100,
+            globalWeight: cWeight
           });
         }
         return;
       }
 
-      // Compute each ticker's target weight inside class k
       const n = positionsInClass.length;
-      positionsInClass.forEach(pos => {
-        const shareWithinClass = (strat.tickerSplitMode === 'equal' || cValUsd <= 0)
-          ? (1 / n)
-          : (pos.currentValUsd / cValUsd);
+      const sumCustomInClass = positionsInClass.reduce((acc, p) => acc + Math.max(0, Number(strat.tickerTargets[p.id]) || 0), 0);
 
-        let posDeltaUsd = 0;
-        if (strat.rebalanceMode === 'with_sell') {
-          const posTargetPostUsd = (weights[k] * shareWithinClass) * postTotalUsd;
-          posDeltaUsd = posTargetPostUsd - pos.currentValUsd;
+      positionsInClass.forEach(pos => {
+        let shareWithinClass = 1 / n;
+        let rawIntraPct = 100 / n;
+        if (strat.tickerSplitMode === 'equal') {
+          shareWithinClass = 1 / n;
+          rawIntraPct = 100 / n;
+        } else if (strat.tickerSplitMode === 'proportional') {
+          shareWithinClass = cValUsd > 0 ? (pos.currentValUsd / cValUsd) : (1 / n);
+          rawIntraPct = shareWithinClass * 100;
         } else {
-          // In buy_only mode, distribute class's positive buy budget across tickers so underweights within class catch up
-          if (cDeltaUsd <= 0) {
-            posDeltaUsd = 0;
-          } else if (strat.tickerSplitMode === 'equal' && cValUsd > 0) {
-            // Water-fill inside the class toward equal weights
-            const desiredWithin = (cValUsd + cDeltaUsd) / n;
-            posDeltaUsd = Math.max(0, desiredWithin - pos.currentValUsd);
-          } else {
-            posDeltaUsd = cDeltaUsd * shareWithinClass;
-          }
+          // 'custom' per-ticker target percentage
+          rawIntraPct = Math.max(0, Number(strat.tickerTargets[pos.id]) || 0);
+          shareWithinClass = sumCustomInClass > 0 ? (rawIntraPct / sumCustomInClass) : (1 / n);
         }
 
-        if (posDeltaUsd > 0) totalBuyUsd += posDeltaUsd;
-        if (posDeltaUsd < 0) totalSellUsd += Math.abs(posDeltaUsd);
-
-        const posPostUsd = Math.max(0, pos.currentValUsd + posDeltaUsd);
-        planRows.push({
+        items.push({
+          id: pos.id,
           isPlaceholderClass: false,
           pos,
           subType: k,
           classMeta,
           currentValUsd: pos.currentValUsd,
-          currentPct: currentTotalUsd > 0 ? (pos.currentValUsd / currentTotalUsd) * 100 : 0,
-          targetPct: cTargetPct * shareWithinClass,
-          postValUsd: posPostUsd,
-          postPct: postTotalUsd > 0 ? (posPostUsd / postTotalUsd) * 100 : 0,
-          deltaUsd: posDeltaUsd,
-          exactShares: pos.livePriceUsd > 0 ? (posDeltaUsd / pos.livePriceUsd) : 0
+          intraClassPct: rawIntraPct,
+          normShareWithinClass: shareWithinClass,
+          globalWeight: cWeight * shareWithinClass
         });
       });
+    });
 
-      // Normalize buy_only equal-split rounding inside class if needed
-      if (strat.rebalanceMode === 'buy_only' && strat.tickerSplitMode === 'equal' && cDeltaUsd > 0 && positionsInClass.length > 1) {
-        const classRows = planRows.filter(r => !r.isPlaceholderClass && r.subType === k);
-        const sumRowDeltas = classRows.reduce((acc, r) => acc + r.deltaUsd, 0);
-        if (sumRowDeltas > 0 && Math.abs(sumRowDeltas - cDeltaUsd) > 0.01) {
-          const scale = cDeltaUsd / sumRowDeltas;
-          totalBuyUsd = 0;
-          classRows.forEach(r => {
-            r.deltaUsd *= scale;
-            r.postValUsd = r.currentValUsd + r.deltaUsd;
-            r.postPct = postTotalUsd > 0 ? (r.postValUsd / postTotalUsd) * 100 : 0;
-            r.exactShares = r.pos.livePriceUsd > 0 ? (r.deltaUsd / r.pos.livePriceUsd) : 0;
+    // Compute deltaUsd per item according to rebalanceMode ('with_sell' vs 'buy_only')
+    const itemDeltaUsd = {};
+    if (strat.rebalanceMode === 'with_sell') {
+      items.forEach(it => {
+        const targetPostUsd = it.globalWeight * postTotalUsd;
+        itemDeltaUsd[it.id] = targetPostUsd - it.currentValUsd;
+      });
+    } else {
+      // 'buy_only': water-filling at the individual asset level so no asset is sold (delta >= 0) and sum(delta) == investUsd
+      let active = items.filter(it => it.globalWeight > 0);
+      items.forEach(it => { itemDeltaUsd[it.id] = 0; });
+      if (active.length > 0 && investUsd > 0) {
+        for (let iter = 0; iter < items.length + 2; iter++) {
+          const sumV = active.reduce((acc, it) => acc + it.currentValUsd, 0);
+          const sumW = active.reduce((acc, it) => acc + it.globalWeight, 0);
+          const totalPool = investUsd + sumV;
+          let clampedAny = false;
+          const nextActive = [];
+
+          active.forEach(it => {
+            const desiredTotal = sumW > 0 ? totalPool * (it.globalWeight / sumW) : it.currentValUsd;
+            const delta = desiredTotal - it.currentValUsd;
+            if (delta < -1e-6) {
+              itemDeltaUsd[it.id] = 0;
+              clampedAny = true;
+            } else {
+              itemDeltaUsd[it.id] = Math.max(0, delta);
+              nextActive.push(it);
+            }
           });
-          planRows.forEach(r => {
-            if (r.deltaUsd > 0) totalBuyUsd += r.deltaUsd;
-          });
+
+          if (!clampedAny || nextActive.length === 0) break;
+          active = nextActive;
         }
       }
+    }
+
+    // Aggregate class-level deltas and build planRows
+    const classDeltaUsd = { equities: 0, bonds: 0, metals: 0 };
+    let totalBuyUsd = 0;
+    let totalSellUsd = 0;
+
+    const planRows = items.map(it => {
+      const dUsd = itemDeltaUsd[it.id] || 0;
+      classDeltaUsd[it.subType] += dUsd;
+      if (dUsd > 0) totalBuyUsd += dUsd;
+      if (dUsd < 0) totalSellUsd += Math.abs(dUsd);
+
+      const postValUsd = Math.max(0, it.currentValUsd + dUsd);
+      return {
+        ...it,
+        currentPct: currentTotalUsd > 0 ? (it.currentValUsd / currentTotalUsd) * 100 : 0,
+        targetPct: it.globalWeight * 100,
+        postValUsd,
+        postPct: postTotalUsd > 0 ? (postValUsd / postTotalUsd) * 100 : (it.globalWeight * 100),
+        deltaUsd: dUsd,
+        exactShares: (!it.isPlaceholderClass && it.pos.livePriceUsd > 0) ? (dUsd / it.pos.livePriceUsd) : 0
+      };
     });
 
     // Post-investment class shares for summary bar
@@ -3268,8 +3580,8 @@ body {
     if (!resultsEl) return;
 
     const modeDescription = strat.rebalanceMode === 'buy_only'
-      ? `🟢 <strong>Режим без продажу:</strong> жоден існуючий актив не продається. Уся сума нової інвестиції (<strong>${fmtUsd(investUsd)}</strong> / <strong>${fmtUah(investUah)}</strong>) спрямовується у найбільш недокуплені класи активів для максимального наближення до цільових пропорцій.`
-      : `🔄 <strong>Режим з продажем (повне ребалансування):</strong> активи, частка яких перевищує план, частково продаються (на <strong>${fmtUsd(totalSellUsd)}</strong>), а виручені кошти разом із новою інвестицією (<strong>${fmtUsd(investUsd)}</strong>) спрямовуються на купівлю (разом купівля на <strong>${fmtUsd(totalBuyUsd)}</strong>), щоб досягти точних цільових <strong>${ (weights.equities*100).toFixed(0) }% / ${ (weights.bonds*100).toFixed(0) }% / ${ (weights.metals*100).toFixed(0) }%</strong>.`;
+      ? `🟢 <strong>Режим без продажу:</strong> жоден існуючий актив не продається. Уся сума нової інвестиції (<strong>${fmtUsd(investUsd)}</strong> / <strong>${fmtUah(investUah)}</strong>) спрямовується у найбільш недокуплені акції та класи активів згідно з їхніми цільовими частками %.`
+      : `🔄 <strong>Режим з продажем (повне ребалансування):</strong> активи, частка яких перевищує план, частково продаються (на <strong>${fmtUsd(totalSellUsd)}</strong>), а виручені кошти разом із новою інвестицією (<strong>${fmtUsd(investUsd)}</strong>) спрямовуються на купівлю (разом купівля на <strong>${fmtUsd(totalBuyUsd)}</strong>), щоб досягти точних цільових пропорцій по кожному класу й кожній акції.`;
 
     resultsEl.innerHTML = `
       <div class="rebalance-summary-banner">
@@ -3293,9 +3605,9 @@ body {
           const targPct = weights[k] * 100;
           const dUsd = classDeltaUsd[k];
           const actionText = dUsd > 0.5
-            ? `<span style="color:var(--positive); font-weight:700;">Купити +${fmtUsd(dUsd)} (+${fmtUah(dUsd * rates.USD_UAH)})</span>`
+            ? `<span style="color:var(--positive); font-weight:700;">Разом по класу: +${fmtUsd(dUsd)} (+${fmtUah(dUsd * rates.USD_UAH)})</span>`
             : (dUsd < -0.5
-                ? `<span style="color:var(--negative); font-weight:700;">Продати ${fmtUsd(dUsd)} (${fmtUah(dUsd * rates.USD_UAH)})</span>`
+                ? `<span style="color:var(--negative); font-weight:700;">Разом по класу: ${fmtUsd(dUsd)} (${fmtUah(dUsd * rates.USD_UAH)})</span>`
                 : `<span style="color:var(--text-muted);">Без змін ($0)</span>`);
           return `
             <div style="padding:10px 12px; border-radius:8px; background:var(--bg-elevated); border:1px solid var(--border-subtle);">
@@ -3319,7 +3631,7 @@ body {
             <tr>
               <th>Актив / Клас стратегії</th>
               <th class="text-right">Поточна вартість</th>
-              <th class="text-right">Частка (Зараз → План)</th>
+              <th class="text-right">Частка в класі → У портфелі</th>
               <th class="text-right">Що зробити (Сума $ / ₴)</th>
               <th class="text-right">Кількість до купівлі / продажу</th>
               <th class="text-right">Після ребалансу</th>
@@ -3347,7 +3659,7 @@ body {
                       <div class="dual-val-sub">0 ₴</div>
                     </td>
                     <td class="text-right">
-                      <div class="dual-val-primary">0.0% → ${row.targetPct.toFixed(1)}%</div>
+                      <div class="dual-val-primary">0.0% → ${row.targetPct.toFixed(1)}% портфеля</div>
                       <div class="dual-val-sub">Після: ${row.postPct.toFixed(1)}%</div>
                     </td>
                     <td class="text-right">
@@ -3415,12 +3727,15 @@ body {
                       <span class="ticker-badge" style="border-left: 3px solid ${row.classMeta.color}">${escapeHtml(pos.ticker)}</span>
                       <div>
                         <div class="asset-name-primary">${escapeHtml(pos.displayName)}</div>
-                        <div style="margin-top:3px;">
+                        <div style="margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                           <select class="subtype-pill-select" data-change-pos-subtype="${pos.id}" title="Клас активу в стратегії">
                             <option value="equities" ${row.subType === 'equities' ? 'selected' : ''}>📈 Акції</option>
                             <option value="bonds" ${row.subType === 'bonds' ? 'selected' : ''}>📜 Облігації</option>
                             <option value="metals" ${row.subType === 'metals' ? 'selected' : ''}>🥇 Золото / Срібло</option>
                           </select>
+                          <button type="button" class="btn btn-ghost btn-split-table-pos" data-id="${pos.id}" title="Розбити цю позицію на частини" style="padding:1px 6px; font-size:11px; border:1px solid var(--border-subtle);">
+                            ✂️ Частини
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -3430,8 +3745,12 @@ body {
                     <div class="dual-val-sub">${fmtUah(row.currentValUsd * rates.USD_UAH)} (${pos.quantity} шт.)</div>
                   </td>
                   <td class="text-right">
-                    <div class="dual-val-primary">${row.currentPct.toFixed(1)}% → ${row.targetPct.toFixed(1)}%</div>
-                    <div class="dual-val-sub">Після інвест.: <strong>${row.postPct.toFixed(1)}%</strong></div>
+                    <div class="dual-val-primary" style="display:flex; align-items:center; justify-content:flex-end; gap:5px;">
+                      <span>В класі:</span>
+                      <input type="number" step="0.1" min="0" max="100" class="ticker-pct-inline-input tabular" data-table-ticker-pct="${pos.id}" data-subtype="${row.subType}" value="${Number((row.normShareWithinClass * 100).toFixed(1))}" title="Цільова частка цього активу всередині класу ${row.classMeta.label} (%)" />
+                      <span>% → <strong>${row.targetPct.toFixed(1)}%</strong></span>
+                    </div>
+                    <div class="dual-val-sub">Зараз у портфелі: ${row.currentPct.toFixed(1)}% → Після: <strong>${row.postPct.toFixed(1)}%</strong></div>
                   </td>
                   <td class="text-right">${actionCellHtml}</td>
                   <td class="text-right">${sharesCellHtml}</td>
@@ -3457,6 +3776,24 @@ body {
           await persistPortfolio();
           renderAll();
         }
+      });
+    });
+
+    // Attach inline split button in rebalancing table
+    resultsEl.querySelectorAll('.btn-split-table-pos').forEach(btn => {
+      btn.addEventListener('click', () => openSplitPositionPrompt(btn.dataset.id));
+    });
+
+    // Attach inline intra-class % change handlers in rebalancing table
+    resultsEl.querySelectorAll('[data-table-ticker-pct]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const posId = inp.dataset.tableTickerPct;
+        const val = Math.max(0, Number(inp.value) || 0);
+        if (!state.settings.stockStrategy) state.settings.stockStrategy = { ...DEFAULT_STOCK_STRATEGY };
+        if (!state.settings.stockStrategy.tickerTargets) state.settings.stockStrategy.tickerTargets = {};
+        state.settings.stockStrategy.tickerTargets[posId] = Math.round(val * 10) / 10;
+        persistPortfolio();
+        renderAll();
       });
     });
 
@@ -3751,6 +4088,7 @@ body {
           <td class="text-right">${pnlHtml}</td>
           <td class="text-right">
             <div class="row-actions">
+              <button type="button" class="btn btn-ghost btn-split-pos" data-id="${pos.id}" title="Розбити актив на частини">✂️</button>
               <button type="button" class="btn btn-ghost btn-edit-pos" data-id="${pos.id}" title="Редагувати">✎</button>
               <button type="button" class="btn btn-ghost btn-delete-pos" data-id="${pos.id}" title="Видалити" style="color:var(--negative);">✕</button>
             </div>
@@ -3759,7 +4097,10 @@ body {
       `;
     }).join('');
 
-    // Attach Edit / Delete handlers
+    // Attach Split / Edit / Delete handlers
+    tbody.querySelectorAll('.btn-split-pos').forEach(btn => {
+      btn.addEventListener('click', () => openSplitPositionPrompt(btn.dataset.id));
+    });
     tbody.querySelectorAll('.btn-edit-pos').forEach(btn => {
       btn.addEventListener('click', () => openPositionModal(btn.dataset.id));
     });
@@ -4495,6 +4836,211 @@ body {
     state.positions = state.positions.filter(p => p.id !== id);
     await persistPortfolio();
     renderAll();
+  }
+
+  function openSplitPositionPrompt(posId) {
+    const pos = state.positions.find(p => p.id === posId);
+    if (!pos) return;
+
+    // Determine quantity/amount field based on category
+    let totalQty = 0;
+    let unitLabel = 'шт.';
+    let fieldKey = 'quantity';
+
+    if (pos.category === 'stocks' || pos.category === 'crypto') {
+      totalQty = Number(pos.quantity) || 0;
+      unitLabel = 'шт.';
+      fieldKey = 'quantity';
+    } else if (pos.category === 'ovdp') {
+      totalQty = Number(pos.bondsCount) || Math.round((Number(pos.principalAmount) || 0) / (Number(pos.faceValue) || 1000));
+      unitLabel = 'облігацій (шт.)';
+      fieldKey = 'bondsCount';
+    } else if (pos.category === 'deposits') {
+      totalQty = Number(pos.principalAmount) || 0;
+      unitLabel = pos.currency || 'UAH';
+      fieldKey = 'principalAmount';
+    } else {
+      totalQty = Number(pos.amount) || 0;
+      unitLabel = pos.currency || 'USD';
+      fieldKey = 'amount';
+    }
+
+    if (totalQty <= 0) return;
+
+    let overlay = document.getElementById('modal-split-position');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'modal-split-position';
+      overlay.className = 'modal-backdrop';
+      document.body.appendChild(overlay);
+    }
+
+    const defaultSplitQty = totalQty > 1 && Number.isInteger(totalQty)
+      ? Math.floor(totalQty / 2)
+      : Number((totalQty / 2).toFixed(4));
+    const titleLabel = pos.ticker ? `${pos.ticker} (${pos.name || pos.ticker})` : (pos.name || 'Актив');
+    const platformFieldLabel = (pos.category === 'deposits')
+      ? 'Банк для відокремленої частини'
+      : (pos.category === 'cash' ? 'Місце зберігання для відокремленої частини' : 'Брокер / Платформа для відокремленої частини');
+    const currentPlatformVal = pos.platform || pos.bank || pos.location || '';
+
+    overlay.innerHTML = `
+      <div class="modal-dialog" style="max-width: 500px;">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">✂️ Розбити актив на частини</h3>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">${escapeHtml(titleLabel)} · Всього зараз: <strong>${totalQty} ${escapeHtml(unitLabel)}</strong></div>
+          </div>
+          <button type="button" class="btn btn-ghost" id="btn-close-split-modal">✕</button>
+        </div>
+        <form id="form-split-position">
+          <div class="modal-body" style="display:flex; flex-direction:column; gap:14px;">
+            <div style="padding:10px 12px; border-radius:8px; background:rgba(59, 130, 246, 0.08); border:1px solid rgba(59, 130, 246, 0.25); font-size:12.5px; color:var(--text-secondary); line-height:1.45;">
+              Розбиття дозволяє розділити одну позицію на дві окремі частини (наприклад, між різними брокерами/рахунками, різними лотами купівлі або окремими цілями в стратегії).
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="split-qty-input">Скільки відокремити у нову частину (${escapeHtml(unitLabel)})</label>
+              <input type="number" step="any" min="0.000001" max="${totalQty * 0.999999}" class="form-input tabular" id="split-qty-input" value="${defaultSplitQty}" required />
+              <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-secondary); margin-top:6px;" class="tabular">
+                <span>Залишиться в частині 1: <strong id="split-remain-preview" style="color:var(--text-primary);">${Number((totalQty - defaultSplitQty).toFixed(6))} ${escapeHtml(unitLabel)}</strong></span>
+                <span>Нова частина 2: <strong id="split-new-preview" style="color:var(--accent-primary);">${defaultSplitQty} ${escapeHtml(unitLabel)}</strong></span>
+              </div>
+              <div style="display:flex; gap:6px; margin-top:8px;">
+                <button type="button" class="btn btn-secondary btn-split-ratio" data-ratio="0.25" style="padding:3px 8px; font-size:11.5px;">25%</button>
+                <button type="button" class="btn btn-secondary btn-split-ratio" data-ratio="0.5" style="padding:3px 8px; font-size:11.5px;">50% (Навпіл)</button>
+                <button type="button" class="btn btn-secondary btn-split-ratio" data-ratio="0.75" style="padding:3px 8px; font-size:11.5px;">75%</button>
+              </div>
+            </div>
+
+            ${(pos.category === 'stocks' || pos.category === 'crypto') ? `
+              <div class="form-group">
+                <label class="form-label" for="split-buy-price">Ціна купівлі для нової частини ($ USD за 1 шт.)</label>
+                <input type="number" step="any" min="0" class="form-input tabular" id="split-buy-price" value="${pos.buyPriceUsd || 0}" required />
+              </div>
+            ` : ''}
+
+            <div class="form-group">
+              <label class="form-label" for="split-platform-input">${escapeHtml(platformFieldLabel)}</label>
+              <input type="text" class="form-input" id="split-platform-input" value="${escapeHtml(currentPlatformVal)}" placeholder="Напр. Interactive Brokers / Freedom24 / Субрахунок 2" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="split-notes-input">Коментар / позначка для нової частини</label>
+              <input type="text" class="form-input" id="split-notes-input" value="${escapeHtml(pos.notes ? `${pos.notes} (Частина 2)` : 'Частина 2')}" placeholder="Напр. Довгостроковий лот / Частина 2" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-split-modal">Скасувати</button>
+            <button type="submit" class="btn btn-primary">✂️ Розділити на 2 частини</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    overlay.classList.add('open');
+
+    const closeSplitModal = () => overlay.classList.remove('open');
+    overlay.querySelector('#btn-close-split-modal').addEventListener('click', closeSplitModal);
+    overlay.querySelector('#btn-cancel-split-modal').addEventListener('click', closeSplitModal);
+
+    const qtyInput = overlay.querySelector('#split-qty-input');
+    const remainPreview = overlay.querySelector('#split-remain-preview');
+    const newPreview = overlay.querySelector('#split-new-preview');
+
+    const updateSplitPreview = () => {
+      const val = Number(qtyInput.value) || 0;
+      const rem = Math.max(0, Number((totalQty - val).toFixed(6)));
+      remainPreview.textContent = `${rem} ${unitLabel}`;
+      newPreview.textContent = `${Number(val.toFixed(6))} ${unitLabel}`;
+    };
+
+    qtyInput.addEventListener('input', updateSplitPreview);
+
+    overlay.querySelectorAll('.btn-split-ratio').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const r = Number(btn.dataset.ratio) || 0.5;
+        const raw = totalQty * r;
+        qtyInput.value = (pos.category === 'ovdp' && totalQty > 1)
+          ? Math.max(1, Math.round(raw))
+          : Number(raw.toFixed(4));
+        updateSplitPreview();
+      });
+    });
+
+    overlay.querySelector('#form-split-position').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const splitVal = Number(qtyInput.value) || 0;
+      if (splitVal <= 0 || splitVal >= totalQty) {
+        alert(`Вкажіть кількість більше 0 та менше ніж ${totalQty} ${unitLabel}.`);
+        return;
+      }
+
+      const remainVal = Number((totalQty - splitVal).toFixed(6));
+      const ratioNew = splitVal / totalQty;
+      const ratioRemain = remainVal / totalQty;
+
+      const newPosId = 'pos-' + Date.now();
+      const newPlatform = overlay.querySelector('#split-platform-input').value.trim();
+      const newNotes = overlay.querySelector('#split-notes-input').value.trim();
+
+      // Clone original position for part 2
+      const newPos = JSON.parse(JSON.stringify(pos));
+      newPos.id = newPosId;
+      newPos.notes = newNotes;
+
+      if (pos.category === 'stocks' || pos.category === 'crypto') {
+        pos.quantity = remainVal;
+        newPos.quantity = Number(splitVal.toFixed(6));
+        const customBuyPrice = parseFloat(overlay.querySelector('#split-buy-price')?.value);
+        if (!Number.isNaN(customBuyPrice) && customBuyPrice >= 0) {
+          newPos.buyPriceUsd = customBuyPrice;
+        }
+        newPos.platform = newPlatform;
+        if (pos.category === 'crypto' && pos.isStaked && pos.stakingEarnedCoins > 0) {
+          const origEarned = Number(pos.stakingEarnedCoins) || 0;
+          pos.stakingEarnedCoins = Number((origEarned * ratioRemain).toFixed(6));
+          newPos.stakingEarnedCoins = Number((origEarned * ratioNew).toFixed(6));
+        }
+      } else if (pos.category === 'ovdp') {
+        const face = Number(pos.faceValue) || 1000;
+        pos.bondsCount = remainVal;
+        pos.principalAmount = Math.round((Number(pos.principalAmount) || (totalQty * face)) * ratioRemain);
+        newPos.bondsCount = splitVal;
+        newPos.principalAmount = Math.round((Number(newPos.principalAmount) || (totalQty * face)) * ratioNew);
+        newPos.platform = newPlatform;
+      } else if (pos.category === 'deposits') {
+        pos.principalAmount = remainVal;
+        newPos.principalAmount = splitVal;
+        newPos.bank = newPlatform;
+      } else {
+        pos.amount = remainVal;
+        newPos.amount = splitVal;
+        newPos.location = newPlatform;
+      }
+
+      // If this is a stock with a target percentage in stockStrategy.tickerTargets, split its target percentage proportionally
+      if (pos.category === 'stocks' && state.settings?.stockStrategy?.tickerTargets) {
+        const tt = state.settings.stockStrategy.tickerTargets;
+        if (typeof tt[pos.id] === 'number' && tt[pos.id] > 0) {
+          const origTarget = tt[pos.id];
+          tt[pos.id] = Math.round(origTarget * ratioRemain * 10) / 10;
+          tt[newPosId] = Math.round((origTarget - tt[pos.id]) * 10) / 10;
+        }
+      }
+
+      // Insert new position right after original
+      const origIdx = state.positions.findIndex(p => p.id === pos.id);
+      if (origIdx >= 0) {
+        state.positions.splice(origIdx + 1, 0, newPos);
+      } else {
+        state.positions.push(newPos);
+      }
+
+      closeSplitModal();
+      await persistPortfolio();
+      renderAll();
+    });
   }
 
   // Settings Modal
