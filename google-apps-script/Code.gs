@@ -1,5 +1,5 @@
 /**
- * КАПІТАЛ — Персональний трекер інвестиційного портфеля (UAH / USD)
+ * Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)
  * Google Apps Script (Хмарна база даних на Google Диску для https://phoenix1142.github.io/kapital-portfolio-tracker/ + власний інтерфейс)
  */
 
@@ -36,7 +36,7 @@ function doGet(e) {
   }
 
   return HtmlService.createHtmlOutput(htmlContent)
-    .setTitle('КАПІТАЛ — Персональний трекер інвестиційного портфеля (UAH / USD)')
+    .setTitle('Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
