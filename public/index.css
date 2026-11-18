@@ -1360,13 +1360,67 @@ body {
   padding: 14px 14px 10px;
 }
 
+.forecast-plot-area {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.forecast-y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 230px;
+  padding-top: 14px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border-default);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.forecast-y-tick {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.forecast-bars-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.forecast-grid-lines {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  right: 0;
+  height: 216px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.forecast-grid-line {
+  width: 100%;
+  border-top: 1px dashed rgba(148, 163, 184, 0.16);
+}
+
 .forecast-bars-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(26, minmax(14px, 1fr));
   gap: 5px;
-  height: 220px;
+  height: 230px;
   align-items: end;
-  padding-top: 18px;
+  padding-top: 22px;
   border-bottom: 1px solid var(--border-default);
 }
 
@@ -1385,6 +1439,22 @@ body {
 .forecast-bar-col:hover,
 .forecast-bar-col.active {
   background: rgba(56, 189, 248, 0.08);
+}
+
+.forecast-bar-top-val {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  margin-bottom: 3px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.forecast-bar-col.active .forecast-bar-top-val {
+  color: var(--accent-primary);
+  font-size: 10px;
 }
 
 .forecast-bar-stack {
@@ -1445,35 +1515,72 @@ body {
 /* Category Value Dynamics & Historical Trajectory Chart (Crypto & Stocks) */
 .dynamics-range-switcher {
   display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 2px;
-  gap: 2px;
+  border: 1.5px solid var(--accent-primary);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 4px;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.12);
 }
 
 .dynamics-range-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 .dynamics-range-btn:hover {
-  color: var(--text-primary);
-  background: rgba(148, 163, 184, 0.1);
+  border-color: var(--accent-primary);
+  background: rgba(56, 189, 248, 0.16);
 }
 
 .dynamics-range-btn.active {
   background: var(--accent-primary);
-  color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  color: #0b0f17;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.35);
+}
+
+.dynamics-chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.dynamics-extremes-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+}
+
+.dynamics-extreme-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  font-size: 11.5px;
 }
 
 .dynamics-summary-strip {
@@ -1535,8 +1642,8 @@ body {
 .dynamics-svg-wrap {
   position: relative;
   width: 100%;
-  height: 215px;
-  margin: 8px 0 6px;
+  height: 265px;
+  margin: 6px 0 6px;
 }
 
 .dynamics-svg-wrap svg {

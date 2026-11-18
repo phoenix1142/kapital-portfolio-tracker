@@ -1368,13 +1368,67 @@ body {
   padding: 14px 14px 10px;
 }
 
+.forecast-plot-area {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.forecast-y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 230px;
+  padding-top: 14px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border-default);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.forecast-y-tick {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.forecast-bars-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.forecast-grid-lines {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  right: 0;
+  height: 216px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.forecast-grid-line {
+  width: 100%;
+  border-top: 1px dashed rgba(148, 163, 184, 0.16);
+}
+
 .forecast-bars-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(26, minmax(14px, 1fr));
   gap: 5px;
-  height: 220px;
+  height: 230px;
   align-items: end;
-  padding-top: 18px;
+  padding-top: 22px;
   border-bottom: 1px solid var(--border-default);
 }
 
@@ -1393,6 +1447,22 @@ body {
 .forecast-bar-col:hover,
 .forecast-bar-col.active {
   background: rgba(56, 189, 248, 0.08);
+}
+
+.forecast-bar-top-val {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  margin-bottom: 3px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.forecast-bar-col.active .forecast-bar-top-val {
+  color: var(--accent-primary);
+  font-size: 10px;
 }
 
 .forecast-bar-stack {
@@ -1453,35 +1523,72 @@ body {
 /* Category Value Dynamics & Historical Trajectory Chart (Crypto & Stocks) */
 .dynamics-range-switcher {
   display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 2px;
-  gap: 2px;
+  border: 1.5px solid var(--accent-primary);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 4px;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.12);
 }
 
 .dynamics-range-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 .dynamics-range-btn:hover {
-  color: var(--text-primary);
-  background: rgba(148, 163, 184, 0.1);
+  border-color: var(--accent-primary);
+  background: rgba(56, 189, 248, 0.16);
 }
 
 .dynamics-range-btn.active {
   background: var(--accent-primary);
-  color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  color: #0b0f17;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.35);
+}
+
+.dynamics-chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.dynamics-extremes-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+}
+
+.dynamics-extreme-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  font-size: 11.5px;
 }
 
 .dynamics-summary-strip {
@@ -1543,8 +1650,8 @@ body {
 .dynamics-svg-wrap {
   position: relative;
   width: 100%;
-  height: 215px;
-  margin: 8px 0 6px;
+  height: 265px;
+  margin: 6px 0 6px;
 }
 
 .dynamics-svg-wrap svg {
@@ -3275,7 +3382,7 @@ body {
       overviewSection.style.display = 'none';
     }
 
-    // Show/hide Category Dynamics Chart Section (for 'crypto' and 'stocks' tabs)
+    // Show/hide Category Dynamics Chart Section (for 'all', 'crypto', and 'stocks' tabs)
     let dynamicsSection = document.getElementById('category-dynamics-section');
     if (!dynamicsSection && overviewSection && overviewSection.parentNode) {
       dynamicsSection = document.createElement('section');
@@ -3286,7 +3393,7 @@ body {
       overviewSection.parentNode.insertBefore(dynamicsSection, overviewSection.nextSibling);
     }
     if (dynamicsSection) {
-      if (state.activeCategory === 'crypto' || state.activeCategory === 'stocks') {
+      if (state.activeCategory === 'crypto' || state.activeCategory === 'stocks' || state.activeCategory === 'all') {
         dynamicsSection.style.display = 'block';
         renderCategoryDynamicsSection(state.activeCategory, scopedPositions);
       } else {
@@ -3322,21 +3429,47 @@ body {
   let selectedDynamicsRange = 'all'; // '1d' | '1m' | '6m' | '1y' | 'all'
 
   const DYNAMICS_RANGE_META = {
-    '1d':  { label: 'День',     fullLabel: 'За 1 день (24 години)', days: 1,   steps: 8 },
-    '1m':  { label: 'Місяць',   fullLabel: 'За 1 місяць (30 днів)',  days: 30,  steps: 8 },
-    '6m':  { label: 'Пів року', fullLabel: 'За пів року (180 днів)', days: 180, steps: 8 },
-    '1y':  { label: 'Рік',      fullLabel: 'За 1 рік (365 днів)',    days: 365, steps: 9 },
-    'all': { label: 'Весь час', fullLabel: 'За весь час',            days: 0,   steps: 8 }
+    '1d':  { label: 'День',     btnLabel: '1Д · День',     fullLabel: 'За 1 день (24 години)', days: 1,   steps: 8 },
+    '1m':  { label: 'Місяць',   btnLabel: '1М · Місяць',   fullLabel: 'За 1 місяць (30 днів)',  days: 30,  steps: 8 },
+    '6m':  { label: 'Пів року', btnLabel: '6М · Пів року', fullLabel: 'За пів року (180 днів)', days: 180, steps: 8 },
+    '1y':  { label: 'Рік',      btnLabel: '1Р · Рік',      fullLabel: 'За 1 рік (365 днів)',    days: 365, steps: 9 },
+    'all': { label: 'Весь час', btnLabel: 'Весь час',      fullLabel: 'За весь час',            days: 0,   steps: 8 }
   };
+
+  function fmtChartAxisVal(valUsd, rates, compact = false) {
+    const isUah = state.primaryCurrency === 'UAH';
+    const r = rates || getEffectiveRates();
+    const num = isUah ? (Number(valUsd) || 0) * r.USD_UAH : (Number(valUsd) || 0);
+    const abs = Math.abs(num);
+
+    if (isUah) {
+      if (compact && abs >= 1000000) {
+        return (num / 1000000).toFixed(2) + ' млн ₴';
+      }
+      if (compact && abs >= 10000) {
+        return Math.round(num / 1000) + ' тис ₴';
+      }
+      return new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 }).format(Math.round(num)) + ' ₴';
+    }
+
+    const sign = num < 0 ? '-' : '';
+    if (compact && abs >= 1000000) {
+      return sign + '$' + (abs / 1000000).toFixed(2) + 'M';
+    }
+    if (abs >= 100) {
+      return sign + '$' + new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(abs));
+    }
+    return sign + '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(abs);
+  }
 
   function recordCategoryHistorySnapshots(allEvaluated) {
     if (!state.settings.categoryHistory || typeof state.settings.categoryHistory !== 'object') {
-      state.settings.categoryHistory = { crypto: [], stocks: [] };
+      state.settings.categoryHistory = { all: [], crypto: [], stocks: [] };
     }
     const todayStr = new Date().toISOString().slice(0, 10);
 
-    ['crypto', 'stocks'].forEach(cat => {
-      const catPositions = allEvaluated.filter(p => p.category === cat);
+    ['all', 'crypto', 'stocks'].forEach(cat => {
+      const catPositions = cat === 'all' ? allEvaluated : allEvaluated.filter(p => p.category === cat);
       const valUsd = Number(catPositions.reduce((s, p) => s + (p.currentValUsd || 0), 0).toFixed(2));
       const invUsd = Number(catPositions.reduce((s, p) => s + (p.investedUsd || 0), 0).toFixed(2));
       if (!Array.isArray(state.settings.categoryHistory[cat])) {
@@ -3536,8 +3669,14 @@ body {
 
     const rates = getEffectiveRates();
     const isCrypto = category === 'crypto';
-    const catTitle = isCrypto ? 'Криптовалютного портфеля' : 'Портфеля Фондового ринку';
-    const catAccent = isCrypto ? '#f59e0b' : '#38bdf8';
+    const isStocks = category === 'stocks';
+    const catTitle = isCrypto
+      ? 'Криптовалютного портфеля'
+      : (isStocks ? 'Портфеля Фондового ринку' : 'Сукупного портфеля');
+    const catHeaderBadge = isCrypto
+      ? 'Криптовалюта (CoinMarketCap Live)'
+      : (isStocks ? 'Фондовий ринок' : 'Увесь портфель');
+    const catAccent = isCrypto ? '#f59e0b' : (isStocks ? '#38bdf8' : '#10b981');
 
     if (!positions || positions.length === 0) {
       sectionEl.innerHTML = `
@@ -3599,13 +3738,13 @@ body {
     const mainCurveColor = isPeriodUp ? '#10b981' : '#ef4444';
     const fillGradientId = `dyn-grad-${category}`;
 
-    // Build SVG coordinates
-    const svgW = 640;
-    const svgH = 195;
-    const padL = 12;
-    const padR = 14;
-    const padT = 18;
-    const padB = 26;
+    // Build SVG coordinates with spacious left padding for vertical Y-axis dollar markings
+    const svgW = 760;
+    const svgH = 260;
+    const padL = 82;
+    const padR = 28;
+    const padT = 34;
+    const padB = 30;
     const plotW = svgW - padL - padR;
     const plotH = svgH - padT - padB;
 
@@ -3613,8 +3752,11 @@ body {
     timeline.forEach(pt => {
       allVals.push(pt.valUsd, pt.investedUsd);
     });
-    const minVal = Math.min(...allVals) * 0.96;
-    const maxVal = Math.max(...allVals, minVal + 1) * 1.03;
+    const rawMin = Math.min(...allVals);
+    const rawMax = Math.max(...allVals, rawMin + 1);
+    const rawSpan = Math.max(1, rawMax - rawMin);
+    const minVal = Math.max(0, rawMin - rawSpan * 0.14);
+    const maxVal = rawMax + rawSpan * 0.18;
     const valSpan = Math.max(1, maxVal - minVal);
 
     const coords = timeline.map((pt, i) => {
@@ -3625,6 +3767,28 @@ body {
       const yInv = padT + plotH - ((pt.investedUsd - minVal) / valSpan) * plotH;
       return { ...pt, idx: i, x, yVal, yInv };
     });
+
+    // Identify Peak (Maximum) and Trough (Minimum) points on the curve
+    let peakCoord = coords[0];
+    let minCoord = coords[0];
+    coords.forEach(c => {
+      if (c.valUsd >= peakCoord.valUsd) peakCoord = c;
+      if (c.valUsd < minCoord.valUsd) minCoord = c;
+    });
+
+    // Build 5 vertical Y-axis ticks (from maxVal at top to minVal at bottom)
+    const yTicksCount = 5;
+    const yTicks = [];
+    for (let i = 0; i < yTicksCount; i++) {
+      const frac = i / (yTicksCount - 1); // 0 (top) -> 1 (bottom)
+      const valAtTick = maxVal - frac * valSpan;
+      const yAtTick = padT + frac * plotH;
+      yTicks.push({
+        valUsd: valAtTick,
+        y: yAtTick,
+        label: fmtChartAxisVal(valAtTick, rates, false)
+      });
+    }
 
     const valPolyline = coords.map(c => `${c.x.toFixed(1)},${c.yVal.toFixed(1)}`).join(' ');
     const invPolyline = coords.map(c => `${c.x.toFixed(1)},${c.yInv.toFixed(1)}`).join(' ');
@@ -3639,27 +3803,30 @@ body {
     const selDeltaPct = selBaseForPt > 0 ? (selDeltaUsd / selBaseForPt) * 100 : 0;
 
     const rangeKeysOrder = ['1d', '1m', '6m', '1y', 'all'];
+    const switcherButtonsHtml = rangeKeysOrder.map(rk => `
+      <button
+        type="button"
+        class="dynamics-range-btn ${selectedDynamicsRange === rk ? 'active' : ''}"
+        data-dyn-range="${rk}"
+        title="${DYNAMICS_RANGE_META[rk].fullLabel}"
+      >${DYNAMICS_RANGE_META[rk].btnLabel}</button>
+    `).join('');
 
     sectionEl.innerHTML = `
-      <div class="panel-header" style="margin-bottom: 12px; flex-wrap:wrap; gap:10px;">
+      <div class="panel-header" style="margin-bottom: 12px; flex-wrap:wrap; gap:12px;">
         <div>
           <div class="panel-title">
-            📊 Динаміка вартості активів: ${isCrypto ? 'Криптовалюта (CoinMarketCap Live)' : 'Фондовий ринок'}
+            📊 Динаміка вартості активів: ${catHeaderBadge}
           </div>
           <div class="panel-subtitle">
-            Як росте чи падає загальна сума ваших активів за обраний період (${rangeMeta.fullLabel.toLowerCase()}) та порівняно з вкладеним капіталом
+            Як росте чи падає загальна сума ваших активів (${rangeMeta.fullLabel.toLowerCase()}) з вертикальною шкалою сум та відміткою піку
           </div>
         </div>
 
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">Період:</span>
           <div class="dynamics-range-switcher" role="group" aria-label="Період графіка динаміки">
-            ${rangeKeysOrder.map(rk => `
-              <button
-                type="button"
-                class="dynamics-range-btn ${selectedDynamicsRange === rk ? 'active' : ''}"
-                data-dyn-range="${rk}"
-              >${DYNAMICS_RANGE_META[rk].label}</button>
-            `).join('')}
+            ${switcherButtonsHtml}
           </div>
         </div>
       </div>
@@ -3687,9 +3854,9 @@ body {
         </div>
 
         <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Загальний PnL (Весь час) · За 24г</div>
-          <div class="dynamics-stat-val" style="color:${isOverallUp ? 'var(--positive)' : 'var(--negative)'};">
-            ${fmtUsd(totalPnlUsd, true)} (${fmtPct(totalPnlPct, true)})
+          <div class="dynamics-stat-label">Пік за період (${rangeMeta.label}) · За 24г</div>
+          <div class="dynamics-stat-val" style="color:var(--positive);">
+            ▲ ${fmtUsd(peakCoord.valUsd)}
           </div>
           <div class="dynamics-stat-sub" style="color:${is24Up ? 'var(--positive)' : 'var(--negative)'};">
             За 24г: ${fmtUsd(change24Usd, true)} (${fmtPct(change24Pct, true)})
@@ -3701,16 +3868,40 @@ body {
         <!-- Left: Trajectory Line Chart (Market Value vs Invested Cost Basis) -->
         <div class="dynamics-chart-card">
           <div>
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px;">
+            <!-- Prominent Chart Toolbar with Period Switchers + Peak / Min / Current Value Badges -->
+            <div class="dynamics-chart-toolbar">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-size:11.5px; font-weight:700; color:var(--text-secondary);">Період графіка:</span>
+                <div class="dynamics-range-switcher" role="group" aria-label="Перемикач періоду графіка">
+                  ${switcherButtonsHtml}
+                </div>
+              </div>
+
+              <div class="dynamics-extremes-strip">
+                <span class="dynamics-extreme-pill" style="border-color:rgba(16,185,129,0.45);">
+                  <strong style="color:#10b981;">▲ Пік: ${fmtChartAxisVal(peakCoord.valUsd, rates)}</strong>
+                  <span style="color:var(--text-muted);">(${peakCoord.shortLabel})</span>
+                </span>
+                <span class="dynamics-extreme-pill">
+                  <strong style="color:#f59e0b;">▼ Мін: ${fmtChartAxisVal(minCoord.valUsd, rates)}</strong>
+                  <span style="color:var(--text-muted);">(${minCoord.shortLabel})</span>
+                </span>
+                <span class="dynamics-extreme-pill" style="border-color:rgba(56,189,248,0.45);">
+                  <strong style="color:#38bdf8;">● Зараз: ${fmtChartAxisVal(latestPt.valUsd, rates)}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px; margin-bottom:2px;">
               <div style="font-weight:700; color:var(--text-primary);">📈 Графік суми активів (${rangeMeta.fullLabel})</div>
               <div style="display:flex; align-items:center; gap:14px; font-size:11.5px; color:var(--text-secondary);">
                 <span><span style="display:inline-block; width:12px; height:3px; background:${mainCurveColor}; vertical-align:middle; margin-right:5px; border-radius:2px;"></span>Ринкова вартість</span>
-                <span><span style="display:inline-block; width:12px; height:2px; border-top:2px dashed #94a3b8; vertical-align:middle; margin-right:5px;"></span>Вкладено (Собівартість)</span>
+                <span><span style="display:inline-block; width:12px; height:2px; border-top:2px dashed #94a3b8; vertical-align:middle; margin-right:5px;"></span>Вкладено (${fmtChartAxisVal(totalInvestedUsd, rates)})</span>
               </div>
             </div>
 
             <div class="dynamics-svg-wrap">
-              <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+              <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="xMidYMid meet">
                 <defs>
                   <linearGradient id="${fillGradientId}" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stop-color="${mainCurveColor}" stop-opacity="0.32" />
@@ -3718,10 +3909,57 @@ body {
                   </linearGradient>
                 </defs>
 
-                <!-- Horizontal grid lines -->
-                <line x1="${padL}" y1="${padT}" x2="${svgW - padR}" y2="${padT}" stroke="rgba(148,163,184,0.14)" stroke-width="1" />
-                <line x1="${padL}" y1="${(padT + plotH / 2).toFixed(1)}" x2="${svgW - padR}" y2="${(padT + plotH / 2).toFixed(1)}" stroke="rgba(148,163,184,0.12)" stroke-dasharray="3,3" stroke-width="1" />
-                <line x1="${padL}" y1="${padT + plotH}" x2="${svgW - padR}" y2="${padT + plotH}" stroke="rgba(148,163,184,0.22)" stroke-width="1" />
+                <!-- Y-Axis Top Header Label -->
+                <text x="${padL - 8}" y="14" text-anchor="end" fill="var(--text-muted)" font-size="10" font-weight="700" font-family="monospace">
+                  СУМА (${state.primaryCurrency === 'UAH' ? '₴' : '$'})
+                </text>
+
+                <!-- Vertical Y-Axis Line -->
+                <line x1="${padL}" y1="${padT - 6}" x2="${padL}" y2="${padT + plotH}" stroke="rgba(148,163,184,0.32)" stroke-width="1.2" />
+
+                <!-- 5 Horizontal Grid Lines & Left Vertical Y-Axis Sum Markings -->
+                ${yTicks.map((t, idx) => `
+                  <g>
+                    <line
+                      x1="${padL}"
+                      y1="${t.y.toFixed(1)}"
+                      x2="${svgW - padR}"
+                      y2="${t.y.toFixed(1)}"
+                      stroke="${idx === yTicks.length - 1 ? 'rgba(148,163,184,0.28)' : 'rgba(148,163,184,0.14)'}"
+                      stroke-dasharray="${idx === yTicks.length - 1 ? 'none' : '3,3'}"
+                      stroke-width="1"
+                    />
+                    <line
+                      x1="${padL - 5}"
+                      y1="${t.y.toFixed(1)}"
+                      x2="${padL}"
+                      y2="${t.y.toFixed(1)}"
+                      stroke="rgba(148,163,184,0.45)"
+                      stroke-width="1.2"
+                    />
+                    <text
+                      x="${padL - 8}"
+                      y="${(t.y + 3.5).toFixed(1)}"
+                      text-anchor="end"
+                      fill="var(--text-secondary)"
+                      font-size="11"
+                      font-weight="700"
+                      font-family="monospace"
+                    >${t.label}</text>
+                  </g>
+                `).join('')}
+
+                <!-- Horizontal Peak Level Guide Line to Y-Axis -->
+                <line
+                  x1="${padL}"
+                  y1="${peakCoord.yVal.toFixed(1)}"
+                  x2="${peakCoord.x.toFixed(1)}"
+                  y2="${peakCoord.yVal.toFixed(1)}"
+                  stroke="#10b981"
+                  stroke-width="1.2"
+                  stroke-dasharray="4,3"
+                  opacity="0.75"
+                />
 
                 <!-- Shaded area under Market Value curve -->
                 <polygon points="${areaPoints}" fill="url(#${fillGradientId})" />
@@ -3732,30 +3970,51 @@ body {
                 <!-- Main Market Value Curve -->
                 <polyline fill="none" stroke="${mainCurveColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${valPolyline}" />
 
-                <!-- Interactive Data Points -->
+                <!-- Interactive Data Points with Direct Dollar Value Labels & Peak Callout -->
                 ${coords.map(c => {
                   const isSel = c.idx === selectedDynamicsPointIdx;
+                  const isPeak = c.idx === peakCoord.idx;
+                  const isMin = c.idx === minCoord.idx && minCoord.idx !== peakCoord.idx;
+                  const valLabel = fmtChartAxisVal(c.valUsd, rates, false);
+                  const badgeText = isPeak ? `▲ ПІК: ${valLabel}` : (isMin ? `▼ МІН: ${valLabel}` : valLabel);
+                  const labelY = isPeak ? Math.max(15, c.yVal - 13) : (isMin ? Math.min(padT + plotH - 4, c.yVal + 18) : Math.max(16, c.yVal - 10));
+                  const labelColor = isPeak ? '#10b981' : (isSel ? '#38bdf8' : (isMin ? '#f59e0b' : 'var(--text-primary)'));
+
                   return `
                     <g class="dynamics-point-group" data-dyn-pt="${c.idx}" style="cursor:pointer;">
-                      ${isSel ? `<line x1="${c.x.toFixed(1)}" y1="${padT}" x2="${c.x.toFixed(1)}" y2="${padT + plotH}" stroke="${mainCurveColor}" stroke-width="1" stroke-dasharray="2,2" />` : ''}
+                      ${isSel ? `<line x1="${c.x.toFixed(1)}" y1="${padT}" x2="${c.x.toFixed(1)}" y2="${padT + plotH}" stroke="${mainCurveColor}" stroke-width="1.2" stroke-dasharray="2,2" />` : ''}
                       <circle
                         class="dynamics-point-dot"
                         cx="${c.x.toFixed(1)}"
                         cy="${c.yVal.toFixed(1)}"
-                        r="${isSel ? '6' : '4'}"
-                        fill="${isSel ? '#ffffff' : mainCurveColor}"
-                        stroke="${mainCurveColor}"
-                        stroke-width="${isSel ? '3' : '1.5'}"
+                        r="${isPeak || isSel ? '6' : '4.2'}"
+                        fill="${isPeak ? '#10b981' : (isSel ? '#ffffff' : mainCurveColor)}"
+                        stroke="${isPeak ? '#ffffff' : mainCurveColor}"
+                        stroke-width="${isPeak || isSel ? '2.5' : '1.5'}"
                       >
-                        <title>${c.label}: Вартість ${fmtUsd(c.valUsd)} (Вкладено ${fmtUsd(c.investedUsd)})</title>
+                        <title>${c.label}: Вартість ${fmtUsd(c.valUsd)} (${fmtUah(c.valUsd * rates.USD_UAH)}) · Вкладено ${fmtUsd(c.investedUsd)}</title>
                       </circle>
+
+                      <!-- Direct Dollar Value Label Above/Near Each Curve Point -->
                       <text
                         x="${c.x.toFixed(1)}"
-                        y="${svgH - 6}"
+                        y="${labelY.toFixed(1)}"
                         text-anchor="middle"
-                        fill="${isSel ? 'var(--text-primary)' : 'var(--text-muted)'}"
-                        font-size="10"
-                        font-weight="${isSel ? '700' : '400'}"
+                        fill="${labelColor}"
+                        font-size="${isPeak || isSel ? '10.5' : '9.5'}"
+                        font-weight="${isPeak || isSel || isMin ? '800' : '600'}"
+                        font-family="monospace"
+                        style="paint-order: stroke; stroke: var(--bg-elevated); stroke-width: 3.5px; stroke-linecap: round; stroke-linejoin: round;"
+                      >${badgeText}</text>
+
+                      <!-- X-Axis Date/Time Label -->
+                      <text
+                        x="${c.x.toFixed(1)}"
+                        y="${svgH - 7}"
+                        text-anchor="middle"
+                        fill="${isSel || isPeak ? 'var(--text-primary)' : 'var(--text-muted)'}"
+                        font-size="10.5"
+                        font-weight="${isSel || isPeak ? '700' : '500'}"
                         font-family="monospace"
                       >${c.shortLabel}</text>
                     </g>
@@ -3770,6 +4029,7 @@ body {
             <div>
               <span style="color:var(--text-secondary);">${escapeHtml(selPt.tag)}:</span>
               <strong style="color:var(--text-primary); margin-left:4px;">${escapeHtml(selPt.label)}</strong>
+              ${selPt.valUsd === peakCoord.valUsd ? `<span class="pill-badge pill-positive" style="margin-left:6px;">▲ Пік періоду</span>` : ''}
             </div>
             <div class="tabular" style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
               <span>Вкладено: <strong>${fmtUsd(selPt.investedUsd)}</strong></span>
@@ -3786,7 +4046,7 @@ body {
             <span style="font-size:11px; color:var(--text-muted);">Купівля → Зараз</span>
           </div>
 
-          <div style="display:flex; flex-direction:column; gap:8px; max-height: 255px; overflow-y:auto; padding-right:2px;">
+          <div style="display:flex; flex-direction:column; gap:8px; max-height: 295px; overflow-y:auto; padding-right:2px;">
             ${sortedPositions.map(pos => {
               const isPosUp = pos.pnlUsd >= 0;
               const isPos24Up = (pos.change24h || 0) >= 0;
@@ -3798,7 +4058,7 @@ body {
                 <div class="dynamics-asset-row">
                   <div class="dynamics-asset-top">
                     <div style="display:flex; align-items:center; gap:6px; min-width:0;">
-                      <span class="ticker-badge" style="height:22px; min-width:36px; font-size:11px;">${escapeHtml(pos.ticker)}</span>
+                      <span class="ticker-badge" style="height:22px; min-width:36px; font-size:11px;">${escapeHtml(pos.ticker || '—')}</span>
                       <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(pos.displayName)}">${escapeHtml(pos.displayName)}</span>
                     </div>
                     <div class="tabular" style="text-align:right; white-space:nowrap;">
@@ -3825,7 +4085,7 @@ body {
                   </div>
 
                   <div class="tabular" style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-muted);">
-                    <span>Ціна: ${fmtUsd(pos.buyPriceUsd)} → <strong style="color:var(--text-secondary);">${fmtUsd(pos.livePriceUsd)}</strong></span>
+                    <span>${pos.buyPriceUsd ? `Ціна: ${fmtUsd(pos.buyPriceUsd)} → <strong style="color:var(--text-secondary);">${fmtUsd(pos.livePriceUsd)}</strong>` : `Категорія: ${escapeHtml(CATEGORY_META[pos.category]?.shortName || pos.category)}`}</span>
                     <span style="color:${isPos24Up ? 'var(--positive)' : 'var(--negative)'};">24г: ${isPos24Up ? '+' : ''}${(pos.change24h || 0).toFixed(2)}%</span>
                   </div>
                 </div>
@@ -5050,47 +5310,72 @@ body {
         }).join('')}
       </div>
 
-      <!-- 25-Year Stacked Bar Chart -->
+      <!-- 25-Year Stacked Bar Chart with Vertical Y-Axis Sum Markings -->
       <div class="forecast-chart-stage">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px; font-size:11.5px; color:var(--text-secondary);">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; font-size:11.5px; color:var(--text-secondary);">
           <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
             <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.equities.color}; margin-right:4px;"></span>Акції (${strat.forecastEquitiesCagr}% річних)</span>
             <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.bonds.color}; margin-right:4px;"></span>Облігації (${strat.forecastBondsCagr}% річних)</span>
             <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.metals.color}; margin-right:4px;"></span>Золото / Срібло (${strat.forecastMetalsCagr}% річних)</span>
           </div>
-          <span style="color:var(--text-muted);">Наведіть або натисніть на стовпчик року для деталізації</span>
+          <span style="color:var(--text-muted);">Пік (25р): <strong style="color:var(--positive);">${fmtChartAxisVal(y25.totalUsd, rates)}</strong> · Наведіть на стовпчик року для деталізації</span>
         </div>
 
-        <div class="forecast-bars-grid">
-          ${timeline.map(pt => {
-            const totalHeightPct = maxTotalUsd > 0 ? Math.max(2, (pt.totalUsd / maxTotalUsd) * 100) : 2;
-            const eqShare = pt.totalUsd > 0 ? (pt.eqUsd / pt.totalUsd) * 100 : 0;
-            const bdShare = pt.totalUsd > 0 ? (pt.bdUsd / pt.totalUsd) * 100 : 0;
-            const mtShare = pt.totalUsd > 0 ? (pt.mtUsd / pt.totalUsd) * 100 : 0;
-            const isActive = pt.yearOffset === selectedForecastYear;
+        <div class="forecast-plot-area">
+          <!-- Left Vertical Y-Axis Sum Markings -->
+          <div class="forecast-y-axis">
+            <div class="forecast-y-tick" style="color:var(--positive); font-weight:700;">${fmtChartAxisVal(maxTotalUsd, rates)}</div>
+            <div class="forecast-y-tick">${fmtChartAxisVal(maxTotalUsd * 0.75, rates)}</div>
+            <div class="forecast-y-tick">${fmtChartAxisVal(maxTotalUsd * 0.50, rates)}</div>
+            <div class="forecast-y-tick">${fmtChartAxisVal(maxTotalUsd * 0.25, rates)}</div>
+            <div class="forecast-y-tick">${fmtChartAxisVal(0, rates)}</div>
+          </div>
 
-            return `
-              <div
-                class="forecast-bar-col ${isActive ? 'active' : ''}"
-                data-forecast-year-bar="${pt.yearOffset}"
-                title="Рік +${pt.yearOffset} (${pt.calendarYear}): ${fmtUsd(pt.totalUsd)} (${fmtUah(pt.totalUah)}) · Чистий складний приріст: +${fmtUsd(pt.compoundProfitUsd)}"
-              >
-                <div class="forecast-bar-stack" style="height: ${totalHeightPct.toFixed(1)}%;">
-                  <div class="forecast-bar-seg" style="height: ${eqShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.equities.color};"></div>
-                  <div class="forecast-bar-seg" style="height: ${bdShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.bonds.color};"></div>
-                  <div class="forecast-bar-seg" style="height: ${mtShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.metals.color};"></div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
+          <!-- Right Bars Stage with Horizontal Grid Lines -->
+          <div class="forecast-bars-wrap">
+            <div class="forecast-grid-lines">
+              <div class="forecast-grid-line"></div>
+              <div class="forecast-grid-line"></div>
+              <div class="forecast-grid-line"></div>
+              <div class="forecast-grid-line"></div>
+              <div class="forecast-grid-line" style="border-top:none;"></div>
+            </div>
 
-        <div class="forecast-x-labels">
-          ${timeline.map(pt => {
-            const isMilestone = pt.yearOffset % 5 === 0;
-            const label = pt.yearOffset === 0 ? '0р' : `+${pt.yearOffset}р`;
-            return `<div class="forecast-x-label ${isMilestone ? 'milestone' : ''}">${label}</div>`;
-          }).join('')}
+            <div class="forecast-bars-grid">
+              ${timeline.map(pt => {
+                const totalHeightPct = maxTotalUsd > 0 ? Math.max(2, (pt.totalUsd / maxTotalUsd) * 100) : 2;
+                const eqShare = pt.totalUsd > 0 ? (pt.eqUsd / pt.totalUsd) * 100 : 0;
+                const bdShare = pt.totalUsd > 0 ? (pt.bdUsd / pt.totalUsd) * 100 : 0;
+                const mtShare = pt.totalUsd > 0 ? (pt.mtUsd / pt.totalUsd) * 100 : 0;
+                const isActive = pt.yearOffset === selectedForecastYear;
+                const isMilestone = pt.yearOffset % 5 === 0;
+                const showTopLabel = isMilestone || isActive;
+
+                return `
+                  <div
+                    class="forecast-bar-col ${isActive ? 'active' : ''}"
+                    data-forecast-year-bar="${pt.yearOffset}"
+                    title="Рік +${pt.yearOffset} (${pt.calendarYear}): ${fmtUsd(pt.totalUsd)} (${fmtUah(pt.totalUah)}) · Чистий складний приріст: +${fmtUsd(pt.compoundProfitUsd)}"
+                  >
+                    ${showTopLabel ? `<div class="forecast-bar-top-val">${fmtChartAxisVal(pt.totalUsd, rates, true)}</div>` : ''}
+                    <div class="forecast-bar-stack" style="height: ${totalHeightPct.toFixed(1)}%;">
+                      <div class="forecast-bar-seg" style="height: ${eqShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.equities.color};"></div>
+                      <div class="forecast-bar-seg" style="height: ${bdShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.bonds.color};"></div>
+                      <div class="forecast-bar-seg" style="height: ${mtShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.metals.color};"></div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+
+            <div class="forecast-x-labels">
+              ${timeline.map(pt => {
+                const isMilestone = pt.yearOffset % 5 === 0;
+                const label = pt.yearOffset === 0 ? '0р' : `+${pt.yearOffset}р`;
+                return `<div class="forecast-x-label ${isMilestone ? 'milestone' : ''}">${label}</div>`;
+              }).join('')}
+            </div>
+          </div>
         </div>
 
         <!-- Selected Year Detailed Breakdown Banner -->
