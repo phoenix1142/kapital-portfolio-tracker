@@ -1078,6 +1078,170 @@ body {
   color: var(--text-primary);
 }
 
+/* Stock Market Strategy & Rebalancing Calculator */
+.strategy-top-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.strategy-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.strategy-box-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.strategy-box-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.strategy-classes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.strategy-class-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.strategy-class-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.strategy-pct-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.strategy-pct-input {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-align: right;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+}
+
+.strategy-pct-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.strategy-class-meta {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.strategy-presets-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mode-switch-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: var(--bg-surface);
+  padding: 4px;
+  border-radius: 9px;
+  border: 1px solid var(--border-default);
+}
+
+.mode-switch-btn {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all 140ms ease;
+}
+
+.mode-switch-btn:hover {
+  color: var(--text-primary);
+}
+
+.mode-switch-btn.active {
+  background: var(--accent-primary);
+  color: #0b0f17;
+  font-weight: 700;
+}
+
+.rebalance-summary-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(56, 189, 248, 0.07);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  margin-bottom: 14px;
+  font-size: 12.5px;
+}
+
+.subtype-pill-select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.subtype-pill-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
 /* Mobile Bottom Nav */
 .mobile-nav {
   display: none;
@@ -1125,7 +1289,8 @@ body {
     padding-right: 0;
     padding-bottom: 14px;
   }
-  .overview-grid {
+  .overview-grid,
+  .strategy-top-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1146,7 +1311,8 @@ body {
   .page-content {
     padding: 16px;
   }
-  .form-grid {
+  .form-grid,
+  .strategy-classes-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1546,7 +1712,55 @@ body {
   };
 
   const QUICK_CRYPTO = ['BTC', 'ETH', 'SOL', 'USDT', 'TON', 'BNB', 'XRP', 'ADA', 'SUI', 'DOGE', 'LINK', 'AVAX'];
-  const QUICK_STOCKS = ['VOO', 'SPY', 'VWCE', 'CSP1', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'GLD'];
+  const QUICK_STOCKS = ['VOO', 'SPY', 'VWCE', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'TLT', 'BND', 'SGOV', 'GLD', 'IAU', 'SLV'];
+
+  const STOCK_SUBTYPES_META = {
+    equities: {
+      key: 'equities',
+      label: 'Акції',
+      fullLabel: '📈 Акції та ETF на акції',
+      badge: '📈 Акції',
+      color: '#38bdf8',
+      defaultTickerHint: 'VOO, VWCE, QQQ, NVDA'
+    },
+    bonds: {
+      key: 'bonds',
+      label: 'Облігації',
+      fullLabel: '📜 Облігації (Bond ETF / Treasuries)',
+      badge: '📜 Облігації',
+      color: '#a78bfa',
+      defaultTickerHint: 'TLT, BND, AGG, SGOV'
+    },
+    metals: {
+      key: 'metals',
+      label: 'Золото / Срібло',
+      fullLabel: '🥇 Золото та Срібло (Commodities / Metals)',
+      badge: '🥇 Золото / Срібло',
+      color: '#f59e0b',
+      defaultTickerHint: 'GLD, IAU, SLV, SGLN'
+    }
+  };
+
+  const KNOWN_BOND_TICKERS = new Set(['TLT', 'BND', 'AGG', 'SGOV', 'IEF', 'SHY', 'BIL', 'TIP', 'LQD', 'HYG', 'BNDX', 'VGLT', 'VGIT', 'VGSH', 'IB01', 'DTLA', 'AGGH', 'EUNA', 'IBTA', 'IDTL']);
+  const KNOWN_METAL_TICKERS = new Set(['GLD', 'IAU', 'SLV', 'GLDM', 'SGOL', 'SIVR', 'PHYS', 'PSLV', 'SGLN', 'PHAU', '4GLD', 'XAD5', 'GOLD', 'XAU', 'XAG']);
+
+  function inferStockSubType(posOrTicker, nameAndNotes = '') {
+    if (posOrTicker && typeof posOrTicker === 'object') {
+      if (posOrTicker.stockSubType && STOCK_SUBTYPES_META[posOrTicker.stockSubType]) {
+        return posOrTicker.stockSubType;
+      }
+      const t = (posOrTicker.ticker || '').toUpperCase().trim();
+      const txt = `${posOrTicker.name || ''} ${posOrTicker.notes || ''}`;
+      return inferStockSubType(t, txt);
+    }
+    const sym = String(posOrTicker || '').toUpperCase().trim();
+    if (KNOWN_METAL_TICKERS.has(sym)) return 'metals';
+    if (KNOWN_BOND_TICKERS.has(sym)) return 'bonds';
+    const text = `${sym} ${nameAndNotes || ''}`.toLowerCase();
+    if (/(gold|silver|золот|срібл|metal|bullion|xau|xag)/i.test(text)) return 'metals';
+    if (/(bond|treasur|облігац|bill|gilt|fixed income|t-bill)/i.test(text)) return 'bonds';
+    return 'equities';
+  }
 
   function safeGetItem(key) {
     try {
@@ -1562,6 +1776,16 @@ body {
     } catch (_) {}
   }
 
+  const DEFAULT_STOCK_STRATEGY = {
+    equitiesPct: 70,
+    bondsPct: 20,
+    metalsPct: 10,
+    investAmount: 1000,
+    investCurrency: 'USD',
+    rebalanceMode: 'buy_only', // 'buy_only' | 'with_sell'
+    tickerSplitMode: 'proportional' // 'proportional' | 'equal'
+  };
+
   const state = {
     activeCategory: 'all',
     primaryCurrency: 'UAH',
@@ -1575,7 +1799,8 @@ body {
         EUR_UAH: 44.80
       },
       depositTaxDefault: true,
-      depositTaxRate: 23.0
+      depositTaxRate: 23.0,
+      stockStrategy: { ...DEFAULT_STOCK_STRATEGY }
     },
     auth: {
       requireAuth: false
@@ -1756,9 +1981,12 @@ body {
       const pnlUah = currentValUah - investedUah;
       const pnlPct = investedUsd > 0 ? (pnlUsd / investedUsd) * 100 : 0;
 
+      const stockSubType = cat === 'stocks' ? inferStockSubType(pos) : undefined;
+
       return {
         ...pos,
         ticker,
+        stockSubType,
         displayName: pos.name || quote?.name || ticker,
         nativeCurrency: 'USD',
         livePriceUsd,
@@ -1916,7 +2144,16 @@ body {
       AMZN: { priceUsd: 210.40, change24h: 1.38, name: 'Amazon.com Inc.' },
       META: { priceUsd: 589.20, change24h: 1.15, name: 'Meta Platforms Inc.' },
       TSLA: { priceUsd: 332.10, change24h: 3.45, name: 'Tesla Inc.' },
-      GLD: { priceUsd: 242.70, change24h: 0.75, name: 'SPDR Gold Shares ETF' }
+      TLT: { priceUsd: 91.40, change24h: 0.35, name: 'iShares 20+ Year Treasury Bond ETF' },
+      BND: { priceUsd: 72.80, change24h: 0.18, name: 'Vanguard Total Bond Market ETF' },
+      AGG: { priceUsd: 97.60, change24h: 0.15, name: 'iShares Core U.S. Aggregate Bond ETF' },
+      SGOV: { priceUsd: 100.45, change24h: 0.02, name: 'iShares 0-3 Month Treasury Bond ETF' },
+      IEF: { priceUsd: 93.90, change24h: 0.22, name: 'iShares 7-10 Year Treasury Bond ETF' },
+      SHY: { priceUsd: 82.10, change24h: 0.05, name: 'iShares 1-3 Year Treasury Bond ETF' },
+      GLD: { priceUsd: 242.70, change24h: 0.75, name: 'SPDR Gold Shares ETF (Золото)' },
+      IAU: { priceUsd: 49.85, change24h: 0.74, name: 'iShares Gold Trust ETF (Золото)' },
+      SLV: { priceUsd: 28.40, change24h: 1.10, name: 'iShares Silver Trust ETF (Срібло)' },
+      SGLN: { priceUsd: 51.20, change24h: 0.72, name: 'iShares Physical Gold ETC' }
     }
   };
 
@@ -2545,8 +2782,683 @@ body {
       overviewSection.style.display = 'none';
     }
 
+    // Show/hide Stocks Strategy & Monthly Rebalancing Calculator section
+    const stocksStrategySection = document.getElementById('stocks-strategy-section');
+    if (stocksStrategySection) {
+      if (state.activeCategory === 'stocks') {
+        stocksStrategySection.style.display = 'block';
+        renderStockStrategySection(scopedPositions);
+      } else {
+        stocksStrategySection.style.display = 'none';
+      }
+    }
+
     // Render Positions Table
     renderPositionsTable(scopedPositions);
+  }
+
+  function getStockStrategy() {
+    if (!state.settings.stockStrategy || typeof state.settings.stockStrategy !== 'object') {
+      state.settings.stockStrategy = { ...DEFAULT_STOCK_STRATEGY };
+    }
+    const s = state.settings.stockStrategy;
+    return {
+      equitiesPct: s.equitiesPct !== undefined ? Number(s.equitiesPct) : 70,
+      bondsPct: s.bondsPct !== undefined ? Number(s.bondsPct) : 20,
+      metalsPct: s.metalsPct !== undefined ? Number(s.metalsPct) : 10,
+      investAmount: s.investAmount !== undefined ? Number(s.investAmount) : 1000,
+      investCurrency: s.investCurrency === 'UAH' ? 'UAH' : 'USD',
+      rebalanceMode: s.rebalanceMode === 'with_sell' ? 'with_sell' : 'buy_only',
+      tickerSplitMode: s.tickerSplitMode === 'equal' ? 'equal' : 'proportional'
+    };
+  }
+
+  let strategySaveTimer = null;
+  function schedulePersistStrategy() {
+    if (strategySaveTimer) clearTimeout(strategySaveTimer);
+    strategySaveTimer = setTimeout(() => {
+      persistPortfolio();
+    }, 350);
+  }
+
+  function ensureStockStrategyShell(sectionEl) {
+    if (sectionEl.dataset.initialized === 'true') return;
+    sectionEl.dataset.initialized = 'true';
+
+    sectionEl.innerHTML = `
+      <div class="panel-header" style="margin-bottom: 14px;">
+        <div>
+          <div class="panel-title">🎯 Цільова стратегія фондового портфеля та калькулятор докупівлі</div>
+          <div class="panel-subtitle">Задайте бажані пропорції (Акції / Облігації / Золото та Срібло) і розрахуйте, скільки та яких активів купити на суму щомісячної інвестиції</div>
+        </div>
+      </div>
+
+      <div class="strategy-top-grid">
+        <!-- Left Box: Target Strategy Percentages -->
+        <div class="strategy-box">
+          <div class="strategy-box-title">
+            <span>1. Моя цільова стратегія (% від фондового портфеля)</span>
+            <span id="strat-total-pct-badge" class="pill-badge pill-positive">Разом: 100%</span>
+          </div>
+          <div class="strategy-box-sub">Вкажіть бажану частку кожного класу активів у вашому фондовому портфелі</div>
+
+          <div class="strategy-classes-grid">
+            <div class="strategy-class-card" style="border-top: 3px solid ${STOCK_SUBTYPES_META.equities.color};">
+              <div class="strategy-class-header">
+                <span>📈 Акції</span>
+              </div>
+              <div class="strategy-pct-input-wrap">
+                <input type="number" step="0.5" min="0" max="100" id="strat-pct-equities" class="strategy-pct-input" />
+                <span style="font-weight:700; color:var(--text-secondary);">%</span>
+              </div>
+              <div class="strategy-class-meta" id="strat-meta-equities"></div>
+            </div>
+
+            <div class="strategy-class-card" style="border-top: 3px solid ${STOCK_SUBTYPES_META.bonds.color};">
+              <div class="strategy-class-header">
+                <span>📜 Облігації</span>
+              </div>
+              <div class="strategy-pct-input-wrap">
+                <input type="number" step="0.5" min="0" max="100" id="strat-pct-bonds" class="strategy-pct-input" />
+                <span style="font-weight:700; color:var(--text-secondary);">%</span>
+              </div>
+              <div class="strategy-class-meta" id="strat-meta-bonds"></div>
+            </div>
+
+            <div class="strategy-class-card" style="border-top: 3px solid ${STOCK_SUBTYPES_META.metals.color};">
+              <div class="strategy-class-header">
+                <span>🥇 Золото / Срібло</span>
+              </div>
+              <div class="strategy-pct-input-wrap">
+                <input type="number" step="0.5" min="0" max="100" id="strat-pct-metals" class="strategy-pct-input" />
+                <span style="font-weight:700; color:var(--text-secondary);">%</span>
+              </div>
+              <div class="strategy-class-meta" id="strat-meta-metals"></div>
+            </div>
+          </div>
+
+          <div class="strategy-presets-row">
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <span style="font-size:11.5px; color:var(--text-muted);">Шаблони:</span>
+              <button type="button" class="chip-btn" data-strat-preset="80,10,10">Агресивний 80 / 10 / 10</button>
+              <button type="button" class="chip-btn" data-strat-preset="70,20,10">Збалансований 70 / 20 / 10</button>
+              <button type="button" class="chip-btn" data-strat-preset="60,30,10">Класичний 60 / 30 / 10</button>
+              <button type="button" class="chip-btn" data-strat-preset="50,35,15">Захисний 50 / 35 / 15</button>
+            </div>
+            <button type="button" class="chip-btn" id="btn-strat-normalize" style="display:none; border-color:var(--accent-primary); color:var(--accent-primary);">
+              Вирівняти до 100%
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Box: Monthly Investment & Rebalance Mode -->
+        <div class="strategy-box">
+          <div class="strategy-box-title">
+            <span>2. Калькулятор щомісячної інвестиції та ребалансування</span>
+          </div>
+          <div class="strategy-box-sub">Введіть суму, яку плануєте доінвестувати цього місяця, та оберіть режим розрахунку</div>
+
+          <div class="form-grid" style="margin-bottom: 12px;">
+            <div class="form-group">
+              <label class="form-label" for="strat-invest-amount">Сума нової інвестиції</label>
+              <input type="number" step="any" min="0" id="strat-invest-amount" class="form-input tabular" placeholder="1000" style="font-weight:700; font-size:15px;" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="strat-invest-currency">Валюта суми</label>
+              <select id="strat-invest-currency" class="form-select">
+                <option value="USD">🇺🇸 Долар США ($ USD)</option>
+                <option value="UAH">🇺🇦 Гривня (₴ UAH)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label">Режим ребалансування</label>
+            <div class="mode-switch-group">
+              <button type="button" class="mode-switch-btn" data-rebalance-mode="buy_only" id="btn-mode-buy-only">
+                🟢 Без продажу активів (Тільки докупівля)
+              </button>
+              <button type="button" class="mode-switch-btn" data-rebalance-mode="with_sell" id="btn-mode-with-sell">
+                🔄 З продажем активів (Повне ребалансування)
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="strat-ticker-split">Розподіл суми між тікерами всередині одного класу</label>
+            <select id="strat-ticker-split" class="form-select">
+              <option value="proportional">⚖️ Пропорційно поточній вазі активу в цьому класі</option>
+              <option value="equal">➗ Порівну між усіма моїми активами цього класу</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dynamic Calculation Results & Action Plan Table -->
+      <div id="stocks-rebalance-results"></div>
+    `;
+
+    // Wire up live input events
+    const eqInput = document.getElementById('strat-pct-equities');
+    const bdInput = document.getElementById('strat-pct-bonds');
+    const mtInput = document.getElementById('strat-pct-metals');
+    const amtInput = document.getElementById('strat-invest-amount');
+    const currSelect = document.getElementById('strat-invest-currency');
+    const splitSelect = document.getElementById('strat-ticker-split');
+    const normBtn = document.getElementById('btn-strat-normalize');
+
+    function onStrategyInputChanged() {
+      const strat = getStockStrategy();
+      strat.equitiesPct = Math.max(0, parseFloat(eqInput.value) || 0);
+      strat.bondsPct = Math.max(0, parseFloat(bdInput.value) || 0);
+      strat.metalsPct = Math.max(0, parseFloat(mtInput.value) || 0);
+      strat.investAmount = Math.max(0, parseFloat(amtInput.value) || 0);
+      strat.investCurrency = currSelect.value === 'UAH' ? 'UAH' : 'USD';
+      strat.tickerSplitMode = splitSelect.value === 'equal' ? 'equal' : 'proportional';
+      state.settings.stockStrategy = strat;
+      schedulePersistStrategy();
+      const stockPositions = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
+      updateStockStrategyCalculations(stockPositions);
+    }
+
+    [eqInput, bdInput, mtInput, amtInput].forEach(inp => {
+      inp?.addEventListener('input', onStrategyInputChanged);
+    });
+    [currSelect, splitSelect].forEach(sel => {
+      sel?.addEventListener('change', onStrategyInputChanged);
+    });
+
+    sectionEl.querySelectorAll('[data-strat-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const parts = (btn.dataset.stratPreset || '70,20,10').split(',').map(Number);
+        eqInput.value = parts[0] ?? 70;
+        bdInput.value = parts[1] ?? 20;
+        mtInput.value = parts[2] ?? 10;
+        onStrategyInputChanged();
+      });
+    });
+
+    normBtn?.addEventListener('click', () => {
+      const strat = getStockStrategy();
+      const sum = strat.equitiesPct + strat.bondsPct + strat.metalsPct;
+      if (sum > 0) {
+        const eq = Number(((strat.equitiesPct / sum) * 100).toFixed(1));
+        const bd = Number(((strat.bondsPct / sum) * 100).toFixed(1));
+        const mt = Number((100 - eq - bd).toFixed(1));
+        eqInput.value = eq;
+        bdInput.value = bd;
+        mtInput.value = mt;
+      } else {
+        eqInput.value = 70;
+        bdInput.value = 20;
+        mtInput.value = 10;
+      }
+      onStrategyInputChanged();
+    });
+
+    sectionEl.querySelectorAll('[data-rebalance-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.rebalanceMode === 'with_sell' ? 'with_sell' : 'buy_only';
+        const strat = getStockStrategy();
+        strat.rebalanceMode = mode;
+        state.settings.stockStrategy = strat;
+        schedulePersistStrategy();
+        const stockPositions = state.positions.filter(p => p.category === 'stocks').map(evaluatePosition);
+        updateStockStrategyCalculations(stockPositions);
+      });
+    });
+  }
+
+  function renderStockStrategySection(stockPositions) {
+    const sectionEl = document.getElementById('stocks-strategy-section');
+    if (!sectionEl) return;
+    ensureStockStrategyShell(sectionEl);
+
+    const strat = getStockStrategy();
+    const eqInput = document.getElementById('strat-pct-equities');
+    const bdInput = document.getElementById('strat-pct-bonds');
+    const mtInput = document.getElementById('strat-pct-metals');
+    const amtInput = document.getElementById('strat-invest-amount');
+    const currSelect = document.getElementById('strat-invest-currency');
+    const splitSelect = document.getElementById('strat-ticker-split');
+
+    if (eqInput && document.activeElement !== eqInput) eqInput.value = strat.equitiesPct;
+    if (bdInput && document.activeElement !== bdInput) bdInput.value = strat.bondsPct;
+    if (mtInput && document.activeElement !== mtInput) mtInput.value = strat.metalsPct;
+    if (amtInput && document.activeElement !== amtInput) amtInput.value = strat.investAmount;
+    if (currSelect && document.activeElement !== currSelect) currSelect.value = strat.investCurrency;
+    if (splitSelect && document.activeElement !== splitSelect) splitSelect.value = strat.tickerSplitMode;
+
+    updateStockStrategyCalculations(stockPositions);
+  }
+
+  function updateStockStrategyCalculations(stockPositions) {
+    const strat = getStockStrategy();
+    const rates = getEffectiveRates();
+
+    // Update mode toggle buttons
+    document.getElementById('btn-mode-buy-only')?.classList.toggle('active', strat.rebalanceMode === 'buy_only');
+    document.getElementById('btn-mode-with-sell')?.classList.toggle('active', strat.rebalanceMode === 'with_sell');
+
+    // Validate sum of percentages
+    const rawSumPct = strat.equitiesPct + strat.bondsPct + strat.metalsPct;
+    const pctBadge = document.getElementById('strat-total-pct-badge');
+    const normBtn = document.getElementById('btn-strat-normalize');
+    const isExact100 = Math.abs(rawSumPct - 100) < 0.05;
+
+    if (pctBadge) {
+      pctBadge.textContent = `Разом: ${Number(rawSumPct.toFixed(1))}%`;
+      pctBadge.className = 'pill-badge ' + (isExact100 ? 'pill-positive' : 'pill-negative');
+    }
+    if (normBtn) {
+      normBtn.style.display = isExact100 ? 'none' : 'inline-flex';
+    }
+
+    // Normalized target weights (w_i in [0..1])
+    const weights = {
+      equities: rawSumPct > 0 ? strat.equitiesPct / rawSumPct : 0,
+      bonds: rawSumPct > 0 ? strat.bondsPct / rawSumPct : 0,
+      metals: rawSumPct > 0 ? strat.metalsPct / rawSumPct : 0
+    };
+
+    // Group existing stock positions by sub-type
+    const classKeys = ['equities', 'bonds', 'metals'];
+    const byClass = { equities: [], bonds: [], metals: [] };
+    const classValUsd = { equities: 0, bonds: 0, metals: 0 };
+
+    stockPositions.forEach(p => {
+      const sub = p.stockSubType && byClass[p.stockSubType] ? p.stockSubType : inferStockSubType(p);
+      byClass[sub].push(p);
+      classValUsd[sub] += p.currentValUsd;
+    });
+
+    const currentTotalUsd = classValUsd.equities + classValUsd.bonds + classValUsd.metals;
+    const currentTotalUah = currentTotalUsd * rates.USD_UAH;
+
+    // Update per-class card metadata (Current % vs Target %)
+    classKeys.forEach(k => {
+      const metaEl = document.getElementById(`strat-meta-${k}`);
+      if (!metaEl) return;
+      const curUsd = classValUsd[k];
+      const curPct = currentTotalUsd > 0 ? (curUsd / currentTotalUsd) * 100 : 0;
+      const targetPct = weights[k] * 100;
+      const diffPct = curPct - targetPct;
+      const diffSign = diffPct > 0 ? '+' : '';
+      const diffColor = Math.abs(diffPct) < 1.0 ? 'var(--positive)' : 'var(--accent-primary)';
+      metaEl.innerHTML = `
+        <div class="tabular">Зараз: <strong>${curPct.toFixed(1)}%</strong> (${fmtUsd(curUsd)})</div>
+        <div class="tabular" style="color:${diffColor};">Відхилення: ${diffSign}${diffPct.toFixed(1)}% · ${byClass[k].length} поз.</div>
+      `;
+    });
+
+    // Convert monthly investment amount to USD & UAH
+    const investUsd = strat.investCurrency === 'UAH'
+      ? (rates.USD_UAH > 0 ? strat.investAmount / rates.USD_UAH : 0)
+      : strat.investAmount;
+    const investUah = investUsd * rates.USD_UAH;
+    const postTotalUsd = currentTotalUsd + investUsd;
+    const postTotalUah = postTotalUsd * rates.USD_UAH;
+
+    // Calculate class-level deltaUsd for the active mode
+    const classDeltaUsd = { equities: 0, bonds: 0, metals: 0 };
+
+    if (strat.rebalanceMode === 'with_sell') {
+      // Full rebalancing: each class reaches exact target weight of (currentTotalUsd + investUsd)
+      classKeys.forEach(k => {
+        const targetPostUsd = weights[k] * postTotalUsd;
+        classDeltaUsd[k] = targetPostUsd - classValUsd[k];
+      });
+    } else {
+      // Buy-only mode ('buy_only'): no selling allowed (classDeltaUsd[k] >= 0, sum = investUsd)
+      // Constrained water-filling projection onto simplex
+      let active = classKeys.filter(k => weights[k] > 0);
+      if (active.length === 0 || investUsd <= 0) {
+        classKeys.forEach(k => { classDeltaUsd[k] = 0; });
+      } else {
+        for (let iter = 0; iter < 4; iter++) {
+          const sumV = active.reduce((acc, k) => acc + classValUsd[k], 0);
+          const sumW = active.reduce((acc, k) => acc + weights[k], 0);
+          const totalPool = investUsd + sumV;
+          let ClampedAny = false;
+          const nextActive = [];
+
+          active.forEach(k => {
+            const desiredTotal = sumW > 0 ? totalPool * (weights[k] / sumW) : classValUsd[k];
+            const delta = desiredTotal - classValUsd[k];
+            if (delta < -1e-6) {
+              classDeltaUsd[k] = 0;
+              ClampedAny = true;
+            } else {
+              classDeltaUsd[k] = Math.max(0, delta);
+              nextActive.push(k);
+            }
+          });
+
+          if (!ClampedAny || nextActive.length === 0) break;
+          active = nextActive;
+        }
+      }
+    }
+
+    // Build rows for the action plan (both existing positions & empty target classes)
+    const planRows = [];
+    let totalBuyUsd = 0;
+    let totalSellUsd = 0;
+
+    classKeys.forEach(k => {
+      const classMeta = STOCK_SUBTYPES_META[k];
+      const positionsInClass = byClass[k];
+      const cValUsd = classValUsd[k];
+      const cDeltaUsd = classDeltaUsd[k];
+      const cTargetPct = weights[k] * 100;
+
+      if (positionsInClass.length === 0) {
+        if (cTargetPct > 0 || Math.abs(cDeltaUsd) > 0.01) {
+          if (cDeltaUsd > 0) totalBuyUsd += cDeltaUsd;
+          if (cDeltaUsd < 0) totalSellUsd += Math.abs(cDeltaUsd);
+          planRows.push({
+            isPlaceholderClass: true,
+            subType: k,
+            classMeta,
+            currentValUsd: 0,
+            currentPct: 0,
+            targetPct: cTargetPct,
+            postValUsd: Math.max(0, cDeltaUsd),
+            postPct: postTotalUsd > 0 ? (Math.max(0, cDeltaUsd) / postTotalUsd) * 100 : cTargetPct,
+            deltaUsd: cDeltaUsd
+          });
+        }
+        return;
+      }
+
+      // Compute each ticker's target weight inside class k
+      const n = positionsInClass.length;
+      positionsInClass.forEach(pos => {
+        const shareWithinClass = (strat.tickerSplitMode === 'equal' || cValUsd <= 0)
+          ? (1 / n)
+          : (pos.currentValUsd / cValUsd);
+
+        let posDeltaUsd = 0;
+        if (strat.rebalanceMode === 'with_sell') {
+          const posTargetPostUsd = (weights[k] * shareWithinClass) * postTotalUsd;
+          posDeltaUsd = posTargetPostUsd - pos.currentValUsd;
+        } else {
+          // In buy_only mode, distribute class's positive buy budget across tickers so underweights within class catch up
+          if (cDeltaUsd <= 0) {
+            posDeltaUsd = 0;
+          } else if (strat.tickerSplitMode === 'equal' && cValUsd > 0) {
+            // Water-fill inside the class toward equal weights
+            const desiredWithin = (cValUsd + cDeltaUsd) / n;
+            posDeltaUsd = Math.max(0, desiredWithin - pos.currentValUsd);
+          } else {
+            posDeltaUsd = cDeltaUsd * shareWithinClass;
+          }
+        }
+
+        if (posDeltaUsd > 0) totalBuyUsd += posDeltaUsd;
+        if (posDeltaUsd < 0) totalSellUsd += Math.abs(posDeltaUsd);
+
+        const posPostUsd = Math.max(0, pos.currentValUsd + posDeltaUsd);
+        planRows.push({
+          isPlaceholderClass: false,
+          pos,
+          subType: k,
+          classMeta,
+          currentValUsd: pos.currentValUsd,
+          currentPct: currentTotalUsd > 0 ? (pos.currentValUsd / currentTotalUsd) * 100 : 0,
+          targetPct: cTargetPct * shareWithinClass,
+          postValUsd: posPostUsd,
+          postPct: postTotalUsd > 0 ? (posPostUsd / postTotalUsd) * 100 : 0,
+          deltaUsd: posDeltaUsd,
+          exactShares: pos.livePriceUsd > 0 ? (posDeltaUsd / pos.livePriceUsd) : 0
+        });
+      });
+
+      // Normalize buy_only equal-split rounding inside class if needed
+      if (strat.rebalanceMode === 'buy_only' && strat.tickerSplitMode === 'equal' && cDeltaUsd > 0 && positionsInClass.length > 1) {
+        const classRows = planRows.filter(r => !r.isPlaceholderClass && r.subType === k);
+        const sumRowDeltas = classRows.reduce((acc, r) => acc + r.deltaUsd, 0);
+        if (sumRowDeltas > 0 && Math.abs(sumRowDeltas - cDeltaUsd) > 0.01) {
+          const scale = cDeltaUsd / sumRowDeltas;
+          totalBuyUsd = 0;
+          classRows.forEach(r => {
+            r.deltaUsd *= scale;
+            r.postValUsd = r.currentValUsd + r.deltaUsd;
+            r.postPct = postTotalUsd > 0 ? (r.postValUsd / postTotalUsd) * 100 : 0;
+            r.exactShares = r.pos.livePriceUsd > 0 ? (r.deltaUsd / r.pos.livePriceUsd) : 0;
+          });
+          planRows.forEach(r => {
+            if (r.deltaUsd > 0) totalBuyUsd += r.deltaUsd;
+          });
+        }
+      }
+    });
+
+    // Post-investment class shares for summary bar
+    const postClassPcts = {};
+    classKeys.forEach(k => {
+      const postClassUsd = Math.max(0, classValUsd[k] + classDeltaUsd[k]);
+      postClassPcts[k] = postTotalUsd > 0 ? (postClassUsd / postTotalUsd) * 100 : (weights[k] * 100);
+    });
+
+    const resultsEl = document.getElementById('stocks-rebalance-results');
+    if (!resultsEl) return;
+
+    const modeDescription = strat.rebalanceMode === 'buy_only'
+      ? `🟢 <strong>Режим без продажу:</strong> жоден існуючий актив не продається. Уся сума нової інвестиції (<strong>${fmtUsd(investUsd)}</strong> / <strong>${fmtUah(investUah)}</strong>) спрямовується у найбільш недокуплені класи активів для максимального наближення до цільових пропорцій.`
+      : `🔄 <strong>Режим з продажем (повне ребалансування):</strong> активи, частка яких перевищує план, частково продаються (на <strong>${fmtUsd(totalSellUsd)}</strong>), а виручені кошти разом із новою інвестицією (<strong>${fmtUsd(investUsd)}</strong>) спрямовуються на купівлю (разом купівля на <strong>${fmtUsd(totalBuyUsd)}</strong>), щоб досягти точних цільових <strong>${ (weights.equities*100).toFixed(0) }% / ${ (weights.bonds*100).toFixed(0) }% / ${ (weights.metals*100).toFixed(0) }%</strong>.`;
+
+    resultsEl.innerHTML = `
+      <div class="rebalance-summary-banner">
+        <div style="flex:1; min-width: 260px;">
+          ${modeDescription}
+        </div>
+        <div class="tabular" style="text-align:right;">
+          <div style="font-size:11.5px; color:var(--text-secondary);">Портфель після інвестиції:</div>
+          <div style="font-size:15px; font-weight:700; color:var(--text-primary);">${fmtUsd(postTotalUsd)} <span style="color:var(--text-secondary); font-weight:500;">(${fmtUah(postTotalUah)})</span></div>
+        </div>
+      </div>
+
+      <!-- Stacked Bar Comparison: Current vs Post-Rebalance vs Target -->
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:16px;">
+        ${classKeys.map(k => {
+          const cm = STOCK_SUBTYPES_META[k];
+          const curUsd = classValUsd[k];
+          const curPct = currentTotalUsd > 0 ? (curUsd / currentTotalUsd) * 100 : 0;
+          const postUsd = Math.max(0, curUsd + classDeltaUsd[k]);
+          const postPct = postClassPcts[k];
+          const targPct = weights[k] * 100;
+          const dUsd = classDeltaUsd[k];
+          const actionText = dUsd > 0.5
+            ? `<span style="color:var(--positive); font-weight:700;">Купити +${fmtUsd(dUsd)} (+${fmtUah(dUsd * rates.USD_UAH)})</span>`
+            : (dUsd < -0.5
+                ? `<span style="color:var(--negative); font-weight:700;">Продати ${fmtUsd(dUsd)} (${fmtUah(dUsd * rates.USD_UAH)})</span>`
+                : `<span style="color:var(--text-muted);">Без змін ($0)</span>`);
+          return `
+            <div style="padding:10px 12px; border-radius:8px; background:var(--bg-elevated); border:1px solid var(--border-subtle);">
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; font-weight:600; margin-bottom:4px;">
+                <span>${cm.badge}</span>
+                <span class="tabular" style="color:var(--text-secondary);">Ціль: <strong>${targPct.toFixed(1)}%</strong></span>
+              </div>
+              <div class="tabular" style="font-size:12px; color:var(--text-secondary); margin-bottom:4px;">
+                Частка: ${curPct.toFixed(1)}% → <strong style="color:var(--text-primary);">${postPct.toFixed(1)}%</strong> (${fmtUsd(postUsd)})
+              </div>
+              <div class="tabular" style="font-size:12px;">${actionText}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Per-Ticker Rebalancing Action Table -->
+      <div class="table-container">
+        <table class="positions-table">
+          <thead>
+            <tr>
+              <th>Актив / Клас стратегії</th>
+              <th class="text-right">Поточна вартість</th>
+              <th class="text-right">Частка (Зараз → План)</th>
+              <th class="text-right">Що зробити (Сума $ / ₴)</th>
+              <th class="text-right">Кількість до купівлі / продажу</th>
+              <th class="text-right">Після ребалансу</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${planRows.map(row => {
+              if (row.isPlaceholderClass) {
+                const dUsd = row.deltaUsd;
+                const dUah = dUsd * rates.USD_UAH;
+                const isBuy = dUsd > 0.5;
+                return `
+                  <tr>
+                    <td>
+                      <div class="asset-cell">
+                        <span class="ticker-badge" style="border-left: 3px solid ${row.classMeta.color}">НОВИЙ</span>
+                        <div>
+                          <div class="asset-name-primary">${row.classMeta.fullLabel}</div>
+                          <div class="asset-name-sub">У портфелі ще немає активів цього класу (напр. ${row.classMeta.defaultTickerHint})</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="text-right">
+                      <div class="dual-val-primary">$0.00</div>
+                      <div class="dual-val-sub">0 ₴</div>
+                    </td>
+                    <td class="text-right">
+                      <div class="dual-val-primary">0.0% → ${row.targetPct.toFixed(1)}%</div>
+                      <div class="dual-val-sub">Після: ${row.postPct.toFixed(1)}%</div>
+                    </td>
+                    <td class="text-right">
+                      ${isBuy ? `
+                        <div class="dual-val-primary" style="color:var(--positive);">🟢 КУПИТИ +${fmtUsd(dUsd)}</div>
+                        <div class="dual-val-sub">+${fmtUah(dUah)}</div>
+                      ` : `<div class="dual-val-sub">Немає дій</div>`}
+                    </td>
+                    <td class="text-right">
+                      <button type="button" class="btn btn-secondary btn-add-missing-subtype" data-subtype="${row.subType}" style="padding:5px 10px; font-size:12px;">
+                        + Додати актив (${row.classMeta.label})
+                      </button>
+                    </td>
+                    <td class="text-right">
+                      <div class="dual-val-primary">${fmtUsd(row.postValUsd)}</div>
+                      <div class="dual-val-sub">${fmtUah(row.postValUsd * rates.USD_UAH)} (${row.postPct.toFixed(1)}%)</div>
+                    </td>
+                  </tr>
+                `;
+              }
+
+              const pos = row.pos;
+              const dUsd = row.deltaUsd;
+              const dUah = dUsd * rates.USD_UAH;
+              const absShares = Math.abs(row.exactShares);
+              const wholeShares = Math.floor(absShares + 1e-6);
+              const wholeCostUsd = wholeShares * pos.livePriceUsd;
+
+              let actionCellHtml = '';
+              let sharesCellHtml = '';
+
+              if (dUsd > 0.5) {
+                actionCellHtml = `
+                  <div class="dual-val-primary" style="color:var(--positive);">🟢 КУПИТИ +${fmtUsd(dUsd)}</div>
+                  <div class="dual-val-sub">+${fmtUah(dUah)}</div>
+                `;
+                sharesCellHtml = `
+                  <div class="dual-val-primary" style="color:var(--positive);">+${absShares.toFixed(2)} шт. <span style="font-size:11.5px; color:var(--text-secondary);">по ${fmtUsd(pos.livePriceUsd)}</span></div>
+                  <div class="dual-val-sub">${wholeShares > 0 ? `Цілих лотів: <strong>+${wholeShares} шт.</strong> (${fmtUsd(wholeCostUsd)})` : `Менше 1 цілої акції (дробовий лот)`}</div>
+                `;
+              } else if (dUsd < -0.5) {
+                actionCellHtml = `
+                  <div class="dual-val-primary" style="color:var(--negative);">🔴 ПРОДАТИ ${fmtUsd(dUsd)}</div>
+                  <div class="dual-val-sub">${fmtUah(dUah)}</div>
+                `;
+                sharesCellHtml = `
+                  <div class="dual-val-primary" style="color:var(--negative);">-${absShares.toFixed(2)} шт. <span style="font-size:11.5px; color:var(--text-secondary);">по ${fmtUsd(pos.livePriceUsd)}</span></div>
+                  <div class="dual-val-sub">${wholeShares > 0 ? `Цілих лотів: <strong>-${wholeShares} шт.</strong> (${fmtUsd(wholeCostUsd)})` : `Менше 1 цілої акції`}</div>
+                `;
+              } else {
+                actionCellHtml = `
+                  <div class="dual-val-primary" style="color:var(--text-muted);">⚪ Тримати ($0.00)</div>
+                  <div class="dual-val-sub">Не потребує докупівлі</div>
+                `;
+                sharesCellHtml = `
+                  <div class="dual-val-primary" style="color:var(--text-muted);">0 шт.</div>
+                  <div class="dual-val-sub">Поточна к-сть: ${pos.quantity} шт.</div>
+                `;
+              }
+
+              return `
+                <tr>
+                  <td>
+                    <div class="asset-cell">
+                      <span class="ticker-badge" style="border-left: 3px solid ${row.classMeta.color}">${escapeHtml(pos.ticker)}</span>
+                      <div>
+                        <div class="asset-name-primary">${escapeHtml(pos.displayName)}</div>
+                        <div style="margin-top:3px;">
+                          <select class="subtype-pill-select" data-change-pos-subtype="${pos.id}" title="Клас активу в стратегії">
+                            <option value="equities" ${row.subType === 'equities' ? 'selected' : ''}>📈 Акції</option>
+                            <option value="bonds" ${row.subType === 'bonds' ? 'selected' : ''}>📜 Облігації</option>
+                            <option value="metals" ${row.subType === 'metals' ? 'selected' : ''}>🥇 Золото / Срібло</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="text-right">
+                    <div class="dual-val-primary">${fmtUsd(row.currentValUsd)}</div>
+                    <div class="dual-val-sub">${fmtUah(row.currentValUsd * rates.USD_UAH)} (${pos.quantity} шт.)</div>
+                  </td>
+                  <td class="text-right">
+                    <div class="dual-val-primary">${row.currentPct.toFixed(1)}% → ${row.targetPct.toFixed(1)}%</div>
+                    <div class="dual-val-sub">Після інвест.: <strong>${row.postPct.toFixed(1)}%</strong></div>
+                  </td>
+                  <td class="text-right">${actionCellHtml}</td>
+                  <td class="text-right">${sharesCellHtml}</td>
+                  <td class="text-right">
+                    <div class="dual-val-primary">${fmtUsd(row.postValUsd)}</div>
+                    <div class="dual-val-sub">${fmtUah(row.postValUsd * rates.USD_UAH)}</div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // Attach inline sub-type change handlers
+    resultsEl.querySelectorAll('[data-change-pos-subtype]').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const posId = sel.dataset.changePosSubtype;
+        const targetPos = state.positions.find(p => p.id === posId);
+        if (targetPos) {
+          targetPos.stockSubType = sel.value;
+          await persistPortfolio();
+          renderAll();
+        }
+      });
+    });
+
+    // Attach "+ Додати актив" button for missing classes
+    resultsEl.querySelectorAll('.btn-add-missing-subtype').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const subType = btn.dataset.subtype || 'equities';
+        const defaultTickerBySub = { equities: 'VOO', bonds: 'TLT', metals: 'GLD' };
+        const defTicker = defaultTickerBySub[subType] || 'VOO';
+        const defQuote = state.quotes.stocks?.[defTicker];
+        openPositionModal(null);
+        const catSelect = document.getElementById('pos-category');
+        if (catSelect) {
+          catSelect.value = 'stocks';
+          renderModalFormFields('stocks', {
+            category: 'stocks',
+            stockSubType: subType,
+            ticker: defTicker,
+            name: defQuote?.name || defTicker,
+            buyPriceUsd: defQuote?.priceUsd || 100,
+            quantity: 10
+          });
+        }
+      });
+    });
   }
 
   function renderOverviewBreakdown(allEvaluated, grandTotalUah) {
@@ -2773,6 +3685,9 @@ body {
       const primaryValueStr = state.primaryCurrency === 'UAH' ? fmtUah(pos.currentValUah) : fmtUsd(pos.currentValUsd);
       const secondaryValueStr = state.primaryCurrency === 'UAH' ? fmtUsd(pos.currentValUsd) : fmtUah(pos.currentValUah);
       const platformText = pos.platform || pos.bank || pos.location || 'Особистий рахунок';
+      const stockSubBadge = pos.category === 'stocks' && STOCK_SUBTYPES_META[pos.stockSubType]
+        ? ` · <span style="color:${STOCK_SUBTYPES_META[pos.stockSubType].color}; font-weight:600;">${STOCK_SUBTYPES_META[pos.stockSubType].badge}</span>`
+        : '';
 
       return `
         <tr data-pos-id="${pos.id}">
@@ -2786,7 +3701,7 @@ body {
             </div>
           </td>
           <td>
-            <div class="dual-val-primary">${catInfo.shortName}</div>
+            <div class="dual-val-primary">${catInfo.shortName}${stockSubBadge}</div>
             <div class="dual-val-sub">${escapeHtml(platformText)}</div>
           </td>
           <td class="text-right">${qtyOrRateHtml}</td>
@@ -3223,6 +4138,16 @@ body {
         }
       }
 
+      if (!isCrypto) {
+        const tickerInput = document.getElementById('f-ticker');
+        const subTypeSelect = document.getElementById('f-stock-subtype');
+        tickerInput?.addEventListener('input', () => {
+          if (subTypeSelect) {
+            subTypeSelect.value = inferStockSubType(tickerInput.value);
+          }
+        });
+      }
+
       container.querySelectorAll('[data-pick-ticker]').forEach(btn => {
         btn.addEventListener('click', () => {
           const sym = btn.dataset.pickTicker;
@@ -3233,6 +4158,10 @@ body {
             if (!existing) {
               document.getElementById('f-buy-price').value = quoteBook[sym].priceUsd;
             }
+          }
+          if (!isCrypto) {
+            const subTypeSelect = document.getElementById('f-stock-subtype');
+            if (subTypeSelect) subTypeSelect.value = inferStockSubType(sym, quoteBook?.[sym]?.name || '');
           }
         });
       });
@@ -3446,6 +4375,9 @@ body {
       const stakingCompound = category === 'crypto' ? (document.getElementById('f-staking-compound')?.value !== 'false') : true;
       const stakingAutoSync = category === 'crypto' ? (document.getElementById('f-staking-autosync')?.value || 'manual') : 'manual';
       const aaveChain = category === 'crypto' ? (document.getElementById('f-aave-chain')?.value || 'Ethereum') : '';
+      const stockSubType = category === 'stocks'
+        ? (document.getElementById('f-stock-subtype')?.value || inferStockSubType(ticker, defaultName))
+        : undefined;
       newPos = {
         ...newPos,
         ticker,
@@ -3454,6 +4386,7 @@ body {
         quantity: parseFloat(document.getElementById('f-quantity').value) || 0,
         buyPriceUsd: parseFloat(document.getElementById('f-buy-price').value) || 0,
         notes: document.getElementById('f-notes').value.trim(),
+        ...(category === 'stocks' ? { stockSubType } : {}),
         ...(category === 'crypto' ? {
           isStaked,
           stakingCompound,
