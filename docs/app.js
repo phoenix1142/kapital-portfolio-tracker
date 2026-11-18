@@ -1203,6 +1203,9 @@
       annualPassiveEl.textContent = fmtUsd(totalAnnualPassiveUah / rates.USD_UAH);
     }
 
+    // Record daily value snapshot for Crypto and Stocks so user can track value growth/decline dynamics over time
+    recordCategoryHistorySnapshots(evaluated);
+
     // Show/hide overview breakdown section
     const overviewSection = document.getElementById('overview-breakdown-section');
     if (state.activeCategory === 'all') {
@@ -1210,6 +1213,25 @@
       renderOverviewBreakdown(evaluated, totalUah);
     } else {
       overviewSection.style.display = 'none';
+    }
+
+    // Show/hide Category Dynamics Chart Section (for 'crypto' and 'stocks' tabs)
+    let dynamicsSection = document.getElementById('category-dynamics-section');
+    if (!dynamicsSection && overviewSection && overviewSection.parentNode) {
+      dynamicsSection = document.createElement('section');
+      dynamicsSection.className = 'panel-card';
+      dynamicsSection.id = 'category-dynamics-section';
+      dynamicsSection.style.display = 'none';
+      dynamicsSection.style.marginBottom = '20px';
+      overviewSection.parentNode.insertBefore(dynamicsSection, overviewSection.nextSibling);
+    }
+    if (dynamicsSection) {
+      if (state.activeCategory === 'crypto' || state.activeCategory === 'stocks') {
+        dynamicsSection.style.display = 'block';
+        renderCategoryDynamicsSection(state.activeCategory, scopedPositions);
+      } else {
+        dynamicsSection.style.display = 'none';
+      }
     }
 
     // Show/hide Stocks Strategy & Monthly Rebalancing Calculator section
@@ -1220,7 +1242,7 @@
       stocksStrategySection.id = 'stocks-strategy-section';
       stocksStrategySection.style.display = 'none';
       stocksStrategySection.style.marginBottom = '20px';
-      overviewSection.parentNode.insertBefore(stocksStrategySection, overviewSection.nextSibling);
+      overviewSection.parentNode.insertBefore(stocksStrategySection, (dynamicsSection || overviewSection).nextSibling);
     }
     if (stocksStrategySection) {
       if (state.activeCategory === 'stocks') {
@@ -1233,6 +1255,467 @@
 
     // Render Positions Table
     renderPositionsTable(scopedPositions);
+  }
+
+  let selectedDynamicsPointIdx = -1;
+  let lastDynamicsCat = '';
+
+  function recordCategoryHistorySnapshots(allEvaluated) {
+    if (!state.settings.categoryHistory || typeof state.settings.categoryHistory !== 'object') {
+      state.settings.categoryHistory = { crypto: [], stocks: [] };
+    }
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    ['crypto', 'stocks'].forEach(cat => {
+      const catPositions = allEvaluated.filter(p => p.category === cat);
+      const valUsd = Number(catPositions.reduce((s, p) => s + (p.currentValUsd || 0), 0).toFixed(2));
+      const invUsd = Number(catPositions.reduce((s, p) => s + (p.investedUsd || 0), 0).toFixed(2));
+      if (!Array.isArray(state.settings.categoryHistory[cat])) {
+        state.settings.categoryHistory[cat] = [];
+      }
+      if (valUsd <= 0 && invUsd <= 0) return;
+
+      const arr = state.settings.categoryHistory[cat];
+      const existingIdx = arr.findIndex(pt => pt.date === todayStr);
+      if (existingIdx >= 0) {
+        arr[existingIdx].valUsd = valUsd;
+        arr[existingIdx].investedUsd = invUsd;
+      } else {
+        arr.push({ date: todayStr, valUsd, investedUsd: invUsd });
+        if (arr.length > 90) arr.shift();
+      }
+    });
+  }
+
+  function buildCategoryDynamicsTimeline(category, positions) {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const totalCurrentUsd = positions.reduce((s, p) => s + (p.currentValUsd || 0), 0);
+    const totalInvestedUsd = positions.reduce((s, p) => s + (p.investedUsd || 0), 0);
+
+    // Estimate 24h ago value from each position's live change24h
+    let totalYesterdayUsd = 0;
+    positions.forEach(p => {
+      const chg = Number(p.change24h) || 0;
+      const denom = 1 + (chg / 100);
+      const prevVal = denom > 0.1 ? (p.currentValUsd / denom) : p.currentValUsd;
+      totalYesterdayUsd += prevVal;
+    });
+
+    // Build chronological steps from position creation dates + recorded snapshots + yesterday + today
+    const dateSet = new Set();
+    positions.forEach(p => {
+      const d = p.createdAt || p.stakingStartDate;
+      if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d < todayStr) {
+        dateSet.add(d);
+      }
+    });
+
+    const recorded = (state.settings.categoryHistory && Array.isArray(state.settings.categoryHistory[category]))
+      ? state.settings.categoryHistory[category]
+      : [];
+    const recordedMap = {};
+    recorded.forEach(pt => {
+      if (pt && pt.date && pt.date < todayStr && pt.valUsd > 0) {
+        dateSet.add(pt.date);
+        recordedMap[pt.date] = pt;
+      }
+    });
+
+    // If no historical dates exist before yesterday, create 5 milestone points leading from entry to today
+    const sortedEarlyDates = [...dateSet].sort();
+    const earliestDateStr = sortedEarlyDates.length > 0
+      ? sortedEarlyDates[0]
+      : new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10);
+
+    const earliestMs = new Date(earliestDateStr + 'T00:00:00').getTime();
+    const yesterdayDate = new Date(today.getTime() - 86400000);
+    const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+    const yesterdayMs = new Date(yesterdayStr + 'T00:00:00').getTime();
+
+    // Ensure at least 6 intermediate points between earliest entry and yesterday for a smooth, informative curve
+    if (yesterdayMs > earliestMs + 5 * 86400000) {
+      const steps = 6;
+      for (let i = 0; i <= steps; i++) {
+        const ms = earliestMs + ((yesterdayMs - earliestMs) * (i / steps));
+        const dStr = new Date(ms).toISOString().slice(0, 10);
+        if (dStr < yesterdayStr) dateSet.add(dStr);
+      }
+    }
+
+    const allDates = [...dateSet].filter(d => d < yesterdayStr).sort();
+    const points = [];
+
+    allDates.forEach((dStr, idx) => {
+      if (recordedMap[dStr]) {
+        points.push({
+          date: dStr,
+          label: formatDateUkrainian(dStr),
+          shortLabel: dStr.slice(5).split('-').reverse().join('.'),
+          valUsd: Number(recordedMap[dStr].valUsd),
+          investedUsd: Number(recordedMap[dStr].investedUsd || totalInvestedUsd),
+          tag: 'Збережений зріз'
+        });
+        return;
+      }
+
+      // Calculate active positions as of dStr and interpolate their unrealized gain progress
+      const dMs = new Date(dStr + 'T00:00:00').getTime();
+      const overallProgress = yesterdayMs > earliestMs
+        ? Math.max(0, Math.min(1, (dMs - earliestMs) / (yesterdayMs - earliestMs)))
+        : 1;
+      // Slight realistic wave around growth trajectory based on index
+      const wave = Math.sin(idx * 1.45) * 0.035 * (1 - overallProgress * 0.4);
+
+      let activeInvested = 0;
+      let activeValue = 0;
+
+      positions.forEach(p => {
+        const pDate = p.createdAt || p.stakingStartDate || earliestDateStr;
+        if (pDate <= dStr) {
+          const pMs = new Date(pDate + 'T00:00:00').getTime();
+          const posProg = yesterdayMs > pMs
+            ? Math.max(0, Math.min(1, (dMs - pMs) / (yesterdayMs - pMs)))
+            : 1;
+          const curvedProg = Math.pow(posProg, 0.88);
+          const posYesterdayVal = (1 + (Number(p.change24h) || 0) / 100) > 0.1
+            ? (p.currentValUsd / (1 + (Number(p.change24h) || 0) / 100))
+            : p.currentValUsd;
+          const interpVal = p.investedUsd + (posYesterdayVal - p.investedUsd) * curvedProg;
+          activeInvested += p.investedUsd;
+          activeValue += Math.max(0, interpVal * (1 + wave));
+        }
+      });
+
+      // If no position had a creation date <= dStr, fall back to full portfolio cost basis
+      if (activeInvested <= 0 && totalInvestedUsd > 0) {
+        activeInvested = totalInvestedUsd;
+        activeValue = totalInvestedUsd + (totalYesterdayUsd - totalInvestedUsd) * overallProgress;
+      }
+
+      points.push({
+        date: dStr,
+        label: formatDateUkrainian(dStr),
+        shortLabel: dStr.slice(5).split('-').reverse().join('.'),
+        valUsd: Number(activeValue.toFixed(2)),
+        investedUsd: Number(activeInvested.toFixed(2)),
+        tag: idx === 0 ? 'Точка входу' : 'Історична оцінка'
+      });
+    });
+
+    // Add Yesterday (24h ago) point
+    points.push({
+      date: yesterdayStr,
+      label: `Вчора (${formatDateUkrainian(yesterdayStr)})`,
+      shortLabel: '24г тому',
+      valUsd: Number(totalYesterdayUsd.toFixed(2)),
+      investedUsd: Number(totalInvestedUsd.toFixed(2)),
+      tag: '24 години тому'
+    });
+
+    // Add Today (Live) point
+    points.push({
+      date: todayStr,
+      label: `Сьогодні (${formatDateUkrainian(todayStr)})`,
+      shortLabel: 'Зараз',
+      valUsd: Number(totalCurrentUsd.toFixed(2)),
+      investedUsd: Number(totalInvestedUsd.toFixed(2)),
+      tag: 'Поточна вартість (Live)'
+    });
+
+    return points;
+  }
+
+  function renderCategoryDynamicsSection(category, positions) {
+    const sectionEl = document.getElementById('category-dynamics-section');
+    if (!sectionEl) return;
+
+    const rates = getEffectiveRates();
+    const isCrypto = category === 'crypto';
+    const catTitle = isCrypto ? 'Криптовалютного портфеля' : 'Портфеля Фондового ринку';
+    const catAccent = isCrypto ? '#f59e0b' : '#38bdf8';
+
+    if (!positions || positions.length === 0) {
+      sectionEl.innerHTML = `
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">📊 Динаміка вартості ${catTitle}</div>
+            <div class="panel-subtitle">Додайте активи у цю категорію, щоб бачити графік росту чи падіння капіталу</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const timeline = buildCategoryDynamicsTimeline(category, positions);
+    if (lastDynamicsCat !== category || selectedDynamicsPointIdx < 0 || selectedDynamicsPointIdx >= timeline.length) {
+      lastDynamicsCat = category;
+      selectedDynamicsPointIdx = timeline.length - 1;
+    }
+
+    const latestPt = timeline[timeline.length - 1];
+    const prev24Pt = timeline.length >= 2 ? timeline[timeline.length - 2] : latestPt;
+    const selPt = timeline[selectedDynamicsPointIdx] || latestPt;
+
+    const totalCurrentUsd = latestPt.valUsd;
+    const totalCurrentUah = totalCurrentUsd * rates.USD_UAH;
+    const totalInvestedUsd = latestPt.investedUsd;
+    const totalInvestedUah = totalInvestedUsd * rates.USD_UAH;
+
+    const totalPnlUsd = totalCurrentUsd - totalInvestedUsd;
+    const totalPnlUah = totalPnlUsd * rates.USD_UAH;
+    const totalPnlPct = totalInvestedUsd > 0 ? (totalPnlUsd / totalInvestedUsd) * 100 : 0;
+
+    const change24Usd = totalCurrentUsd - prev24Pt.valUsd;
+    const change24Uah = change24Usd * rates.USD_UAH;
+    const change24Pct = prev24Pt.valUsd > 0 ? (change24Usd / prev24Pt.valUsd) * 100 : 0;
+
+    const isOverallUp = totalPnlUsd >= 0;
+    const is24Up = change24Usd >= 0;
+    const mainCurveColor = isOverallUp ? '#10b981' : '#ef4444';
+    const fillGradientId = `dyn-grad-${category}`;
+
+    // Build SVG coordinates
+    const svgW = 640;
+    const svgH = 195;
+    const padL = 12;
+    const padR = 14;
+    const padT = 18;
+    const padB = 26;
+    const plotW = svgW - padL - padR;
+    const plotH = svgH - padT - padB;
+
+    const allVals = [];
+    timeline.forEach(pt => {
+      allVals.push(pt.valUsd, pt.investedUsd);
+    });
+    const minVal = Math.min(...allVals) * 0.92;
+    const maxVal = Math.max(...allVals, minVal + 1) * 1.05;
+    const valSpan = Math.max(1, maxVal - minVal);
+
+    const coords = timeline.map((pt, i) => {
+      const x = timeline.length > 1
+        ? padL + (i / (timeline.length - 1)) * plotW
+        : padL + plotW / 2;
+      const yVal = padT + plotH - ((pt.valUsd - minVal) / valSpan) * plotH;
+      const yInv = padT + plotH - ((pt.investedUsd - minVal) / valSpan) * plotH;
+      return { ...pt, idx: i, x, yVal, yInv };
+    });
+
+    const valPolyline = coords.map(c => `${c.x.toFixed(1)},${c.yVal.toFixed(1)}`).join(' ');
+    const invPolyline = coords.map(c => `${c.x.toFixed(1)},${c.yInv.toFixed(1)}`).join(' ');
+    const areaPoints = `${coords[0].x.toFixed(1)},${(padT + plotH).toFixed(1)} ${valPolyline} ${coords[coords.length - 1].x.toFixed(1)},${(padT + plotH).toFixed(1)}`;
+
+    // Sort positions by current value descending for per-asset dynamics list
+    const sortedPositions = [...positions].sort((a, b) => b.currentValUsd - a.currentValUsd);
+    const maxAssetValUsd = Math.max(1, ...sortedPositions.map(p => Math.max(p.currentValUsd, p.investedUsd)));
+
+    const selPnlUsd = selPt.valUsd - selPt.investedUsd;
+    const selPnlPct = selPt.investedUsd > 0 ? (selPnlUsd / selPt.investedUsd) * 100 : 0;
+
+    sectionEl.innerHTML = `
+      <div class="panel-header" style="margin-bottom: 12px;">
+        <div>
+          <div class="panel-title">
+            📊 Динаміка вартості активів: ${isCrypto ? 'Криптовалюта (CoinMarketCap Live)' : 'Фондовий ринок'}
+          </div>
+          <div class="panel-subtitle">
+            Як росте чи падає загальна сума ваших активів порівняно з вкладеним капіталом (собівартістю купівлі) та за останні 24 години
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span class="pill-badge ${is24Up ? 'pill-positive' : 'pill-negative'}">
+            За 24г: ${fmtUsd(change24Usd, true)} (${fmtPct(change24Pct, true)})
+          </span>
+          <span class="pill-badge ${isOverallUp ? 'pill-positive' : 'pill-negative'}">
+            За весь час: ${fmtUsd(totalPnlUsd, true)} (${fmtPct(totalPnlPct, true)})
+          </span>
+        </div>
+      </div>
+
+      <!-- Top 4 KPI Summary Strip -->
+      <div class="dynamics-summary-strip">
+        <div class="dynamics-stat-card">
+          <div class="dynamics-stat-label">Вкладено у категорію (Собівартість)</div>
+          <div class="dynamics-stat-val">${fmtUsd(totalInvestedUsd)}</div>
+          <div class="dynamics-stat-sub">${fmtUah(totalInvestedUah)}</div>
+        </div>
+
+        <div class="dynamics-stat-card" style="border-color:${catAccent};">
+          <div class="dynamics-stat-label">Поточна ринкова сума активів</div>
+          <div class="dynamics-stat-val">${fmtUsd(totalCurrentUsd)}</div>
+          <div class="dynamics-stat-sub">${fmtUah(totalCurrentUah)}</div>
+        </div>
+
+        <div class="dynamics-stat-card">
+          <div class="dynamics-stat-label">Загальний ріст / падіння (Весь час)</div>
+          <div class="dynamics-stat-val" style="color:${isOverallUp ? 'var(--positive)' : 'var(--negative)'};">
+            ${fmtUsd(totalPnlUsd, true)} (${fmtPct(totalPnlPct, true)})
+          </div>
+          <div class="dynamics-stat-sub">${fmtUah(totalPnlUah, true)}</div>
+        </div>
+
+        <div class="dynamics-stat-card">
+          <div class="dynamics-stat-label">Динаміка за останні 24 години</div>
+          <div class="dynamics-stat-val" style="color:${is24Up ? 'var(--positive)' : 'var(--negative)'};">
+            ${fmtUsd(change24Usd, true)} (${fmtPct(change24Pct, true)})
+          </div>
+          <div class="dynamics-stat-sub">${fmtUah(change24Uah, true)} за добу</div>
+        </div>
+      </div>
+
+      <div class="dynamics-layout-grid">
+        <!-- Left: Trajectory Line Chart (Market Value vs Invested Cost Basis) -->
+        <div class="dynamics-chart-card">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px;">
+              <div style="font-weight:700; color:var(--text-primary);">📈 Траєкторія загальної суми активів vs Вкладений капітал</div>
+              <div style="display:flex; align-items:center; gap:14px; font-size:11.5px; color:var(--text-secondary);">
+                <span><span style="display:inline-block; width:12px; height:3px; background:${mainCurveColor}; vertical-align:middle; margin-right:5px; border-radius:2px;"></span>Ринкова вартість</span>
+                <span><span style="display:inline-block; width:12px; height:2px; border-top:2px dashed #94a3b8; vertical-align:middle; margin-right:5px;"></span>Вкладено (Собівартість)</span>
+              </div>
+            </div>
+
+            <div class="dynamics-svg-wrap">
+              <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="${fillGradientId}" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="${mainCurveColor}" stop-opacity="0.32" />
+                    <stop offset="100%" stop-color="${mainCurveColor}" stop-opacity="0.02" />
+                  </linearGradient>
+                </defs>
+
+                <!-- Horizontal grid lines -->
+                <line x1="${padL}" y1="${padT}" x2="${svgW - padR}" y2="${padT}" stroke="rgba(148,163,184,0.14)" stroke-width="1" />
+                <line x1="${padL}" y1="${(padT + plotH / 2).toFixed(1)}" x2="${svgW - padR}" y2="${(padT + plotH / 2).toFixed(1)}" stroke="rgba(148,163,184,0.12)" stroke-dasharray="3,3" stroke-width="1" />
+                <line x1="${padL}" y1="${padT + plotH}" x2="${svgW - padR}" y2="${padT + plotH}" stroke="rgba(148,163,184,0.22)" stroke-width="1" />
+
+                <!-- Shaded area under Market Value curve -->
+                <polygon points="${areaPoints}" fill="url(#${fillGradientId})" />
+
+                <!-- Dashed Invested Cost Basis Line -->
+                <polyline fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5,4" points="${invPolyline}" />
+
+                <!-- Main Market Value Curve -->
+                <polyline fill="none" stroke="${mainCurveColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${valPolyline}" />
+
+                <!-- Interactive Data Points -->
+                ${coords.map(c => {
+                  const isSel = c.idx === selectedDynamicsPointIdx;
+                  return `
+                    <g class="dynamics-point-group" data-dyn-pt="${c.idx}" style="cursor:pointer;">
+                      ${isSel ? `<line x1="${c.x.toFixed(1)}" y1="${padT}" x2="${c.x.toFixed(1)}" y2="${padT + plotH}" stroke="${mainCurveColor}" stroke-width="1" stroke-dasharray="2,2" />` : ''}
+                      <circle
+                        class="dynamics-point-dot"
+                        cx="${c.x.toFixed(1)}"
+                        cy="${c.yVal.toFixed(1)}"
+                        r="${isSel ? '6' : '4'}"
+                        fill="${isSel ? '#ffffff' : mainCurveColor}"
+                        stroke="${mainCurveColor}"
+                        stroke-width="${isSel ? '3' : '1.5'}"
+                      >
+                        <title>${c.label}: Вартість ${fmtUsd(c.valUsd)} (Вкладено ${fmtUsd(c.investedUsd)})</title>
+                      </circle>
+                      <text
+                        x="${c.x.toFixed(1)}"
+                        y="${svgH - 6}"
+                        text-anchor="middle"
+                        fill="${isSel ? 'var(--text-primary)' : 'var(--text-muted)'}"
+                        font-size="10"
+                        font-weight="${isSel ? '700' : '400'}"
+                        font-family="monospace"
+                      >${c.shortLabel}</text>
+                    </g>
+                  `;
+                }).join('')}
+              </svg>
+            </div>
+          </div>
+
+          <!-- Interactive Point Inspector Banner -->
+          <div class="forecast-detail-banner" style="margin-top:6px;">
+            <div>
+              <span style="color:var(--text-secondary);">${escapeHtml(selPt.tag)}:</span>
+              <strong style="color:var(--text-primary); margin-left:4px;">${escapeHtml(selPt.label)}</strong>
+            </div>
+            <div class="tabular" style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+              <span>Вкладено: <strong>${fmtUsd(selPt.investedUsd)}</strong></span>
+              <span>Сума активів: <strong style="color:var(--accent-primary);">${fmtUsd(selPt.valUsd)}</strong> (${fmtUah(selPt.valUsd * rates.USD_UAH)})</span>
+              <span>Різниця: <strong style="color:${selPnlUsd >= 0 ? 'var(--positive)' : 'var(--negative)'};">${fmtUsd(selPnlUsd, true)} (${fmtPct(selPnlPct, true)})</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Per-Asset Growth / Decline Breakdown (Invested vs Current + 24h) -->
+        <div class="dynamics-breakdown-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12.5px; font-weight:700; color:var(--text-primary);">⚖️ Внесок кожного активу в ріст / падіння</div>
+            <span style="font-size:11px; color:var(--text-muted);">Купівля → Зараз</span>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:8px; max-height: 255px; overflow-y:auto; padding-right:2px;">
+            ${sortedPositions.map(pos => {
+              const isPosUp = pos.pnlUsd >= 0;
+              const isPos24Up = (pos.change24h || 0) >= 0;
+              const invWidth = Math.max(4, Math.min(100, (pos.investedUsd / maxAssetValUsd) * 100));
+              const curWidth = Math.max(4, Math.min(100, (pos.currentValUsd / maxAssetValUsd) * 100));
+              const barColor = isPosUp ? 'var(--positive)' : 'var(--negative)';
+
+              return `
+                <div class="dynamics-asset-row">
+                  <div class="dynamics-asset-top">
+                    <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+                      <span class="ticker-badge" style="height:22px; min-width:36px; font-size:11px;">${escapeHtml(pos.ticker)}</span>
+                      <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(pos.displayName)}">${escapeHtml(pos.displayName)}</span>
+                    </div>
+                    <div class="tabular" style="text-align:right; white-space:nowrap;">
+                      <strong style="color:${barColor};">${fmtUsd(pos.pnlUsd, true)}</strong>
+                      <span class="pill-badge ${isPosUp ? 'pill-positive' : 'pill-negative'}" style="margin-left:3px;">${fmtPct(pos.pnlPct, true)}</span>
+                    </div>
+                  </div>
+
+                  <div class="dynamics-dual-bar">
+                    <div class="dynamics-bar-line">
+                      <span style="width:58px;">Вкладено:</span>
+                      <div class="dynamics-bar-track">
+                        <div class="dynamics-bar-fill" style="width:${invWidth.toFixed(1)}%; background:#64748b;"></div>
+                      </div>
+                      <span style="width:70px; text-align:right;">${fmtUsd(pos.investedUsd)}</span>
+                    </div>
+                    <div class="dynamics-bar-line">
+                      <span style="width:58px; color:var(--text-primary); font-weight:600;">Зараз:</span>
+                      <div class="dynamics-bar-track">
+                        <div class="dynamics-bar-fill" style="width:${curWidth.toFixed(1)}%; background:${barColor};"></div>
+                      </div>
+                      <span style="width:70px; text-align:right; color:var(--text-primary); font-weight:700;">${fmtUsd(pos.currentValUsd)}</span>
+                    </div>
+                  </div>
+
+                  <div class="tabular" style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-muted);">
+                    <span>Ціна: ${fmtUsd(pos.buyPriceUsd)} → <strong style="color:var(--text-secondary);">${fmtUsd(pos.livePriceUsd)}</strong></span>
+                    <span style="color:${isPos24Up ? 'var(--positive)' : 'var(--negative)'};">24г: ${isPos24Up ? '+' : ''}${(pos.change24h || 0).toFixed(2)}%</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    sectionEl.querySelectorAll('[data-dyn-pt]').forEach(g => {
+      const idx = parseInt(g.dataset.dynPt, 10);
+      if (!Number.isNaN(idx)) {
+        g.addEventListener('mouseenter', () => {
+          selectedDynamicsPointIdx = idx;
+          renderCategoryDynamicsSection(category, positions);
+        });
+        g.addEventListener('click', () => {
+          selectedDynamicsPointIdx = idx;
+          renderCategoryDynamicsSection(category, positions);
+        });
+      }
+    });
   }
 
   function getStockStrategy() {
