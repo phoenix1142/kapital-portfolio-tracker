@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)</title>
   <meta name="description" content="Персональний трекер інвестицій Мані-кеш: Криптовалюта, Фондовий ринок, ОВДП, Депозити та Готівка. Автоматичні котирування та облік у гривні (₴) і доларах ($)." />
-  <link rel="stylesheet" href="./index.css?v=14" />
+  <link rel="stylesheet" href="./index.css?v=15" />
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -308,6 +308,14 @@
           </div>
 
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
+            <label class="form-label" for="set-cmc-api-key">🪙 CoinMarketCap API Key (необов'язково — за замовчуванням працює публічний фід CoinMarketCap)</label>
+            <input type="password" class="form-input mono" id="set-cmc-api-key" placeholder="Публічний фід CoinMarketCap працює автоматично без ключа" style="font-size:12px;" />
+            <div style="font-size:11.5px; color: var(--text-muted); margin-top:4px;">
+              Криптоактиви оновлюються напряму з <strong>CoinMarketCap</strong> без ключа. Якщо маєте власний ключ CMC Pro API, можете вставити його сюди.
+            </div>
+          </div>
+
+          <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
             <label class="form-label">
               <input type="checkbox" id="set-require-auth" />
               Запитувати пароль при відкритті сайту в інтернеті
@@ -358,6 +366,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=14"></script>
+  <script src="./app.js?v=15"></script>
 </body>
 </html>

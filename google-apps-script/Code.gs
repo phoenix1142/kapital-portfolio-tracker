@@ -144,7 +144,7 @@ function gasResetDemo() {
   return loadStoreFromDrive_();
 }
 
-function gasRefreshQuotes(cryptoCsv, stocksCsv) {
+function gasRefreshQuotes(cryptoCsv, stocksCsv, cmcApiKey) {
   var quotes = {
     fx: {
       USD_UAH: 41.65,
@@ -152,10 +152,23 @@ function gasRefreshQuotes(cryptoCsv, stocksCsv) {
       GBP_UAH: 52.80,
       PLN_UAH: 10.35,
       updatedAt: new Date().toISOString(),
-      source: 'Google Cloud (НБУ / Binance / Yahoo Finance)'
+      source: 'Google Cloud (НБУ / CoinMarketCap / Yahoo Finance)'
     },
     crypto: {},
     stocks: {}
+  };
+
+  var CMC_COIN_IDS = {
+    BTC: 1, ETH: 1027, USDT: 825, BNB: 1839, SOL: 5426, USDC: 3408, XRP: 52,
+    TON: 11419, DOGE: 74, ADA: 2010, TRX: 1958, AVAX: 5805, SHIB: 5994,
+    WBTC: 3717, DOT: 6636, LINK: 1975, BCH: 1831, NEAR: 6535, MATIC: 3890,
+    POL: 28321, LTC: 2, UNI: 7083, DAI: 4943, ICP: 8916, APT: 21794,
+    PEPE: 24478, KAS: 20396, ETC: 1321, XMR: 328, FET: 3773, SUI: 20947,
+    STX: 4847, FIL: 2280, ARB: 11841, XLM: 512, HBAR: 4642, ATOM: 3794,
+    OKB: 3897, IMX: 10603, OP: 11840, VET: 3077, INJV: 7226, INJ: 7226,
+    MKR: 1518, AAVE: 7278, GRT: 6719, RUNE: 4157, ALGO: 4030, FTN: 22615,
+    LDO: 8000, TIA: 22861, SEI: 23149, JUP: 29210, ENA: 30171, WLD: 13502,
+    ONDO: 21159, PYTH: 28177, STRK: 22691, ZRO: 26997, WETH: 2396, WSTETH: 12409
   };
 
   try {
@@ -174,8 +187,107 @@ function gasRefreshQuotes(cryptoCsv, stocksCsv) {
   } catch (e) {}
 
   try {
-    var syms = String(cryptoCsv || 'BTC,ETH,SOL,TON,BNB').split(',').map(function(s) { return s.trim().toUpperCase(); }).filter(function(s) { return s && s !== 'USDT' && s !== 'USDC'; });
-    syms.forEach(function(sym) {
+    var store = loadStoreFromDrive_();
+    var effectiveCmcKey = cmcApiKey || (store && store.settings && store.settings.cmcApiKey) || '';
+    var syms = String(cryptoCsv || 'BTC,ETH,SOL,TON,BNB,AAVE').split(',').map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
+
+    // 1. If user provided CoinMarketCap Pro API Key, query Official CMC Pro v1 API
+    if (effectiveCmcKey && syms.length > 0) {
+      try {
+        var proUrl = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=' + encodeURIComponent(syms.join(',')) + '&convert=USD';
+        var proRes = UrlFetchApp.fetch(proUrl, {
+          muteHttpExceptions: true,
+          headers: {
+            'X-CMC_PRO_API_KEY': effectiveCmcKey,
+            'Accept': 'application/json'
+          }
+        });
+        if (proRes.getResponseCode() === 200) {
+          var proJson = JSON.parse(proRes.getContentText());
+          if (proJson && proJson.data) {
+            syms.forEach(function(sym) {
+              var entry = proJson.data[sym];
+              if (Array.isArray(entry)) entry = entry[0];
+              var usdQuote = entry && entry.quote && entry.quote.USD;
+              if (usdQuote && usdQuote.price > 0) {
+                quotes.crypto[sym] = {
+                  name: entry.name || sym,
+                  priceUsd: Number(usdQuote.price),
+                  change24h: Number((usdQuote.percent_change_24h || 0).toFixed(2)),
+                  source: 'CoinMarketCap'
+                };
+              }
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. CoinMarketCap Public Data API v3 (No API key required - fetches top 300 ranked coins in 1 call)
+    var missingSyms = syms.filter(function(s) { return !quotes.crypto[s]; });
+    if (missingSyms.length > 0) {
+      try {
+        var listUrl = 'https://api.coinmarketcap.com/data-api/v3/cryptocurrency/listing?start=1&limit=300&sortBy=market_cap&sortType=desc&convert=USD';
+        var listRes = UrlFetchApp.fetch(listUrl, {
+          muteHttpExceptions: true,
+          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+        });
+        if (listRes.getResponseCode() === 200) {
+          var listJson = JSON.parse(listRes.getContentText());
+          var coinList = (listJson && listJson.data && listJson.data.cryptoCurrencyList) || [];
+          coinList.forEach(function(c) {
+            var sym = String(c.symbol || '').toUpperCase();
+            if (!quotes.crypto[sym] && Array.isArray(c.quotes)) {
+              var usdQ = null;
+              for (var i = 0; i < c.quotes.length; i++) {
+                if (c.quotes[i].name === 'USD') { usdQ = c.quotes[i]; break; }
+              }
+              if (!usdQ && c.quotes.length > 0) usdQ = c.quotes[0];
+              if (usdQ && usdQ.price > 0) {
+                quotes.crypto[sym] = {
+                  name: c.name || sym,
+                  priceUsd: Number(usdQ.price),
+                  change24h: Number((usdQ.percentChange24h || 0).toFixed(2)),
+                  source: 'CoinMarketCap'
+                };
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 3. CoinMarketCap Detail API for any specific coin IDs not in top 300
+    missingSyms = syms.filter(function(s) { return !quotes.crypto[s]; });
+    missingSyms.forEach(function(sym) {
+      var cmcId = CMC_COIN_IDS[sym];
+      if (cmcId) {
+        try {
+          var detUrl = 'https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail?id=' + cmcId;
+          var detRes = UrlFetchApp.fetch(detUrl, {
+            muteHttpExceptions: true,
+            headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+          });
+          if (detRes.getResponseCode() === 200) {
+            var detJson = JSON.parse(detRes.getContentText());
+            var detData = detJson && detJson.data;
+            var stats = detData && detData.statistics;
+            if (stats && stats.price > 0) {
+              quotes.crypto[sym] = {
+                name: detData.name || sym,
+                priceUsd: Number(stats.price),
+                change24h: Number((stats.priceChangePercentage24h || 0).toFixed(2)),
+                source: 'CoinMarketCap'
+              };
+            }
+          }
+        } catch (e) {}
+      }
+    });
+
+    // 4. Final fallback to Binance only for symbols still missing
+    missingSyms = syms.filter(function(s) { return !quotes.crypto[s] && s !== 'USDT' && s !== 'USDC'; });
+    missingSyms.forEach(function(sym) {
       try {
         var res = UrlFetchApp.fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=' + encodeURIComponent(sym + 'USDT'), { muteHttpExceptions: true });
         if (res.getResponseCode() === 200) {
@@ -183,7 +295,7 @@ function gasRefreshQuotes(cryptoCsv, stocksCsv) {
           var p = parseFloat(d.lastPrice);
           var chg = parseFloat(d.priceChangePercent);
           if (!isNaN(p) && p > 0) {
-            quotes.crypto[sym] = { name: sym, priceUsd: p, change24h: isNaN(chg) ? 0 : chg };
+            quotes.crypto[sym] = { name: sym, priceUsd: p, change24h: isNaN(chg) ? 0 : chg, source: 'Binance' };
           }
         }
       } catch (e) {}

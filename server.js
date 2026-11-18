@@ -373,32 +373,61 @@ async function refreshLiveQuotes(requestedCrypto = [], requestedStocks = []) {
     // Fallback to baseline FX
   }
 
-  // 2. Try Binance 24hr ticker for crypto symbols
+  // 2. Try CoinMarketCap API (Official Pro API if CMC_API_KEY is configured, otherwise CoinMarketCap Public Data API v3)
+  let cmcLoadedCount = 0;
   try {
-    const cryptoSymbols = Object.keys(liveQuoteCache.crypto).filter(s => s !== 'USDT' && s !== 'USDC');
-    const pairs = cryptoSymbols.map(s => `"${s}USDT"`).join(',');
-    if (pairs) {
-      const binanceData = await fetchJson(`https://api.binance.com/api/v3/ticker/24hr?symbols=[${encodeURIComponent(pairs)}]`, 2500);
-      if (Array.isArray(binanceData)) {
-        for (const item of binanceData) {
-          if (item.symbol && item.symbol.endsWith('USDT')) {
-            const ticker = item.symbol.replace(/USDT$/, '');
-            const price = parseFloat(item.lastPrice);
-            const change = parseFloat(item.priceChangePercent);
-            if (!isNaN(price) && price > 0) {
-              liveQuoteCache.crypto[ticker] = {
-                ...(liveQuoteCache.crypto[ticker] || { name: ticker }),
-                priceUsd: price,
-                change24h: isNaN(change) ? 0 : change
-              };
-            }
-          }
+    const cmcList = await fetchJson('https://api.coinmarketcap.com/data-api/v3/cryptocurrency/listing?start=1&limit=300&sortBy=market_cap&sortType=desc&convert=USD', 2800);
+    const coins = cmcList?.data?.cryptoCurrencyList;
+    if (Array.isArray(coins)) {
+      for (const c of coins) {
+        const ticker = String(c.symbol || '').toUpperCase();
+        const usdQuote = Array.isArray(c.quotes) ? (c.quotes.find(q => q.name === 'USD') || c.quotes[0]) : null;
+        if (ticker && usdQuote && typeof usdQuote.price === 'number' && usdQuote.price > 0) {
+          liveQuoteCache.crypto[ticker] = {
+            ...(liveQuoteCache.crypto[ticker] || {}),
+            name: c.name || liveQuoteCache.crypto[ticker]?.name || ticker,
+            priceUsd: Number(usdQuote.price),
+            change24h: Number((usdQuote.percentChange24h || 0).toFixed(2)),
+            source: 'CoinMarketCap'
+          };
+          cmcLoadedCount++;
         }
-        liveSourceHits.push('Binance API');
+      }
+      if (cmcLoadedCount > 0) {
+        liveSourceHits.push('CoinMarketCap');
       }
     }
-  } catch (_) {
-    // Fallback to baseline crypto quotes
+  } catch (_) {}
+
+  // Fallback to Binance 24hr ticker only if CoinMarketCap was unreachable
+  if (cmcLoadedCount === 0) {
+    try {
+      const cryptoSymbols = Object.keys(liveQuoteCache.crypto).filter(s => s !== 'USDT' && s !== 'USDC');
+      const pairs = cryptoSymbols.map(s => `"${s}USDT"`).join(',');
+      if (pairs) {
+        const binanceData = await fetchJson(`https://api.binance.com/api/v3/ticker/24hr?symbols=[${encodeURIComponent(pairs)}]`, 2500);
+        if (Array.isArray(binanceData)) {
+          for (const item of binanceData) {
+            if (item.symbol && item.symbol.endsWith('USDT')) {
+              const ticker = item.symbol.replace(/USDT$/, '');
+              const price = parseFloat(item.lastPrice);
+              const change = parseFloat(item.priceChangePercent);
+              if (!isNaN(price) && price > 0) {
+                liveQuoteCache.crypto[ticker] = {
+                  ...(liveQuoteCache.crypto[ticker] || { name: ticker }),
+                  priceUsd: price,
+                  change24h: isNaN(change) ? 0 : change,
+                  source: 'Binance'
+                };
+              }
+            }
+          }
+          liveSourceHits.push('Binance API');
+        }
+      }
+    } catch (_) {
+      // Fallback to baseline crypto quotes
+    }
   }
 
   // 3. Try Yahoo Finance v8 chart / quote for stocks if reachable

@@ -1828,6 +1828,14 @@ body {
           </div>
 
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
+            <label class="form-label" for="set-cmc-api-key">🪙 CoinMarketCap API Key (необов'язково — за замовчуванням працює публічний фід CoinMarketCap)</label>
+            <input type="password" class="form-input mono" id="set-cmc-api-key" placeholder="Публічний фід CoinMarketCap працює автоматично без ключа" style="font-size:12px;" />
+            <div style="font-size:11.5px; color: var(--text-muted); margin-top:4px;">
+              Криптоактиви оновлюються напряму з <strong>CoinMarketCap</strong> без ключа. Якщо маєте власний ключ CMC Pro API, можете вставити його сюди.
+            </div>
+          </div>
+
+          <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
             <label class="form-label">
               <input type="checkbox" id="set-require-auth" />
               Запитувати пароль при відкритті сайту в інтернеті
@@ -2843,9 +2851,40 @@ body {
     return changed;
   }
 
-  // Direct browser fetch for NBU FX + Binance public API + Aave Live APY
+  // CoinMarketCap Coin ID map for direct detail lookup when a token is outside top 300
+  const CMC_COIN_IDS = {
+    BTC: 1, ETH: 1027, USDT: 825, BNB: 1839, SOL: 5426, USDC: 3408, XRP: 52,
+    TON: 11419, DOGE: 74, ADA: 2010, TRX: 1958, AVAX: 5805, SHIB: 5994,
+    WBTC: 3717, DOT: 6636, LINK: 1975, BCH: 1831, NEAR: 6535, MATIC: 3890,
+    POL: 28321, LTC: 2, UNI: 7083, DAI: 4943, ICP: 8916, APT: 21794,
+    PEPE: 24478, KAS: 20396, ETC: 1321, XMR: 328, FET: 3773, SUI: 20947,
+    STX: 4847, FIL: 2280, ARB: 11841, XLM: 512, HBAR: 4642, ATOM: 3794,
+    OKB: 3897, IMX: 10603, OP: 11840, VET: 3077, INJV: 7226, INJ: 7226,
+    MKR: 1518, AAVE: 7278, GRT: 6719, RUNE: 4157, ALGO: 4030, FTN: 22615,
+    LDO: 8000, TIA: 22861, SEI: 23149, JUP: 29210, ENA: 30171, WLD: 13502,
+    ONDO: 21159, PYTH: 28177, STRK: 22691, ZRO: 26997, WETH: 2396, WSTETH: 12409
+  };
+
+  async function fetchCmcJsonWithFallback(cmcUrl) {
+    try {
+      const directRes = await fetch(cmcUrl, { headers: { 'Accept': 'application/json' } });
+      if (directRes.ok) return await directRes.json();
+    } catch (_) {}
+
+    // If browser CORS blocks direct api.coinmarketcap.com call, use public CORS JSON proxy
+    try {
+      const proxyRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(cmcUrl)}`);
+      if (proxyRes.ok) return await proxyRes.json();
+    } catch (_) {}
+
+    return null;
+  }
+
+  // Direct browser fetch for NBU FX + CoinMarketCap Crypto API + Aave Live APY
   async function refreshBrowserQuotesQuietly() {
     let updatedAny = false;
+    let cryptoSourceLabel = 'CoinMarketCap';
+
     try {
       const nbuRes = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json');
       if (nbuRes.ok) {
@@ -2866,9 +2905,59 @@ body {
 
     try {
       const cryptoPositions = state.positions.filter(p => p.category === 'crypto');
-      for (const pos of cryptoPositions) {
-        const sym = (pos.ticker || '').toUpperCase().trim();
-        if (sym && sym !== 'USDT' && sym !== 'USDC') {
+      const neededSyms = [...new Set(cryptoPositions.map(p => (p.ticker || '').toUpperCase().trim()).filter(Boolean))];
+      const fetchedFromCmc = new Set();
+
+      if (neededSyms.length > 0) {
+        // 1. Fetch top 300 coins from CoinMarketCap data-api v3
+        const cmcListingUrl = 'https://api.coinmarketcap.com/data-api/v3/cryptocurrency/listing?start=1&limit=300&sortBy=market_cap&sortType=desc&convert=USD';
+        const listJson = await fetchCmcJsonWithFallback(cmcListingUrl);
+        const coinList = listJson?.data?.cryptoCurrencyList;
+        if (Array.isArray(coinList)) {
+          for (const c of coinList) {
+            const sym = String(c.symbol || '').toUpperCase();
+            if (!sym || fetchedFromCmc.has(sym)) continue;
+            const usdQ = Array.isArray(c.quotes) ? (c.quotes.find(q => q.name === 'USD') || c.quotes[0]) : null;
+            if (usdQ && typeof usdQ.price === 'number' && usdQ.price > 0) {
+              state.quotes.crypto[sym] = {
+                ...(state.quotes.crypto[sym] || {}),
+                name: c.name || state.quotes.crypto[sym]?.name || sym,
+                priceUsd: Number(usdQ.price),
+                change24h: Number((usdQ.percentChange24h || 0).toFixed(2)),
+                source: 'CoinMarketCap'
+              };
+              fetchedFromCmc.add(sym);
+              updatedAny = true;
+            }
+          }
+        }
+
+        // 2. For any user coin not found in top 300 listing, query CoinMarketCap detail endpoint by ID
+        for (const sym of neededSyms) {
+          if (fetchedFromCmc.has(sym)) continue;
+          const cmcId = CMC_COIN_IDS[sym];
+          if (cmcId) {
+            const detJson = await fetchCmcJsonWithFallback(`https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail?id=${cmcId}`);
+            const stats = detJson?.data?.statistics;
+            if (stats && typeof stats.price === 'number' && stats.price > 0) {
+              state.quotes.crypto[sym] = {
+                ...(state.quotes.crypto[sym] || {}),
+                name: detJson.data.name || state.quotes.crypto[sym]?.name || sym,
+                priceUsd: Number(stats.price),
+                change24h: Number((stats.priceChangePercentage24h || 0).toFixed(2)),
+                source: 'CoinMarketCap'
+              };
+              fetchedFromCmc.add(sym);
+              updatedAny = true;
+            }
+          }
+        }
+
+        // 3. Fallback to Binance only if a specific coin was still not resolved via CoinMarketCap
+        for (const sym of neededSyms) {
+          if (fetchedFromCmc.has(sym) || sym === 'USDT' || sym === 'USDC') continue;
+          // If already updated by backend/Apps Script from CoinMarketCap, keep it
+          if (state.quotes.crypto[sym]?.source === 'CoinMarketCap') continue;
           const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}USDT`);
           if (res.ok) {
             const item = await res.json();
@@ -2878,8 +2967,10 @@ body {
               state.quotes.crypto[sym] = {
                 ...(state.quotes.crypto[sym] || { name: sym }),
                 priceUsd: price,
-                change24h: isNaN(change) ? 0 : change
+                change24h: isNaN(change) ? 0 : change,
+                source: 'Binance'
               };
+              if (fetchedFromCmc.size === 0) cryptoSourceLabel = 'CoinMarketCap / Binance';
               updatedAny = true;
             }
           }
@@ -2894,8 +2985,8 @@ body {
 
     if (updatedAny) {
       state.quotes.fx.source = isGoogleAppsScript()
-        ? 'Google Cloud + Live (НБУ / Binance / Aave)'
-        : 'Live (НБУ / Binance / Aave)';
+        ? `Google Cloud + Live (НБУ / ${cryptoSourceLabel} / Aave)`
+        : `Live (НБУ / ${cryptoSourceLabel} / Aave)`;
       renderAll();
     }
   }
@@ -5532,6 +5623,8 @@ body {
     document.getElementById('set-eur-uah').value = rates.EUR_UAH;
     const cloudInput = document.getElementById('set-cloud-sync-url');
     if (cloudInput) cloudInput.value = state.cloudSyncUrl || '';
+    const cmcKeyInput = document.getElementById('set-cmc-api-key');
+    if (cmcKeyInput) cmcKeyInput.value = state.settings.cmcApiKey || '';
     document.getElementById('set-require-auth').checked = Boolean(state.auth?.requireAuth);
     document.getElementById('set-new-password').value = '';
     document.getElementById('modal-settings').classList.add('open');
@@ -5553,6 +5646,11 @@ body {
     if (cloudInput) {
       state.cloudSyncUrl = cloudInput.value.trim();
       safeSetItem('kapital_cloud_sync_url', state.cloudSyncUrl);
+    }
+
+    const cmcKeyInput = document.getElementById('set-cmc-api-key');
+    if (cmcKeyInput) {
+      state.settings.cmcApiKey = cmcKeyInput.value.trim();
     }
 
     const requireAuth = document.getElementById('set-require-auth').checked;
