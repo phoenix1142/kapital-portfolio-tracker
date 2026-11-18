@@ -972,7 +972,7 @@
           <div class="dual-val-sub">${pos.bondsCount ? `${pos.bondsCount} шт. · ` : ''}Тіло: ${fmtCurr(pos.principalNative, pos.nativeCurrency)}</div>
         `;
         priceComparisonHtml = `
-          <div class="dual-val-primary">Погашення: ${pos.maturityDate || '—'}</div>
+          <div class="dual-val-primary">Погашення: ${formatDateUkrainian(pos.maturityDate)}</div>
           <div class="dual-val-sub">Пройшло ${pos.elapsedDays} з ${pos.totalDays} дн. (0% податку)</div>
           <div class="maturity-progress"><div class="maturity-progress-bar" style="width:${pos.progressPct.toFixed(0)}%"></div></div>
         `;
@@ -988,7 +988,7 @@
           <div class="dual-val-sub">${taxLabel} · Вклад: ${fmtCurr(pos.principalNative, pos.nativeCurrency)}</div>
         `;
         priceComparisonHtml = `
-          <div class="dual-val-primary">До: ${pos.endDate || '—'}</div>
+          <div class="dual-val-primary">До: ${formatDateUkrainian(pos.endDate)}</div>
           <div class="dual-val-sub">Пройшло ${pos.elapsedDays} з ${pos.totalDays} дн.</div>
           <div class="maturity-progress"><div class="maturity-progress-bar" style="width:${pos.progressPct.toFixed(0)}%"></div></div>
         `;
@@ -1065,6 +1065,218 @@
       .replace(/"/g, '&quot;');
   }
 
+  // Ukrainian Date Formatter & Custom Calendar Picker (independent of OS/browser locale)
+  const UA_MONTHS_NOMINATIVE = [
+    'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+    'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'
+  ];
+  const UA_MONTHS_GENITIVE = [
+    'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+    'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'
+  ];
+  const UA_WEEKDAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+
+  function formatDateUkrainian(isoStr) {
+    if (!isoStr || typeof isoStr !== 'string') return '—';
+    const parts = isoStr.slice(0, 10).split('-');
+    if (parts.length !== 3) return isoStr;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d) || m < 0 || m > 11) return isoStr;
+    return `${d} ${UA_MONTHS_GENITIVE[m]} ${y} р.`;
+  }
+
+  let activeDatepickerPopover = null;
+
+  function closeActiveDatepicker() {
+    if (activeDatepickerPopover) {
+      activeDatepickerPopover.remove();
+      activeDatepickerPopover = null;
+    }
+  }
+
+  document.addEventListener('mousedown', (e) => {
+    if (!activeDatepickerPopover) return;
+    if (activeDatepickerPopover.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('.ua-dp-trigger')) return;
+    closeActiveDatepicker();
+  });
+
+  function enhanceUkrainianDateInputs(container) {
+    if (!container) return;
+    const dateInputs = container.querySelectorAll('input[type="date"]');
+    dateInputs.forEach(input => {
+      const initialIso = input.value || new Date().toISOString().slice(0, 10);
+      input.type = 'hidden';
+      input.value = initialIso;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'ua-dp-wrapper';
+      input.parentNode.insertBefore(wrapper, input);
+      wrapper.appendChild(input);
+
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'form-input tabular ua-dp-trigger';
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = formatDateUkrainian(input.value);
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'ua-dp-cal-icon';
+      iconSpan.textContent = '📅';
+      trigger.appendChild(labelSpan);
+      trigger.appendChild(iconSpan);
+      wrapper.appendChild(trigger);
+
+      function setIsoDate(newIso) {
+        input.value = newIso;
+        labelSpan.textContent = formatDateUkrainian(newIso);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      trigger.addEventListener('click', () => {
+        if (activeDatepickerPopover && activeDatepickerPopover._ownerTrigger === trigger) {
+          closeActiveDatepicker();
+          return;
+        }
+        closeActiveDatepicker();
+
+        const currentParts = (input.value || new Date().toISOString().slice(0, 10)).split('-');
+        let viewYear = parseInt(currentParts[0], 10) || new Date().getFullYear();
+        let viewMonth = (parseInt(currentParts[1], 10) || (new Date().getMonth() + 1)) - 1;
+
+        const popover = document.createElement('div');
+        popover.className = 'ua-dp-popover';
+        popover._ownerTrigger = trigger;
+        document.body.appendChild(popover);
+        activeDatepickerPopover = popover;
+
+        function positionPopover() {
+          const rect = trigger.getBoundingClientRect();
+          const popHeight = 320;
+          const spaceBelow = window.innerHeight - rect.bottom;
+          const top = (spaceBelow < popHeight && rect.top > popHeight)
+            ? Math.max(8, rect.top - popHeight - 6)
+            : Math.min(window.innerHeight - popHeight - 8, rect.bottom + 6);
+          const left = Math.min(window.innerWidth - 296, Math.max(8, rect.left));
+          popover.style.top = `${top}px`;
+          popover.style.left = `${left}px`;
+        }
+
+        function renderCalendar() {
+          const todayIso = new Date().toISOString().slice(0, 10);
+          const selectedIso = input.value;
+
+          const years = [];
+          for (let y = 2018; y <= 2036; y++) years.push(y);
+
+          const firstDayOfMonth = new Date(viewYear, viewMonth, 1);
+          // Convert Sunday=0..Saturday=6 into Monday=0..Sunday=6
+          const startWeekday = (firstDayOfMonth.getDay() + 6) % 7;
+          const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+          const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+
+          const cells = [];
+          for (let i = startWeekday - 1; i >= 0; i--) {
+            const d = daysInPrevMonth - i;
+            const pm = viewMonth === 0 ? 11 : viewMonth - 1;
+            const py = viewMonth === 0 ? viewYear - 1 : viewYear;
+            const iso = `${py}-${String(pm + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            cells.push({ day: d, iso, other: true });
+          }
+          for (let d = 1; d <= daysInMonth; d++) {
+            const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            cells.push({ day: d, iso, other: false });
+          }
+          let nextDay = 1;
+          while (cells.length < 42) {
+            const nm = viewMonth === 11 ? 0 : viewMonth + 1;
+            const ny = viewMonth === 11 ? viewYear + 1 : viewYear;
+            const iso = `${ny}-${String(nm + 1).padStart(2, '0')}-${String(nextDay).padStart(2, '0')}`;
+            cells.push({ day: nextDay++, iso, other: true });
+          }
+
+          popover.innerHTML = `
+            <div class="ua-dp-header">
+              <button type="button" class="ua-dp-nav-btn" data-dp-nav="-1" title="Попередній місяць">‹</button>
+              <div class="ua-dp-selects">
+                <select class="ua-dp-select" data-dp-month>
+                  ${UA_MONTHS_NOMINATIVE.map((mName, idx) => `<option value="${idx}" ${idx === viewMonth ? 'selected' : ''}>${mName}</option>`).join('')}
+                </select>
+                <select class="ua-dp-select" data-dp-year>
+                  ${years.map(y => `<option value="${y}" ${y === viewYear ? 'selected' : ''}>${y}</option>`).join('')}
+                </select>
+              </div>
+              <button type="button" class="ua-dp-nav-btn" data-dp-nav="1" title="Наступний місяць">›</button>
+            </div>
+            <div class="ua-dp-weekdays">
+              ${UA_WEEKDAYS_SHORT.map(w => `<span>${w}</span>`).join('')}
+            </div>
+            <div class="ua-dp-days">
+              ${cells.map(c => {
+                const cls = [
+                  'ua-dp-day',
+                  c.other ? 'other-month' : '',
+                  c.iso === todayIso ? 'today' : '',
+                  c.iso === selectedIso ? 'selected' : ''
+                ].filter(Boolean).join(' ');
+                return `<button type="button" class="${cls}" data-dp-pick="${c.iso}">${c.day}</button>`;
+              }).join('')}
+            </div>
+            <div class="ua-dp-footer">
+              <button type="button" class="ua-dp-quick-btn" data-dp-quick="today">Сьогодні</button>
+              <button type="button" class="ua-dp-quick-btn" data-dp-quick="6m">+6 міс.</button>
+              <button type="button" class="ua-dp-quick-btn" data-dp-quick="1y">+1 рік</button>
+            </div>
+          `;
+
+          popover.querySelectorAll('[data-dp-nav]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const delta = parseInt(btn.dataset.dpNav, 10);
+              viewMonth += delta;
+              if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+              if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+              renderCalendar();
+            });
+          });
+
+          popover.querySelector('[data-dp-month]')?.addEventListener('change', (ev) => {
+            viewMonth = parseInt(ev.target.value, 10);
+            renderCalendar();
+          });
+
+          popover.querySelector('[data-dp-year]')?.addEventListener('change', (ev) => {
+            viewYear = parseInt(ev.target.value, 10);
+            renderCalendar();
+          });
+
+          popover.querySelectorAll('[data-dp-pick]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              setIsoDate(btn.dataset.dpPick);
+              closeActiveDatepicker();
+            });
+          });
+
+          popover.querySelectorAll('[data-dp-quick]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const now = new Date();
+              const mode = btn.dataset.dpQuick;
+              if (mode === '6m') now.setMonth(now.getMonth() + 6);
+              if (mode === '1y') now.setFullYear(now.getFullYear() + 1);
+              const iso = now.toISOString().slice(0, 10);
+              setIsoDate(iso);
+              closeActiveDatepicker();
+            });
+          });
+        }
+
+        renderCalendar();
+        positionPopover();
+      });
+    });
+  }
+
   function setActiveCategory(cat) {
     state.activeCategory = cat;
     renderAll();
@@ -1072,6 +1284,7 @@
 
   // Dynamic Form Fields inside Add/Edit Modal
   function renderModalFormFields(category, existing = null) {
+    closeActiveDatepicker();
     const container = document.getElementById('dynamic-form-fields');
     const todayStr = new Date().toISOString().slice(0, 10);
     const nextYearStr = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
@@ -1171,6 +1384,7 @@
           }
         });
       });
+      enhanceUkrainianDateInputs(container);
       return;
     }
 
@@ -1234,6 +1448,7 @@
         const c = Number(countInput.value) || 0;
         if (c > 0) principalInput.value = c * 1000;
       });
+      enhanceUkrainianDateInputs(container);
       return;
     }
 
@@ -1291,6 +1506,7 @@
           <input type="text" class="form-input" id="f-notes" value="${escapeHtml(notesVal)}" />
         </div>
       `;
+      enhanceUkrainianDateInputs(container);
       return;
     }
 
@@ -1359,6 +1575,7 @@
   }
 
   function closePositionModal() {
+    closeActiveDatepicker();
     document.getElementById('modal-position').classList.remove('open');
   }
 
