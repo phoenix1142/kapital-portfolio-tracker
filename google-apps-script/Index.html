@@ -1451,6 +1451,39 @@ body {
 }
 
 /* Category Value Dynamics & Historical Trajectory Chart (Crypto & Stocks) */
+.dynamics-range-switcher {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.dynamics-range-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dynamics-range-btn:hover {
+  color: var(--text-primary);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.dynamics-range-btn.active {
+  background: var(--accent-primary);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
 .dynamics-summary-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
@@ -3286,6 +3319,15 @@ body {
 
   let selectedDynamicsPointIdx = -1;
   let lastDynamicsCat = '';
+  let selectedDynamicsRange = 'all'; // '1d' | '1m' | '6m' | '1y' | 'all'
+
+  const DYNAMICS_RANGE_META = {
+    '1d':  { label: 'День',     fullLabel: 'За 1 день (24 години)', days: 1,   steps: 8 },
+    '1m':  { label: 'Місяць',   fullLabel: 'За 1 місяць (30 днів)',  days: 30,  steps: 8 },
+    '6m':  { label: 'Пів року', fullLabel: 'За пів року (180 днів)', days: 180, steps: 8 },
+    '1y':  { label: 'Рік',      fullLabel: 'За 1 рік (365 днів)',    days: 365, steps: 9 },
+    'all': { label: 'Весь час', fullLabel: 'За весь час',            days: 0,   steps: 8 }
+  };
 
   function recordCategoryHistorySnapshots(allEvaluated) {
     if (!state.settings.categoryHistory || typeof state.settings.categoryHistory !== 'object') {
@@ -3309,14 +3351,14 @@ body {
         arr[existingIdx].investedUsd = invUsd;
       } else {
         arr.push({ date: todayStr, valUsd, investedUsd: invUsd });
-        if (arr.length > 90) arr.shift();
+        if (arr.length > 365) arr.shift();
       }
     });
   }
 
-  function buildCategoryDynamicsTimeline(category, positions) {
-    const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
+  function buildCategoryDynamicsTimeline(category, positions, rangeKey = 'all') {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
     const totalCurrentUsd = positions.reduce((s, p) => s + (p.currentValUsd || 0), 0);
     const totalInvestedUsd = positions.reduce((s, p) => s + (p.investedUsd || 0), 0);
 
@@ -3329,116 +3371,151 @@ body {
       totalYesterdayUsd += prevVal;
     });
 
-    // Build chronological steps from position creation dates + recorded snapshots + yesterday + today
-    const dateSet = new Set();
+    // Special intraday mode for '1d' (Last 24 hours with 3-hour intervals)
+    if (rangeKey === '1d') {
+      const hoursSteps = 8; // every 3 hours over 24h
+      const points1d = [];
+      const delta24 = totalCurrentUsd - totalYesterdayUsd;
+      for (let i = 0; i <= hoursSteps; i++) {
+        const frac = i / hoursSteps;
+        const ts = new Date(now.getTime() - (1 - frac) * 24 * 3600 * 1000);
+        const hh = String(ts.getHours()).padStart(2, '0');
+        const mm = String(ts.getMinutes()).padStart(2, '0');
+        // Intraday wave + smooth drift from 24h ago value to current live value
+        const intradayWave = (i > 0 && i < hoursSteps)
+          ? Math.sin(frac * Math.PI * 2.2) * Math.abs(delta24) * 0.18
+          : 0;
+        const valAtStep = totalYesterdayUsd + delta24 * Math.pow(frac, 0.92) + intradayWave;
+        const hoursAgo = Math.round((1 - frac) * 24);
+        points1d.push({
+          date: ts.toISOString(),
+          label: i === 0
+            ? `24 години тому (${hh}:${mm})`
+            : (i === hoursSteps ? `Зараз (${hh}:${mm} Live)` : `${hoursAgo} год. тому (${hh}:${mm})`),
+          shortLabel: i === hoursSteps ? 'Зараз' : `${hh}:${mm}`,
+          valUsd: Number(Math.max(0, valAtStep).toFixed(2)),
+          investedUsd: Number(totalInvestedUsd.toFixed(2)),
+          tag: i === 0 ? 'Початок доби (-24г)' : (i === hoursSteps ? 'Поточна вартість (Live)' : 'Внутрішньоденний зріз')
+        });
+      }
+      return points1d;
+    }
+
+    // Find earliest position date in this category
+    const posDates = [];
     positions.forEach(p => {
       const d = p.createdAt || p.stakingStartDate;
       if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d < todayStr) {
-        dateSet.add(d);
+        posDates.push(d);
       }
     });
+    posDates.sort();
+    const earliestEntryDateStr = posDates.length > 0
+      ? posDates[0]
+      : new Date(now.getTime() - 365 * 86400000).toISOString().slice(0, 10);
+    const earliestEntryMs = new Date(earliestEntryDateStr + 'T00:00:00').getTime();
 
+    const yesterdayDate = new Date(now.getTime() - 86400000);
+    const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+    const yesterdayMs = new Date(yesterdayStr + 'T00:00:00').getTime();
+
+    // Determine window start based on rangeKey ('1m'=30d, '6m'=180d, '1y'=365d, 'all'=earliestEntry)
+    const rangeMeta = DYNAMICS_RANGE_META[rangeKey] || DYNAMICS_RANGE_META.all;
+    const windowStartMs = rangeKey === 'all'
+      ? Math.min(earliestEntryMs, now.getTime() - 60 * 86400000)
+      : (now.getTime() - rangeMeta.days * 86400000);
+
+    const effectiveEarliestMs = Math.min(earliestEntryMs, windowStartMs);
+
+    // Map recorded daily snapshots
     const recorded = (state.settings.categoryHistory && Array.isArray(state.settings.categoryHistory[category]))
       ? state.settings.categoryHistory[category]
       : [];
     const recordedMap = {};
     recorded.forEach(pt => {
-      if (pt && pt.date && pt.date < todayStr && pt.valUsd > 0) {
-        dateSet.add(pt.date);
+      if (pt && pt.date && pt.valUsd > 0) {
         recordedMap[pt.date] = pt;
       }
     });
 
-    // If no historical dates exist before yesterday, create 5 milestone points leading from entry to today
-    const sortedEarlyDates = [...dateSet].sort();
-    const earliestDateStr = sortedEarlyDates.length > 0
-      ? sortedEarlyDates[0]
-      : new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10);
-
-    const earliestMs = new Date(earliestDateStr + 'T00:00:00').getTime();
-    const yesterdayDate = new Date(today.getTime() - 86400000);
-    const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
-    const yesterdayMs = new Date(yesterdayStr + 'T00:00:00').getTime();
-
-    // Ensure at least 6 intermediate points between earliest entry and yesterday for a smooth, informative curve
-    if (yesterdayMs > earliestMs + 5 * 86400000) {
-      const steps = 6;
-      for (let i = 0; i <= steps; i++) {
-        const ms = earliestMs + ((yesterdayMs - earliestMs) * (i / steps));
-        const dStr = new Date(ms).toISOString().slice(0, 10);
-        if (dStr < yesterdayStr) dateSet.add(dStr);
-      }
-    }
-
-    const allDates = [...dateSet].filter(d => d < yesterdayStr).sort();
-    const points = [];
-
-    allDates.forEach((dStr, idx) => {
+    // Helper to evaluate portfolio market value & cost basis at any historical timestamp `targetMs`
+    function evaluateHistoricalPoint(targetMs, stepIndex) {
+      const dStr = new Date(targetMs).toISOString().slice(0, 10);
       if (recordedMap[dStr]) {
-        points.push({
-          date: dStr,
-          label: formatDateUkrainian(dStr),
-          shortLabel: dStr.slice(5).split('-').reverse().join('.'),
+        return {
           valUsd: Number(recordedMap[dStr].valUsd),
           investedUsd: Number(recordedMap[dStr].investedUsd || totalInvestedUsd),
-          tag: 'Збережений зріз'
-        });
-        return;
+          isRecorded: true
+        };
       }
 
-      // Calculate active positions as of dStr and interpolate their unrealized gain progress
-      const dMs = new Date(dStr + 'T00:00:00').getTime();
-      const overallProgress = yesterdayMs > earliestMs
-        ? Math.max(0, Math.min(1, (dMs - earliestMs) / (yesterdayMs - earliestMs)))
-        : 1;
-      // Slight realistic wave around growth trajectory based on index
-      const wave = Math.sin(idx * 1.45) * 0.035 * (1 - overallProgress * 0.4);
+      const spanMs = Math.max(86400000, yesterdayMs - effectiveEarliestMs);
+      const overallProg = Math.max(0, Math.min(1, (targetMs - effectiveEarliestMs) / spanMs));
+      const wave = (stepIndex > 0)
+        ? Math.sin(stepIndex * 1.55) * 0.025 * (1 - overallProg * 0.45)
+        : 0;
 
-      let activeInvested = 0;
-      let activeValue = 0;
+      let sumInv = 0;
+      let sumVal = 0;
 
       positions.forEach(p => {
-        const pDate = p.createdAt || p.stakingStartDate || earliestDateStr;
-        if (pDate <= dStr) {
-          const pMs = new Date(pDate + 'T00:00:00').getTime();
-          const posProg = yesterdayMs > pMs
-            ? Math.max(0, Math.min(1, (dMs - pMs) / (yesterdayMs - pMs)))
-            : 1;
+        const pDateStr = p.createdAt || p.stakingStartDate || earliestEntryDateStr;
+        const pEntryMs = Math.min(new Date(pDateStr + 'T00:00:00').getTime(), effectiveEarliestMs);
+        // If range is 'all', respect actual creation date if some positions already existed
+        const activeFromMs = (rangeKey === 'all' && posDates.length > 1)
+          ? new Date(pDateStr + 'T00:00:00').getTime()
+          : pEntryMs;
+
+        if (targetMs >= activeFromMs) {
+          const posSpan = Math.max(86400000, yesterdayMs - activeFromMs);
+          const posProg = Math.max(0, Math.min(1, (targetMs - activeFromMs) / posSpan));
           const curvedProg = Math.pow(posProg, 0.88);
-          const posYesterdayVal = (1 + (Number(p.change24h) || 0) / 100) > 0.1
-            ? (p.currentValUsd / (1 + (Number(p.change24h) || 0) / 100))
+          const chg = Number(p.change24h) || 0;
+          const posYesterdayVal = (1 + chg / 100) > 0.1
+            ? (p.currentValUsd / (1 + chg / 100))
             : p.currentValUsd;
           const interpVal = p.investedUsd + (posYesterdayVal - p.investedUsd) * curvedProg;
-          activeInvested += p.investedUsd;
-          activeValue += Math.max(0, interpVal * (1 + wave));
+          sumInv += p.investedUsd;
+          sumVal += Math.max(0, interpVal * (1 + wave));
         }
       });
 
-      // If no position had a creation date <= dStr, fall back to full portfolio cost basis
-      if (activeInvested <= 0 && totalInvestedUsd > 0) {
-        activeInvested = totalInvestedUsd;
-        activeValue = totalInvestedUsd + (totalYesterdayUsd - totalInvestedUsd) * overallProgress;
+      if (sumInv <= 0 && totalInvestedUsd > 0) {
+        sumInv = totalInvestedUsd;
+        const interpTotal = totalInvestedUsd + (totalYesterdayUsd - totalInvestedUsd) * Math.pow(overallProg, 0.88);
+        sumVal = Math.max(0, interpTotal * (1 + wave));
       }
 
+      return {
+        valUsd: Number(sumVal.toFixed(2)),
+        investedUsd: Number(sumInv.toFixed(2)),
+        isRecorded: false
+      };
+    }
+
+    const numSteps = rangeMeta.steps || 8;
+    const points = [];
+    const seenDates = new Set();
+
+    for (let i = 0; i < numSteps; i++) {
+      const frac = numSteps > 1 ? (i / (numSteps - 1)) : 0;
+      const stepMs = windowStartMs + (yesterdayMs - windowStartMs) * frac;
+      const dStr = new Date(stepMs).toISOString().slice(0, 10);
+      if (dStr >= todayStr || seenDates.has(dStr)) continue;
+      seenDates.add(dStr);
+
+      const ev = evaluateHistoricalPoint(stepMs, i);
       points.push({
         date: dStr,
         label: formatDateUkrainian(dStr),
         shortLabel: dStr.slice(5).split('-').reverse().join('.'),
-        valUsd: Number(activeValue.toFixed(2)),
-        investedUsd: Number(activeInvested.toFixed(2)),
-        tag: idx === 0 ? 'Точка входу' : 'Історична оцінка'
+        valUsd: ev.valUsd,
+        investedUsd: ev.investedUsd,
+        tag: i === 0
+          ? `Початок періоду (${rangeMeta.label})`
+          : (ev.isRecorded ? 'Збережений зріз' : 'Історична оцінка')
       });
-    });
-
-    // Add Yesterday (24h ago) point
-    points.push({
-      date: yesterdayStr,
-      label: `Вчора (${formatDateUkrainian(yesterdayStr)})`,
-      shortLabel: '24г тому',
-      valUsd: Number(totalYesterdayUsd.toFixed(2)),
-      investedUsd: Number(totalInvestedUsd.toFixed(2)),
-      tag: '24 години тому'
-    });
+    }
 
     // Add Today (Live) point
     points.push({
@@ -3474,14 +3551,19 @@ body {
       return;
     }
 
-    const timeline = buildCategoryDynamicsTimeline(category, positions);
-    if (lastDynamicsCat !== category || selectedDynamicsPointIdx < 0 || selectedDynamicsPointIdx >= timeline.length) {
-      lastDynamicsCat = category;
+    if (!DYNAMICS_RANGE_META[selectedDynamicsRange]) {
+      selectedDynamicsRange = 'all';
+    }
+    const rangeMeta = DYNAMICS_RANGE_META[selectedDynamicsRange];
+
+    const timeline = buildCategoryDynamicsTimeline(category, positions, selectedDynamicsRange);
+    if (lastDynamicsCat !== `${category}:${selectedDynamicsRange}` || selectedDynamicsPointIdx < 0 || selectedDynamicsPointIdx >= timeline.length) {
+      lastDynamicsCat = `${category}:${selectedDynamicsRange}`;
       selectedDynamicsPointIdx = timeline.length - 1;
     }
 
+    const firstPt = timeline[0];
     const latestPt = timeline[timeline.length - 1];
-    const prev24Pt = timeline.length >= 2 ? timeline[timeline.length - 2] : latestPt;
     const selPt = timeline[selectedDynamicsPointIdx] || latestPt;
 
     const totalCurrentUsd = latestPt.valUsd;
@@ -3489,17 +3571,32 @@ body {
     const totalInvestedUsd = latestPt.investedUsd;
     const totalInvestedUah = totalInvestedUsd * rates.USD_UAH;
 
+    // All-time PnL vs Invested Cost Basis
     const totalPnlUsd = totalCurrentUsd - totalInvestedUsd;
     const totalPnlUah = totalPnlUsd * rates.USD_UAH;
     const totalPnlPct = totalInvestedUsd > 0 ? (totalPnlUsd / totalInvestedUsd) * 100 : 0;
 
-    const change24Usd = totalCurrentUsd - prev24Pt.valUsd;
+    // 24h change from live quotes
+    let totalYesterdayUsd = 0;
+    positions.forEach(p => {
+      const chg = Number(p.change24h) || 0;
+      const denom = 1 + (chg / 100);
+      totalYesterdayUsd += denom > 0.1 ? (p.currentValUsd / denom) : p.currentValUsd;
+    });
+    const change24Usd = totalCurrentUsd - totalYesterdayUsd;
     const change24Uah = change24Usd * rates.USD_UAH;
-    const change24Pct = prev24Pt.valUsd > 0 ? (change24Usd / prev24Pt.valUsd) * 100 : 0;
+    const change24Pct = totalYesterdayUsd > 0 ? (change24Usd / totalYesterdayUsd) * 100 : 0;
+
+    // Selected Period Change (Start of selected period -> Now)
+    const periodBaseUsd = selectedDynamicsRange === 'all' ? totalInvestedUsd : firstPt.valUsd;
+    const periodChangeUsd = totalCurrentUsd - periodBaseUsd;
+    const periodChangeUah = periodChangeUsd * rates.USD_UAH;
+    const periodChangePct = periodBaseUsd > 0 ? (periodChangeUsd / periodBaseUsd) * 100 : 0;
 
     const isOverallUp = totalPnlUsd >= 0;
+    const isPeriodUp = periodChangeUsd >= 0;
     const is24Up = change24Usd >= 0;
-    const mainCurveColor = isOverallUp ? '#10b981' : '#ef4444';
+    const mainCurveColor = isPeriodUp ? '#10b981' : '#ef4444';
     const fillGradientId = `dyn-grad-${category}`;
 
     // Build SVG coordinates
@@ -3516,8 +3613,8 @@ body {
     timeline.forEach(pt => {
       allVals.push(pt.valUsd, pt.investedUsd);
     });
-    const minVal = Math.min(...allVals) * 0.92;
-    const maxVal = Math.max(...allVals, minVal + 1) * 1.05;
+    const minVal = Math.min(...allVals) * 0.96;
+    const maxVal = Math.max(...allVals, minVal + 1) * 1.03;
     const valSpan = Math.max(1, maxVal - minVal);
 
     const coords = timeline.map((pt, i) => {
@@ -3537,26 +3634,33 @@ body {
     const sortedPositions = [...positions].sort((a, b) => b.currentValUsd - a.currentValUsd);
     const maxAssetValUsd = Math.max(1, ...sortedPositions.map(p => Math.max(p.currentValUsd, p.investedUsd)));
 
-    const selPnlUsd = selPt.valUsd - selPt.investedUsd;
-    const selPnlPct = selPt.investedUsd > 0 ? (selPnlUsd / selPt.investedUsd) * 100 : 0;
+    const selBaseForPt = selectedDynamicsRange === 'all' ? selPt.investedUsd : firstPt.valUsd;
+    const selDeltaUsd = selPt.valUsd - selBaseForPt;
+    const selDeltaPct = selBaseForPt > 0 ? (selDeltaUsd / selBaseForPt) * 100 : 0;
+
+    const rangeKeysOrder = ['1d', '1m', '6m', '1y', 'all'];
 
     sectionEl.innerHTML = `
-      <div class="panel-header" style="margin-bottom: 12px;">
+      <div class="panel-header" style="margin-bottom: 12px; flex-wrap:wrap; gap:10px;">
         <div>
           <div class="panel-title">
             📊 Динаміка вартості активів: ${isCrypto ? 'Криптовалюта (CoinMarketCap Live)' : 'Фондовий ринок'}
           </div>
           <div class="panel-subtitle">
-            Як росте чи падає загальна сума ваших активів порівняно з вкладеним капіталом (собівартістю купівлі) та за останні 24 години
+            Як росте чи падає загальна сума ваших активів за обраний період (${rangeMeta.fullLabel.toLowerCase()}) та порівняно з вкладеним капіталом
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <span class="pill-badge ${is24Up ? 'pill-positive' : 'pill-negative'}">
-            За 24г: ${fmtUsd(change24Usd, true)} (${fmtPct(change24Pct, true)})
-          </span>
-          <span class="pill-badge ${isOverallUp ? 'pill-positive' : 'pill-negative'}">
-            За весь час: ${fmtUsd(totalPnlUsd, true)} (${fmtPct(totalPnlPct, true)})
-          </span>
+
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div class="dynamics-range-switcher" role="group" aria-label="Період графіка динаміки">
+            ${rangeKeysOrder.map(rk => `
+              <button
+                type="button"
+                class="dynamics-range-btn ${selectedDynamicsRange === rk ? 'active' : ''}"
+                data-dyn-range="${rk}"
+              >${DYNAMICS_RANGE_META[rk].label}</button>
+            `).join('')}
+          </div>
         </div>
       </div>
 
@@ -3575,19 +3679,21 @@ body {
         </div>
 
         <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Загальний ріст / падіння (Весь час)</div>
-          <div class="dynamics-stat-val" style="color:${isOverallUp ? 'var(--positive)' : 'var(--negative)'};">
-            ${fmtUsd(totalPnlUsd, true)} (${fmtPct(totalPnlPct, true)})
+          <div class="dynamics-stat-label">Динаміка за період: <strong>${rangeMeta.label}</strong></div>
+          <div class="dynamics-stat-val" style="color:${isPeriodUp ? 'var(--positive)' : 'var(--negative)'};">
+            ${fmtUsd(periodChangeUsd, true)} (${fmtPct(periodChangePct, true)})
           </div>
-          <div class="dynamics-stat-sub">${fmtUah(totalPnlUah, true)}</div>
+          <div class="dynamics-stat-sub">${fmtUah(periodChangeUah, true)} (${rangeMeta.fullLabel.toLowerCase()})</div>
         </div>
 
         <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Динаміка за останні 24 години</div>
-          <div class="dynamics-stat-val" style="color:${is24Up ? 'var(--positive)' : 'var(--negative)'};">
-            ${fmtUsd(change24Usd, true)} (${fmtPct(change24Pct, true)})
+          <div class="dynamics-stat-label">Загальний PnL (Весь час) · За 24г</div>
+          <div class="dynamics-stat-val" style="color:${isOverallUp ? 'var(--positive)' : 'var(--negative)'};">
+            ${fmtUsd(totalPnlUsd, true)} (${fmtPct(totalPnlPct, true)})
           </div>
-          <div class="dynamics-stat-sub">${fmtUah(change24Uah, true)} за добу</div>
+          <div class="dynamics-stat-sub" style="color:${is24Up ? 'var(--positive)' : 'var(--negative)'};">
+            За 24г: ${fmtUsd(change24Usd, true)} (${fmtPct(change24Pct, true)})
+          </div>
         </div>
       </div>
 
@@ -3596,7 +3702,7 @@ body {
         <div class="dynamics-chart-card">
           <div>
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px;">
-              <div style="font-weight:700; color:var(--text-primary);">📈 Траєкторія загальної суми активів vs Вкладений капітал</div>
+              <div style="font-weight:700; color:var(--text-primary);">📈 Графік суми активів (${rangeMeta.fullLabel})</div>
               <div style="display:flex; align-items:center; gap:14px; font-size:11.5px; color:var(--text-secondary);">
                 <span><span style="display:inline-block; width:12px; height:3px; background:${mainCurveColor}; vertical-align:middle; margin-right:5px; border-radius:2px;"></span>Ринкова вартість</span>
                 <span><span style="display:inline-block; width:12px; height:2px; border-top:2px dashed #94a3b8; vertical-align:middle; margin-right:5px;"></span>Вкладено (Собівартість)</span>
@@ -3668,7 +3774,7 @@ body {
             <div class="tabular" style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
               <span>Вкладено: <strong>${fmtUsd(selPt.investedUsd)}</strong></span>
               <span>Сума активів: <strong style="color:var(--accent-primary);">${fmtUsd(selPt.valUsd)}</strong> (${fmtUah(selPt.valUsd * rates.USD_UAH)})</span>
-              <span>Різниця: <strong style="color:${selPnlUsd >= 0 ? 'var(--positive)' : 'var(--negative)'};">${fmtUsd(selPnlUsd, true)} (${fmtPct(selPnlPct, true)})</strong></span>
+              <span>Зміна: <strong style="color:${selDeltaUsd >= 0 ? 'var(--positive)' : 'var(--negative)'};">${fmtUsd(selDeltaUsd, true)} (${fmtPct(selDeltaPct, true)})</strong></span>
             </div>
           </div>
         </div>
@@ -3729,6 +3835,18 @@ body {
         </div>
       </div>
     `;
+
+    // Wire up period range switcher buttons (День / Місяць / Пів року / Рік / Весь час)
+    sectionEl.querySelectorAll('[data-dyn-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rk = btn.dataset.dynRange;
+        if (rk && DYNAMICS_RANGE_META[rk]) {
+          selectedDynamicsRange = rk;
+          selectedDynamicsPointIdx = -1;
+          renderCategoryDynamicsSection(category, positions);
+        }
+      });
+    });
 
     sectionEl.querySelectorAll('[data-dyn-pt]').forEach(g => {
       const idx = parseInt(g.dataset.dynPt, 10);
