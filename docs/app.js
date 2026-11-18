@@ -627,7 +627,254 @@
     renderAll();
   }
 
-  // Direct browser fetch for NBU FX + Binance public API
+  // Aave V3 On-Chain Pool & Safety Module Live APY Auto-Sync
+  const AAVE_V3_CHAINS = {
+    Ethereum: {
+      label: 'Aave V3 Ethereum',
+      rpcs: ['https://ethereum-rpc.publicnode.com', 'https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'],
+      pool: '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2',
+      assets: {
+        USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+        USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        ETH: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+        WETH: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+        BTC: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+        WBTC: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+        DAI: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+        AAVE: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9',
+        LINK: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
+        WSTETH: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0',
+        USDS: '0xdC035D45d973E3EC169d2276DDab16f1e407384F',
+        EURC: '0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c'
+      }
+    },
+    Arbitrum: {
+      label: 'Aave V3 Arbitrum',
+      rpcs: ['https://arbitrum-one-rpc.publicnode.com', 'https://arb1.arbitrum.io/rpc'],
+      pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
+      assets: {
+        USDT: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+        USDC: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+        ETH: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+        WETH: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+        BTC: '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f',
+        WBTC: '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f',
+        DAI: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1',
+        AAVE: '0xba5DdD1f9d7F570dc94a51479a000E3BCE967196',
+        ARB: '0x912CE59144191C1204E64559FE8253a0e49E6548',
+        LINK: '0xf97f4df75117a78c1A5a0DBb814Af92458539FB4'
+      }
+    },
+    Polygon: {
+      label: 'Aave V3 Polygon',
+      rpcs: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon-rpc.com'],
+      pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
+      assets: {
+        USDT: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+        USDC: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+        ETH: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
+        WETH: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
+        BTC: '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6',
+        WBTC: '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6',
+        DAI: '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
+        AAVE: '0xD6DF932A45C0f255f85145f286eA0b292B21C90B',
+        MATIC: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
+        POL: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270'
+      }
+    },
+    Base: {
+      label: 'Aave V3 Base',
+      rpcs: ['https://base-rpc.publicnode.com', 'https://mainnet.base.org'],
+      pool: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
+      assets: {
+        USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        USDT: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
+        ETH: '0x4200000000000000000000000000000000000006',
+        WETH: '0x4200000000000000000000000000000000000006',
+        BTC: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+        CBBTC: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf'
+      }
+    },
+    Optimism: {
+      label: 'Aave V3 Optimism',
+      rpcs: ['https://optimism-rpc.publicnode.com', 'https://mainnet.optimism.io'],
+      pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
+      assets: {
+        USDT: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
+        USDC: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+        ETH: '0x4200000000000000000000000000000000000006',
+        WETH: '0x4200000000000000000000000000000000000006',
+        BTC: '0x68f180fcCe6836688e9084f035309E29Bf0A2095',
+        WBTC: '0x68f180fcCe6836688e9084f035309E29Bf0A2095',
+        OP: '0x4200000000000000000000000000000000000042'
+      }
+    },
+    Avalanche: {
+      label: 'Aave V3 Avalanche',
+      rpcs: ['https://avalanche-c-chain-rpc.publicnode.com', 'https://api.avax.network/ext/bc/C/rpc'],
+      pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
+      assets: {
+        USDT: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
+        USDC: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+        ETH: '0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB',
+        WETH: '0x49D5c2BdFfac6CE2BFdB6640F4F80f226bc10bAB',
+        BTC: '0x50b7545627a5162F82A992c33b87aDc75187B218',
+        WBTC: '0x50b7545627a5162F82A992c33b87aDc75187B218',
+        AVAX: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
+        WAVAX: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7'
+      }
+    }
+  };
+
+  async function ethCallRpc(rpcUrls, toAddress, dataHex) {
+    for (const rpc of rpcUrls) {
+      try {
+        const res = await fetch(rpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'eth_call',
+            params: [{ to: toAddress, data: dataHex }, 'latest']
+          })
+        });
+        if (!res.ok) continue;
+        const json = await res.json();
+        if (json && typeof json.result === 'string' && json.result.startsWith('0x') && json.result.length >= 66) {
+          return json.result;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  async function fetchAaveSafetyModuleStkAaveApy() {
+    // stkAAVE contract on Ethereum Mainnet: 0x4da27a545c0c5B758a6BA100e3a049001de870f5
+    const stkAave = '0x4da27a545c0c5B758a6BA100e3a049001de870f5';
+    const rpcs = AAVE_V3_CHAINS.Ethereum.rpcs;
+    const paddedAddr = stkAave.slice(2).toLowerCase().padStart(64, '0');
+    const [assetRes, supplyRes] = await Promise.all([
+      ethCallRpc(rpcs, stkAave, '0xf11b8188' + paddedAddr), // assets(address)
+      ethCallRpc(rpcs, stkAave, '0x18160ddd')                // totalSupply()
+    ]);
+    if (assetRes && supplyRes && assetRes.length >= 66 && supplyRes.length >= 66) {
+      const emissionPerSec = Number(BigInt('0x' + assetRes.slice(2, 66))) / 1e18;
+      const totalSupply = Number(BigInt('0x' + supplyRes.slice(2, 66))) / 1e18;
+      if (totalSupply > 0 && emissionPerSec > 0) {
+        const apr = (emissionPerSec * 31536000) / totalSupply;
+        const apyPct = (Math.pow(1 + apr / 365, 365) - 1) * 100;
+        return Number(apyPct.toFixed(2));
+      }
+    }
+    return null;
+  }
+
+  function inferAaveChainFromText(pos) {
+    if (pos.aaveChain && (AAVE_V3_CHAINS[pos.aaveChain] || pos.aaveChain === 'SafetyModule')) {
+      return pos.aaveChain;
+    }
+    const text = `${pos.platform || ''} ${pos.notes || ''} ${pos.name || ''}`.toLowerCase();
+    if (text.includes('arbitrum') || text.includes('arb')) return 'Arbitrum';
+    if (text.includes('polygon') || text.includes('matic') || text.includes('pol')) return 'Polygon';
+    if (text.includes('base')) return 'Base';
+    if (text.includes('optimism') || text.includes('op')) return 'Optimism';
+    if (text.includes('avalanche') || text.includes('avax')) return 'Avalanche';
+    if ((pos.ticker || '').toUpperCase() === 'AAVE' || (pos.ticker || '').toUpperCase() === 'STKAAVE') {
+      return 'SafetyModule';
+    }
+    return 'Ethereum';
+  }
+
+  async function fetchLiveAaveApy(tickerRaw, chainKey = 'Ethereum') {
+    const sym = (tickerRaw || '').toUpperCase().trim();
+    if (!sym) return null;
+
+    // 1. If SafetyModule or staking AAVE token itself
+    if (chainKey === 'SafetyModule' || sym === 'STKAAVE') {
+      const smRate = await fetchAaveSafetyModuleStkAaveApy();
+      if (smRate !== null && smRate > 0) return { apy: smRate, source: 'Aave Safety Module (stkAAVE)' };
+    }
+
+    // 2. Direct On-Chain Aave V3 Pool getReserveData(address) call
+    const chainCfg = AAVE_V3_CHAINS[chainKey] || AAVE_V3_CHAINS.Ethereum;
+    const tokenAddr = chainCfg.assets[sym];
+    if (tokenAddr) {
+      const paddedToken = tokenAddr.slice(2).toLowerCase().padStart(64, '0');
+      const hexResult = await ethCallRpc(chainCfg.rpcs, chainCfg.pool, '0x35ea6a75' + paddedToken);
+      // getReserveData returns 15 words (each 64 hex chars). Word index 2 (chars 2+128 .. 2+192) is currentLiquidityRate in RAY (1e27)
+      if (hexResult && hexResult.length >= 2 + 192) {
+        const liquidityRateRay = BigInt('0x' + hexResult.slice(2 + 128, 2 + 192));
+        const apr = Number(liquidityRateRay) / 1e27;
+        const SECONDS_PER_YEAR = 31536000;
+        const apyPct = (Math.pow(1 + apr / SECONDS_PER_YEAR, SECONDS_PER_YEAR) - 1) * 100;
+        if (apyPct >= 0.02) {
+          return { apy: Number(apyPct.toFixed(2)), source: chainCfg.label };
+        }
+        // If user selected AAVE on Ethereum and pool supply rate is ~0%, check Safety Module stkAAVE
+        if (sym === 'AAVE') {
+          const smRate = await fetchAaveSafetyModuleStkAaveApy();
+          if (smRate !== null && smRate > 0) return { apy: smRate, source: 'Aave Safety Module (stkAAVE)' };
+        }
+      }
+    } else if (sym === 'AAVE') {
+      const smRate = await fetchAaveSafetyModuleStkAaveApy();
+      if (smRate !== null && smRate > 0) return { apy: smRate, source: 'Aave Safety Module (stkAAVE)' };
+    }
+
+    // 3. Fallback: DeFiLlama Yields API for any other Aave V3 token
+    try {
+      const res = await fetch('https://yields.llama.fi/pools');
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.data)) {
+          const targetChain = chainKey === 'SafetyModule' ? 'Ethereum' : chainKey;
+          const matches = json.data.filter(p =>
+            p.project === 'aave-v3' &&
+            String(p.chain || '').toLowerCase() === targetChain.toLowerCase() &&
+            (String(p.symbol || '').toUpperCase() === sym ||
+             (sym === 'ETH' && String(p.symbol || '').toUpperCase() === 'WETH') ||
+             (sym === 'BTC' && String(p.symbol || '').toUpperCase() === 'WBTC'))
+          );
+          if (matches.length > 0 && typeof matches[0].apy === 'number') {
+            return { apy: Number(matches[0].apy.toFixed(2)), source: `Aave V3 ${targetChain}` };
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  async function syncAavePositionsRates() {
+    let changed = false;
+    for (const pos of state.positions) {
+      if (pos.category !== 'crypto') continue;
+      const mentionsAave = /aave/i.test(`${pos.platform || ''} ${pos.notes || ''} ${pos.name || ''}`);
+      const shouldSyncAave = pos.stakingAutoSync === 'aave' || (pos.stakingAutoSync === undefined && mentionsAave);
+      if (!shouldSyncAave) continue;
+
+      const chainKey = inferAaveChainFromText(pos);
+      const res = await fetchLiveAaveApy(pos.ticker, chainKey);
+      if (res && typeof res.apy === 'number' && res.apy > 0) {
+        if (!pos.isStaked || pos.stakingAutoSync !== 'aave' || pos.stakingApy !== res.apy || pos.aaveChain !== chainKey) {
+          pos.isStaked = true;
+          pos.stakingAutoSync = 'aave';
+          pos.aaveChain = chainKey;
+          pos.stakingApy = res.apy;
+          pos.aaveLastSync = new Date().toISOString();
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      await persistPortfolio();
+      renderAll();
+    }
+    return changed;
+  }
+
+  // Direct browser fetch for NBU FX + Binance public API + Aave Live APY
   async function refreshBrowserQuotesQuietly() {
     let updatedAny = false;
     try {
@@ -671,10 +918,15 @@
       }
     } catch (_) {}
 
+    try {
+      const aaveChanged = await syncAavePositionsRates();
+      if (aaveChanged) updatedAny = true;
+    } catch (_) {}
+
     if (updatedAny) {
       state.quotes.fx.source = isGoogleAppsScript()
-        ? 'Google Cloud + Live (НБУ / Binance)'
-        : 'Live (НБУ / Binance)';
+        ? 'Google Cloud + Live (НБУ / Binance / Aave)'
+        : 'Live (НБУ / Binance / Aave)';
       renderAll();
     }
   }
@@ -939,6 +1191,7 @@
         const chgSign = pos.change24h >= 0 ? '+' : '';
         const chgColor = pos.change24h >= 0 ? 'var(--positive)' : 'var(--negative)';
         const isStakedCrypto = pos.category === 'crypto' && pos.isStaked && pos.stakingApy > 0;
+        const isAaveSync = isStakedCrypto && (pos.stakingAutoSync === 'aave' || /aave/i.test(`${pos.platform || ''} ${pos.notes || ''}`));
         const rewardCoinsStr = isStakedCrypto
           ? Number(pos.stakingRewardCoins || 0).toFixed(5).replace(/\.?0+$/, '') || '0'
           : '';
@@ -946,8 +1199,9 @@
           ? Number(pos.totalQty || pos.quantity || 0).toFixed(5).replace(/\.?0+$/, '') || '0'
           : '';
         const compoundLabel = pos.stakingCompound ? '🔄 Реінвест (APY)' : '📥 Без реінвесту (APR)';
+        const aaveBadgeText = isAaveSync ? `👻 Aave Auto · ` : '';
         qtyOrRateHtml = `
-          <div class="dual-val-primary">${pos.quantity} шт.${isStakedCrypto ? ` <span class="pill-badge pill-positive" style="margin-left:4px;" title="${compoundLabel}">⚡ ${pos.stakingApy}% · ${pos.stakingCompound ? 'Реінвест 🔄' : 'Без реінвесту'}</span>` : ''}</div>
+          <div class="dual-val-primary">${pos.quantity} шт.${isStakedCrypto ? ` <span class="pill-badge pill-positive" style="margin-left:4px;" title="${isAaveSync ? `Автосинхронізація ставки Aave (${pos.aaveChain || 'Ethereum'}) · ` : ''}${compoundLabel}">⚡ ${pos.stakingApy}% · ${aaveBadgeText}${pos.stakingCompound ? 'Реінвест 🔄' : 'Без реінвесту'}</span>` : ''}</div>
           ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive);">⚡ +${rewardCoinsStr} ${escapeHtml(pos.ticker)} (${pos.stakingCompound ? `разом ${totalCoinsStr} шт.` : 'на спот'} · ${pos.stakingElapsedDays} дн.)</div>` : ''}
           <div class="dual-val-sub">Вкладено: ${fmtUsd(pos.investedUsd)}</div>
         `;
@@ -1303,6 +1557,9 @@
       const stakingApyVal = existing?.stakingApy ?? 4.5;
       const stakingStartVal = existing?.stakingStartDate || existing?.createdAt || todayStr;
       const stakingEarnedVal = existing?.stakingEarnedCoins ? existing.stakingEarnedCoins : '';
+      const autoDetectedAave = existing && (existing.stakingAutoSync === 'aave' || (existing.stakingAutoSync === undefined && /aave/i.test(`${existing.platform || ''} ${existing.notes || ''} ${existing.name || ''}`)));
+      const stakingAutoSyncVal = autoDetectedAave ? 'aave' : (existing?.stakingAutoSync || 'manual');
+      const aaveChainVal = existing ? inferAaveChainFromText(existing) : 'Ethereum';
 
       container.innerHTML = `
         <div class="form-group full-width">
@@ -1317,7 +1574,7 @@
           <input type="text" class="form-input" id="f-name" value="${escapeHtml(nameVal)}" placeholder="Підтягнеться автоматично" />
         </div>
         <div class="form-group">
-          <label class="form-label" for="f-platform">${isCrypto ? 'Гаманець / Біржа' : 'Брокер'}</label>
+          <label class="form-label" for="f-platform">${isCrypto ? 'Гаманець / Біржа / Протокол (напр. Aave, Binance)' : 'Брокер'}</label>
           <input type="text" class="form-input" id="f-platform" value="${escapeHtml(platVal)}" />
         </div>
         <div class="form-group">
@@ -1332,13 +1589,42 @@
         <div class="form-group full-width" style="padding: 12px 14px; border-radius: var(--radius-md); background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.22);">
           <label class="checkbox-row" style="margin-bottom: 0;">
             <input type="checkbox" id="f-is-staked" ${isStakedVal ? 'checked' : ''} />
-            <span>⚡ <strong>Актив у стейкінгу / крипто-депозиті (Earn)</strong> — нараховувати пасивний дохід</span>
+            <span>⚡ <strong>Актив у стейкінгу / крипто-депозиті (Earn / Aave)</strong> — нараховувати пасивний дохід</span>
           </label>
           <div id="crypto-staking-fields" class="form-grid" style="display: ${isStakedVal ? 'grid' : 'none'}; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08);">
             <div class="form-group full-width">
+              <label class="form-label" for="f-staking-autosync">Джерело ставки (% стейкінгу)</label>
+              <select class="form-select" id="f-staking-autosync">
+                <option value="manual" ${stakingAutoSyncVal !== 'aave' ? 'selected' : ''}>✍️ Вручну (фіксована ставка %)</option>
+                <option value="aave" ${stakingAutoSyncVal === 'aave' ? 'selected' : ''}>👻 Автосинхронізація з Aave (жива ставка зі смарт-контракту Aave)</option>
+              </select>
+            </div>
+            <div id="aave-sync-box" class="form-group full-width" style="display: ${stakingAutoSyncVal === 'aave' ? 'block' : 'none'}; padding: 10px 12px; border-radius: 8px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25);">
+              <div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 180px;">
+                  <label class="form-label" for="f-aave-chain" style="display:block; margin-bottom:4px;">Мережа / Пул Aave</label>
+                  <select class="form-select" id="f-aave-chain">
+                    <option value="Ethereum" ${aaveChainVal === 'Ethereum' ? 'selected' : ''}>🌐 Aave V3 Ethereum Mainnet</option>
+                    <option value="Arbitrum" ${aaveChainVal === 'Arbitrum' ? 'selected' : ''}>🔵 Aave V3 Arbitrum</option>
+                    <option value="Polygon" ${aaveChainVal === 'Polygon' ? 'selected' : ''}>🟣 Aave V3 Polygon</option>
+                    <option value="Base" ${aaveChainVal === 'Base' ? 'selected' : ''}>🔷 Aave V3 Base</option>
+                    <option value="Optimism" ${aaveChainVal === 'Optimism' ? 'selected' : ''}>🔴 Aave V3 Optimism</option>
+                    <option value="Avalanche" ${aaveChainVal === 'Avalanche' ? 'selected' : ''}>🔺 Aave V3 Avalanche</option>
+                    <option value="SafetyModule" ${aaveChainVal === 'SafetyModule' ? 'selected' : ''}>🛡️ Aave Safety Module (стейкінг AAVE / stkAAVE)</option>
+                  </select>
+                </div>
+                <button type="button" class="btn btn-secondary" id="btn-fetch-aave-now" style="white-space: nowrap; height: 38px;">
+                  🔄 Оновити % з Aave
+                </button>
+              </div>
+              <div id="aave-sync-status" style="font-size: 11.5px; color: var(--text-secondary); margin-top: 6px;">
+                Ставка автоматично оновлюється з блокчейну Aave при кожному відкритті та оновленні котирувань.
+              </div>
+            </div>
+            <div class="form-group full-width">
               <label class="form-label" for="f-staking-compound">Тип нарахування стейкінгу (реінвестування)</label>
               <select class="form-select" id="f-staking-compound">
-                <option value="true" ${stakingCompoundVal ? 'selected' : ''}>🔄 З реінвестуванням (Auto-Compound / складний відсоток — дохід додається до стейкінгу)</option>
+                <option value="true" ${stakingCompoundVal ? 'selected' : ''}>🔄 З реінвестуванням (Auto-Compound / складний відсоток — як aTokens в Aave)</option>
                 <option value="false" ${!stakingCompoundVal ? 'selected' : ''}>📥 Без реінвестування (Фіксований APR — нарахування лише на початкову кількість монет)</option>
               </select>
             </div>
@@ -1366,9 +1652,71 @@
       if (isCrypto) {
         const stakedCheckbox = document.getElementById('f-is-staked');
         const stakingFieldsBox = document.getElementById('crypto-staking-fields');
+        const autoSyncSelect = document.getElementById('f-staking-autosync');
+        const aaveSyncBox = document.getElementById('aave-sync-box');
+        const aaveChainSelect = document.getElementById('f-aave-chain');
+        const btnFetchAave = document.getElementById('btn-fetch-aave-now');
+        const aaveStatusEl = document.getElementById('aave-sync-status');
+        const apyInput = document.getElementById('f-staking-apy');
+        const platformInput = document.getElementById('f-platform');
+
+        async function triggerModalAaveFetch() {
+          const sym = (document.getElementById('f-ticker')?.value || '').toUpperCase().trim();
+          const ch = aaveChainSelect?.value || 'Ethereum';
+          if (aaveStatusEl) {
+            aaveStatusEl.style.color = 'var(--text-secondary)';
+            aaveStatusEl.textContent = `⏳ Запит актуальної ставки Aave для ${sym} (${ch})...`;
+          }
+          const res = await fetchLiveAaveApy(sym, ch);
+          if (res && typeof res.apy === 'number') {
+            if (apyInput) apyInput.value = res.apy;
+            if (aaveStatusEl) {
+              aaveStatusEl.style.color = 'var(--positive)';
+              aaveStatusEl.textContent = `✅ Підтягнуто живу ставку: ${res.apy}% APY (${res.source})`;
+            }
+          } else if (aaveStatusEl) {
+            aaveStatusEl.style.color = 'var(--accent-primary)';
+            aaveStatusEl.textContent = `⚠️ Для тікера ${sym} у мережі ${ch} пул не знайдено — оберіть іншу мережу або вкажіть % вручну.`;
+          }
+        }
+
         stakedCheckbox?.addEventListener('change', () => {
           stakingFieldsBox.style.display = stakedCheckbox.checked ? 'grid' : 'none';
+          if (stakedCheckbox.checked && autoSyncSelect?.value === 'aave') {
+            triggerModalAaveFetch();
+          }
         });
+
+        autoSyncSelect?.addEventListener('change', () => {
+          const isAave = autoSyncSelect.value === 'aave';
+          if (aaveSyncBox) aaveSyncBox.style.display = isAave ? 'block' : 'none';
+          if (isAave) triggerModalAaveFetch();
+        });
+
+        aaveChainSelect?.addEventListener('change', () => {
+          if (autoSyncSelect?.value === 'aave') triggerModalAaveFetch();
+        });
+
+        btnFetchAave?.addEventListener('click', () => {
+          triggerModalAaveFetch();
+        });
+
+        // If user types "Aave" in platform field, automatically enable staking + Aave sync
+        platformInput?.addEventListener('input', () => {
+          if (/aave/i.test(platformInput.value) && autoSyncSelect && autoSyncSelect.value !== 'aave') {
+            if (stakedCheckbox && !stakedCheckbox.checked) {
+              stakedCheckbox.checked = true;
+              stakingFieldsBox.style.display = 'grid';
+            }
+            autoSyncSelect.value = 'aave';
+            if (aaveSyncBox) aaveSyncBox.style.display = 'block';
+            triggerModalAaveFetch();
+          }
+        });
+
+        if (isStakedVal && stakingAutoSyncVal === 'aave') {
+          triggerModalAaveFetch();
+        }
       }
 
       container.querySelectorAll('[data-pick-ticker]').forEach(btn => {
@@ -1592,6 +1940,8 @@
       const defaultName = quoteBook?.[ticker]?.name || ticker;
       const isStaked = category === 'crypto' ? Boolean(document.getElementById('f-is-staked')?.checked) : false;
       const stakingCompound = category === 'crypto' ? (document.getElementById('f-staking-compound')?.value !== 'false') : true;
+      const stakingAutoSync = category === 'crypto' ? (document.getElementById('f-staking-autosync')?.value || 'manual') : 'manual';
+      const aaveChain = category === 'crypto' ? (document.getElementById('f-aave-chain')?.value || 'Ethereum') : '';
       newPos = {
         ...newPos,
         ticker,
@@ -1603,6 +1953,8 @@
         ...(category === 'crypto' ? {
           isStaked,
           stakingCompound,
+          stakingAutoSync: isStaked ? stakingAutoSync : 'manual',
+          aaveChain: (isStaked && stakingAutoSync === 'aave') ? aaveChain : '',
           stakingApy: isStaked ? (parseFloat(document.getElementById('f-staking-apy')?.value) || 0) : 0,
           stakingStartDate: isStaked ? (document.getElementById('f-staking-start')?.value || '') : '',
           stakingEarnedCoins: isStaked ? (parseFloat(document.getElementById('f-staking-earned')?.value) || 0) : 0
