@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)</title>
   <meta name="description" content="Персональний трекер інвестицій Мані-кеш: Криптовалюта, Фондовий ринок, ОВДП, Депозити та Готівка. Автоматичні котирування та облік у гривні (₴) і доларах ($)." />
-  <link rel="stylesheet" href="./index.css?v=11" />
+  <link rel="stylesheet" href="./index.css?v=12" />
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -118,8 +118,8 @@
 
         <div class="topbar-controls">
           <div class="segmented-control" role="group" aria-label="Пріоритетна валюта відображення">
-            <button type="button" class="seg-btn active" data-currency="UAH" id="btn-curr-uah">₴ UAH + $ USD</button>
-            <button type="button" class="seg-btn" data-currency="USD" id="btn-curr-usd">$ USD + ₴ UAH</button>
+            <button type="button" class="seg-btn active" data-currency="USD" id="btn-curr-usd">$ USD + ₴ UAH</button>
+            <button type="button" class="seg-btn" data-currency="UAH" id="btn-curr-uah">₴ UAH + $ USD</button>
           </div>
 
           <button type="button" class="btn btn-secondary" id="btn-topbar-cloud" title="Налаштування хмарної синхронізації з Google Диском та параметрів портфеля">
@@ -144,8 +144,8 @@
               <span id="hero-scope-label">Сукупний капітал (Усі активи)</span>
             </div>
             <div class="wealth-dual-values">
-              <div class="wealth-main-amount" id="hero-primary-total">0 ₴</div>
-              <div class="wealth-secondary-amount" id="hero-secondary-total">$0.00</div>
+              <div class="wealth-main-amount" id="hero-primary-total">$0.00</div>
+              <div class="wealth-secondary-amount" id="hero-secondary-total">0 ₴</div>
             </div>
             <div class="wealth-stat-sub" id="hero-fx-caption">
               Перераховано за курсом 1$ = 41.65 ₴ · 1€ = 44.80 ₴
@@ -154,18 +154,18 @@
 
           <div class="wealth-stat-block">
             <div class="metric-eyebrow">Сукупний прибуток (PnL + Нараховані %)</div>
-            <div class="wealth-stat-value" id="hero-pnl-primary">+0 ₴</div>
+            <div class="wealth-stat-value" id="hero-pnl-primary">+$0.00</div>
             <div class="wealth-stat-sub">
-              <span id="hero-pnl-secondary">+$0.00</span>
+              <span id="hero-pnl-secondary">+0 ₴</span>
               <span class="pill-badge pill-positive" id="hero-pnl-pct">+0.00%</span>
             </div>
           </div>
 
           <div class="wealth-stat-block">
             <div class="metric-eyebrow">Пасивний дохід (ОВДП + Депозити + Стейкінг)</div>
-            <div class="wealth-stat-value" id="hero-yield-accrued">+0 ₴</div>
+            <div class="wealth-stat-value" id="hero-yield-accrued">+$0.00</div>
             <div class="wealth-stat-sub">
-              <span id="hero-yield-sub">Накопичено на сьогодні · Прогноз за рік: <strong id="hero-annual-passive">0 ₴</strong></span>
+              <span id="hero-yield-sub">Накопичено на сьогодні · Прогноз за рік: <strong id="hero-annual-passive">$0.00</strong></span>
             </div>
           </div>
         </section>
@@ -193,6 +193,9 @@
             <div class="currency-bars" id="currency-exposure-list"></div>
           </div>
         </section>
+
+        <!-- Stocks Portfolio Strategy & Monthly Rebalancing Calculator -->
+        <section class="panel-card" id="stocks-strategy-section" style="display:none; margin-bottom:20px;" aria-label="Стратегія фондового портфеля та калькулятор ребалансування"></section>
 
         <!-- Positions Table Panel -->
         <section class="panel-card" aria-label="Список активів">
@@ -355,6 +358,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=11"></script>
+  <script src="./app.js?v=12"></script>
 </body>
 </html>

@@ -118,11 +118,12 @@
 
   const state = {
     activeCategory: 'all',
-    primaryCurrency: 'UAH',
+    primaryCurrency: 'USD',
     searchQuery: '',
     token: safeGetItem('kapital_auth_token') || '',
     settings: {
-      primaryCurrency: 'UAH',
+      primaryCurrency: 'USD',
+      defaultUsdMigrated: true,
       manualFxOverride: false,
       fxRates: {
         USD_UAH: 41.65,
@@ -595,7 +596,11 @@
 
       if (data && data.settings) {
         state.settings = { ...state.settings, ...data.settings };
-        state.primaryCurrency = state.settings.primaryCurrency || 'UAH';
+        if (!data.settings.defaultUsdMigrated) {
+          state.settings.primaryCurrency = 'USD';
+          state.settings.defaultUsdMigrated = true;
+        }
+        state.primaryCurrency = state.settings.primaryCurrency || 'USD';
       }
       if (data && Array.isArray(data.positions) && data.positions.length > 0) {
         state.positions = data.positions;
@@ -622,7 +627,14 @@
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
-            if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
+            if (parsed.settings) {
+              state.settings = { ...state.settings, ...parsed.settings };
+              if (!parsed.settings.defaultUsdMigrated) {
+                state.settings.primaryCurrency = 'USD';
+                state.settings.defaultUsdMigrated = true;
+              }
+              state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+            }
             if (Array.isArray(parsed.positions) && parsed.positions.length > 0) {
               state.positions = parsed.positions;
             }
@@ -1113,7 +1125,15 @@
     }
 
     // Show/hide Stocks Strategy & Monthly Rebalancing Calculator section
-    const stocksStrategySection = document.getElementById('stocks-strategy-section');
+    let stocksStrategySection = document.getElementById('stocks-strategy-section');
+    if (!stocksStrategySection && overviewSection && overviewSection.parentNode) {
+      stocksStrategySection = document.createElement('section');
+      stocksStrategySection.className = 'panel-card';
+      stocksStrategySection.id = 'stocks-strategy-section';
+      stocksStrategySection.style.display = 'none';
+      stocksStrategySection.style.marginBottom = '20px';
+      overviewSection.parentNode.insertBefore(stocksStrategySection, overviewSection.nextSibling);
+    }
     if (stocksStrategySection) {
       if (state.activeCategory === 'stocks') {
         stocksStrategySection.style.display = 'block';
@@ -1792,6 +1812,8 @@
   }
 
   function renderOverviewBreakdown(allEvaluated, grandTotalUah) {
+    const rates = getEffectiveRates();
+    const isUsdPrimary = state.primaryCurrency === 'USD';
     const categoriesOrder = ['crypto', 'stocks', 'ovdp', 'deposits', 'cash'];
     const catTotals = {};
     categoriesOrder.forEach(c => {
@@ -1830,19 +1852,25 @@
         barEl.appendChild(seg);
       }
 
+      const primaryCatVal = isUsdPrimary ? fmtUsd(stats.usd) : fmtUah(stats.uah);
+      const secondaryCatVal = isUsdPrimary ? fmtUah(stats.uah) : fmtUsd(stats.usd);
+      const strategyHint = cat === 'stocks'
+        ? `<span class="pill-badge pill-positive" style="margin-left:6px; font-size:10.5px;">🎯 Стратегія та калькулятор</span>`
+        : '';
+
       const card = document.createElement('div');
       card.className = 'allocation-item';
       card.innerHTML = `
         <div class="allocation-item-left">
           <span class="cat-dot" style="background: ${info.color}; width:10px; height:10px;"></span>
           <div>
-            <div class="allocation-item-name">${info.shortName}</div>
+            <div class="allocation-item-name">${info.shortName}${strategyHint}</div>
             <div class="allocation-item-share tabular">${sharePct.toFixed(1)}% портфеля · ${stats.count} поз.</div>
           </div>
         </div>
         <div class="allocation-item-right">
-          <div class="allocation-item-uah">${fmtUah(stats.uah)}</div>
-          <div class="allocation-item-usd">${fmtUsd(stats.usd)}</div>
+          <div class="allocation-item-uah">${primaryCatVal}</div>
+          <div class="allocation-item-usd">${secondaryCatVal}</div>
         </div>
       `;
       card.addEventListener('click', () => {
@@ -1863,13 +1891,17 @@
     Object.keys(currTotals).sort((a, b) => currTotals[b] - currTotals[a]).forEach(curr => {
       const valUah = currTotals[curr];
       if (valUah <= 0 && curr !== 'UAH' && curr !== 'USD') return;
+      const valUsd = rates.USD_UAH > 0 ? valUah / rates.USD_UAH : 0;
       const pct = grandTotalUah > 0 ? (valUah / grandTotalUah) * 100 : 0;
+      const amountDisplay = isUsdPrimary
+        ? `${fmtUsd(valUsd)} · ${fmtUah(valUah)}`
+        : `${fmtUah(valUah)} · ${fmtUsd(valUsd)}`;
       const row = document.createElement('div');
       row.className = 'currency-row';
       row.innerHTML = `
         <div class="currency-row-top">
           <span>${currencyLabels[curr] || curr}</span>
-          <span class="tabular"><strong>${pct.toFixed(1)}%</strong> (${fmtUah(valUah)})</span>
+          <span class="tabular"><strong>${pct.toFixed(1)}%</strong> (${amountDisplay})</span>
         </div>
         <div class="currency-progress-bg">
           <div class="currency-progress-fill" style="width: ${pct.toFixed(1)}%;"></div>
@@ -1880,6 +1912,7 @@
   }
 
   function renderPositionsTable(positions) {
+    const isUsdPrimary = state.primaryCurrency === 'USD';
     const query = state.searchQuery.trim().toLowerCase();
     const filtered = query
       ? positions.filter(p =>
@@ -1905,7 +1938,7 @@
         <th>Категорія / Платформа</th>
         <th class="text-right">Кількість / Ставка</th>
         <th class="text-right">Ціна купівлі → Поточна</th>
-        <th class="text-right">Вартість (₴ UAH / $ USD)</th>
+        <th class="text-right">Вартість (${isUsdPrimary ? '$ USD / ₴ UAH' : '₴ UAH / $ USD'})</th>
         <th class="text-right">Прибуток / Нараховано</th>
         <th class="text-right">Дії</th>
       </tr>
@@ -1956,12 +1989,14 @@
           <div class="dual-val-sub">Купівля: ${fmtUsd(pos.buyPriceUsd)}</div>
         `;
         const pnlClass = pos.pnlUsd >= 0 ? 'pill-positive' : 'pill-negative';
+        const pnlPrimaryStr = isUsdPrimary ? fmtUsd(pos.pnlUsd, true) : fmtUah(pos.pnlUah, true);
+        const pnlSecondaryStr = isUsdPrimary ? fmtUah(pos.pnlUah, true) : fmtUsd(pos.pnlUsd, true);
         pnlHtml = `
           <div class="dual-val-primary" style="color:${pos.pnlUsd >= 0 ? 'var(--positive)' : 'var(--negative)'}">
-            ${fmtUah(pos.pnlUah, true)}
+            ${pnlPrimaryStr}
           </div>
           <div class="dual-val-sub">
-            ${fmtUsd(pos.pnlUsd, true)} <span class="pill-badge ${pnlClass}">${fmtPct(pos.pnlPct)}</span>
+            ${pnlSecondaryStr} <span class="pill-badge ${pnlClass}">${fmtPct(pos.pnlPct)}</span>
           </div>
           ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive); font-size:11px; margin-top:2px;">⚡ Стейкінг: +${fmtUsd(pos.stakingRewardUsd)} (${fmtUah(pos.stakingRewardUah, true)})</div>` : ''}
         `;
@@ -1978,7 +2013,7 @@
         `;
         pnlHtml = `
           <div class="dual-val-primary" style="color:var(--positive)">+${fmtCurr(pos.accruedNative, pos.nativeCurrency)}</div>
-          <div class="dual-val-sub">Вже нараховано (${fmtUah(pos.pnlUah, true)})</div>
+          <div class="dual-val-sub">Вже нараховано (${isUsdPrimary ? fmtUsd(pos.pnlUsd, true) : fmtUah(pos.pnlUah, true)})</div>
         `;
       } else if (pos.category === 'deposits') {
         badgeCode = 'ДЕП';
@@ -1994,7 +2029,7 @@
         `;
         pnlHtml = `
           <div class="dual-val-primary" style="color:var(--positive)">+${fmtCurr(pos.accruedNative, pos.nativeCurrency)}</div>
-          <div class="dual-val-sub">Накопичено (${fmtUah(pos.pnlUah, true)})</div>
+          <div class="dual-val-sub">Накопичено (${isUsdPrimary ? fmtUsd(pos.pnlUsd, true) : fmtUah(pos.pnlUah, true)})</div>
         `;
       } else {
         // Cash
@@ -3053,7 +3088,14 @@
   if (initialCached) {
     try {
       const parsed = JSON.parse(initialCached);
-      if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
+      if (parsed.settings) {
+        state.settings = { ...state.settings, ...parsed.settings };
+        if (!parsed.settings.defaultUsdMigrated) {
+          state.settings.primaryCurrency = 'USD';
+          state.settings.defaultUsdMigrated = true;
+        }
+        state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+      }
       if (Array.isArray(parsed.positions) && parsed.positions.length > 0) {
         state.positions = parsed.positions;
       } else {
