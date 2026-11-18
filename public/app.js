@@ -206,7 +206,46 @@
       const qty = Number(pos.quantity) || 0;
       const buyPriceUsd = Number(pos.buyPriceUsd) || 0;
       const investedUsd = qty * buyPriceUsd;
-      const currentValUsd = qty * livePriceUsd;
+
+      // Crypto Staking calculation (with or without reinvestment)
+      const isStaked = cat === 'crypto' && Boolean(pos.isStaked);
+      const stakingApy = isStaked ? (Number(pos.stakingApy) || 0) : 0;
+      const stakingCompound = pos.stakingCompound !== undefined ? Boolean(pos.stakingCompound) : true;
+      let stakingRewardCoins = 0;
+      let stakingElapsedDays = 0;
+      let stakingAnnualCoins = 0;
+
+      if (isStaked && stakingApy > 0) {
+        const startStr = pos.stakingStartDate || pos.createdAt;
+        if (startStr) {
+          const msPerDay = 1000 * 60 * 60 * 24;
+          stakingElapsedDays = Math.max(0, Math.round((new Date() - new Date(startStr)) / msPerDay));
+        }
+        const manualEarned = Number(pos.stakingEarnedCoins);
+        if (!Number.isNaN(manualEarned) && manualEarned > 0) {
+          stakingRewardCoins = manualEarned;
+        } else if (stakingCompound) {
+          const dailyRate = (stakingApy / 100) / 365;
+          stakingRewardCoins = qty * (Math.pow(1 + dailyRate, stakingElapsedDays) - 1);
+        } else {
+          stakingRewardCoins = qty * (stakingApy / 100) * (stakingElapsedDays / 365);
+        }
+
+        if (stakingCompound) {
+          const dailyRate = (stakingApy / 100) / 365;
+          stakingAnnualCoins = (qty + stakingRewardCoins) * (Math.pow(1 + dailyRate, 365) - 1);
+        } else {
+          stakingAnnualCoins = qty * (stakingApy / 100);
+        }
+      }
+
+      const totalQty = qty + stakingRewardCoins;
+      const stakingRewardUsd = stakingRewardCoins * livePriceUsd;
+      const stakingRewardUah = stakingRewardUsd * rates.USD_UAH;
+      const stakingAnnualUsd = stakingAnnualCoins * livePriceUsd;
+      const stakingAnnualUah = stakingAnnualUsd * rates.USD_UAH;
+
+      const currentValUsd = totalQty * livePriceUsd;
       const currentValUah = currentValUsd * rates.USD_UAH;
       const investedUah = investedUsd * rates.USD_UAH;
       const pnlUsd = currentValUsd - investedUsd;
@@ -220,6 +259,17 @@
         nativeCurrency: 'USD',
         livePriceUsd,
         change24h,
+        isStaked,
+        stakingApy,
+        stakingCompound,
+        stakingElapsedDays,
+        stakingRewardCoins,
+        stakingRewardUsd,
+        stakingRewardUah,
+        stakingAnnualCoins,
+        stakingAnnualUsd,
+        stakingAnnualUah,
+        totalQty,
         investedUsd,
         investedUah,
         currentValUsd,
@@ -227,8 +277,8 @@
         pnlUsd,
         pnlUah,
         pnlPct,
-        accruedUah: 0,
-        annualPassiveUah: 0
+        accruedUah: stakingRewardUah,
+        annualPassiveUah: stakingAnnualUah
       };
     }
 
@@ -892,9 +942,13 @@
         const rewardCoinsStr = isStakedCrypto
           ? Number(pos.stakingRewardCoins || 0).toFixed(5).replace(/\.?0+$/, '') || '0'
           : '';
+        const totalCoinsStr = isStakedCrypto
+          ? Number(pos.totalQty || pos.quantity || 0).toFixed(5).replace(/\.?0+$/, '') || '0'
+          : '';
+        const compoundLabel = pos.stakingCompound ? '🔄 Реінвест (APY)' : '📥 Без реінвесту (APR)';
         qtyOrRateHtml = `
-          <div class="dual-val-primary">${pos.quantity} шт.${isStakedCrypto ? ` <span class="pill-badge pill-positive" style="margin-left:4px;" title="Стейкінг ${pos.stakingApy}% річних">⚡ ${pos.stakingApy}% APY</span>` : ''}</div>
-          ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive);">⚡ Стейкінг: +${rewardCoinsStr} ${escapeHtml(pos.ticker)} (${pos.stakingElapsedDays} дн.)</div>` : ''}
+          <div class="dual-val-primary">${pos.quantity} шт.${isStakedCrypto ? ` <span class="pill-badge pill-positive" style="margin-left:4px;" title="${compoundLabel}">⚡ ${pos.stakingApy}% · ${pos.stakingCompound ? 'Реінвест 🔄' : 'Без реінвесту'}</span>` : ''}</div>
+          ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive);">⚡ +${rewardCoinsStr} ${escapeHtml(pos.ticker)} (${pos.stakingCompound ? `разом ${totalCoinsStr} шт.` : 'на спот'} · ${pos.stakingElapsedDays} дн.)</div>` : ''}
           <div class="dual-val-sub">Вкладено: ${fmtUsd(pos.investedUsd)}</div>
         `;
         priceComparisonHtml = `
@@ -909,7 +963,7 @@
           <div class="dual-val-sub">
             ${fmtUsd(pos.pnlUsd, true)} <span class="pill-badge ${pnlClass}">${fmtPct(pos.pnlPct)}</span>
           </div>
-          ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive); font-size:11px; margin-top:2px;">⚡ Нараховано: +${fmtUsd(pos.stakingRewardUsd)} (${fmtUah(pos.stakingRewardUah, true)})</div>` : ''}
+          ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive); font-size:11px; margin-top:2px;">⚡ Стейкінг: +${fmtUsd(pos.stakingRewardUsd)} (${fmtUah(pos.stakingRewardUah, true)})</div>` : ''}
         `;
       } else if (pos.category === 'ovdp') {
         badgeCode = 'ОВДП';
@@ -1032,6 +1086,7 @@
       const platVal = existing?.platform || (isCrypto ? 'Binance / Ledger' : 'Interactive Brokers');
       const notesVal = existing?.notes || '';
       const isStakedVal = Boolean(existing?.isStaked);
+      const stakingCompoundVal = existing?.stakingCompound !== undefined ? Boolean(existing.stakingCompound) : true;
       const stakingApyVal = existing?.stakingApy ?? 4.5;
       const stakingStartVal = existing?.stakingStartDate || existing?.createdAt || todayStr;
       const stakingEarnedVal = existing?.stakingEarnedCoins ? existing.stakingEarnedCoins : '';
@@ -1067,8 +1122,15 @@
             <span>⚡ <strong>Актив у стейкінгу / крипто-депозиті (Earn)</strong> — нараховувати пасивний дохід</span>
           </label>
           <div id="crypto-staking-fields" class="form-grid" style="display: ${isStakedVal ? 'grid' : 'none'}; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08);">
+            <div class="form-group full-width">
+              <label class="form-label" for="f-staking-compound">Тип нарахування стейкінгу (реінвестування)</label>
+              <select class="form-select" id="f-staking-compound">
+                <option value="true" ${stakingCompoundVal ? 'selected' : ''}>🔄 З реінвестуванням (Auto-Compound / складний відсоток — дохід додається до стейкінгу)</option>
+                <option value="false" ${!stakingCompoundVal ? 'selected' : ''}>📥 Без реінвестування (Фіксований APR — нарахування лише на початкову кількість монет)</option>
+              </select>
+            </div>
             <div class="form-group">
-              <label class="form-label" for="f-staking-apy">Річна ставка стейкінгу (% APY / APR)</label>
+              <label class="form-label" for="f-staking-apy">Річна ставка стейкінгу (% річних)</label>
               <input type="number" step="0.01" min="0" max="500" class="form-input tabular" id="f-staking-apy" value="${stakingApyVal}" placeholder="4.5" />
             </div>
             <div class="form-group">
@@ -1076,7 +1138,7 @@
               <input type="date" class="form-input tabular" id="f-staking-start" value="${stakingStartVal}" />
             </div>
             <div class="form-group full-width">
-              <label class="form-label" for="f-staking-earned">Вже нараховано монет (необов'язково — залиште порожнім для авторозрахунку за % APY)</label>
+              <label class="form-label" for="f-staking-earned">Вже нараховано монет (необов'язково — залиште порожнім для авторозрахунку)</label>
               <input type="number" step="any" min="0" class="form-input tabular" id="f-staking-earned" value="${stakingEarnedVal}" placeholder="Авторозрахунок від дати початку" />
             </div>
           </div>
@@ -1312,6 +1374,7 @@
       const quoteBook = category === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
       const defaultName = quoteBook?.[ticker]?.name || ticker;
       const isStaked = category === 'crypto' ? Boolean(document.getElementById('f-is-staked')?.checked) : false;
+      const stakingCompound = category === 'crypto' ? (document.getElementById('f-staking-compound')?.value !== 'false') : true;
       newPos = {
         ...newPos,
         ticker,
@@ -1322,6 +1385,7 @@
         notes: document.getElementById('f-notes').value.trim(),
         ...(category === 'crypto' ? {
           isStaked,
+          stakingCompound,
           stakingApy: isStaked ? (parseFloat(document.getElementById('f-staking-apy')?.value) || 0) : 0,
           stakingStartDate: isStaked ? (document.getElementById('f-staking-start')?.value || '') : '',
           stakingEarnedCoins: isStaked ? (parseFloat(document.getElementById('f-staking-earned')?.value) || 0) : 0
