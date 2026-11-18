@@ -123,6 +123,9 @@ function getInitialData() {
         buyPriceUsd: 2580,
         platform: 'Binance',
         notes: 'Стейкінг ETH',
+        isStaked: true,
+        stakingApy: 3.8,
+        stakingStartDate: '2026-01-15',
         createdAt: '2026-01-15'
       },
       {
@@ -134,6 +137,9 @@ function getInitialData() {
         buyPriceUsd: 148.5,
         platform: 'Phantom',
         notes: 'Ліквідний стейкінг',
+        isStaked: true,
+        stakingApy: 7.2,
+        stakingStartDate: '2026-03-04',
         createdAt: '2026-03-04'
       },
       // Stock market sample positions

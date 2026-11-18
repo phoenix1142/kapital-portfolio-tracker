@@ -367,9 +367,9 @@
   };
 
   const DEFAULT_DEMO_POSITIONS = [
-    { id: 'crypto-btc-1', category: 'crypto', ticker: 'BTC', name: 'Bitcoin', quantity: 0.125, buyPriceUsd: 64200, platform: 'Ledger Nano X', notes: 'Довгостроковий холодний гаманець', createdAt: '2025-11-10' },
-    { id: 'crypto-eth-2', category: 'crypto', ticker: 'ETH', name: 'Ethereum', quantity: 1.5, buyPriceUsd: 2580, platform: 'Binance', notes: 'Стейкінг ETH', createdAt: '2026-01-15' },
-    { id: 'crypto-sol-3', category: 'crypto', ticker: 'SOL', name: 'Solana', quantity: 18, buyPriceUsd: 148.5, platform: 'Phantom', notes: 'Ліквідний стейкінг', createdAt: '2026-03-04' },
+    { id: 'crypto-btc-1', category: 'crypto', ticker: 'BTC', name: 'Bitcoin', quantity: 0.125, buyPriceUsd: 64200, platform: 'Ledger Nano X', notes: 'Довгостроковий холодний гаманець', createdAt: '2025-11-10', isStaked: false },
+    { id: 'crypto-eth-2', category: 'crypto', ticker: 'ETH', name: 'Ethereum', quantity: 1.5, buyPriceUsd: 2580, platform: 'Binance Earn', notes: 'Стейкінг ETH', createdAt: '2026-01-15', isStaked: true, stakingApy: 3.8, stakingStartDate: '2026-01-15' },
+    { id: 'crypto-sol-3', category: 'crypto', ticker: 'SOL', name: 'Solana', quantity: 18, buyPriceUsd: 148.5, platform: 'Phantom / JitoSOL', notes: 'Ліквідний стейкінг', createdAt: '2026-03-04', isStaked: true, stakingApy: 7.2, stakingStartDate: '2026-03-04' },
     { id: 'stock-voo-1', category: 'stocks', ticker: 'VOO', name: 'Vanguard S&P 500 ETF', quantity: 12, buyPriceUsd: 472.00, platform: 'Interactive Brokers', notes: 'Базовий індексний фонд США', createdAt: '2025-09-20' },
     { id: 'stock-nvda-2', category: 'stocks', ticker: 'NVDA', name: 'NVIDIA Corp.', quantity: 20, buyPriceUsd: 108.50, platform: 'Interactive Brokers', notes: 'AI та напівпровідники', createdAt: '2026-02-12' },
     { id: 'stock-vwce-3', category: 'stocks', ticker: 'VWCE', name: 'Vanguard FTSE All-World UCITS', quantity: 25, buyPriceUsd: 124.00, platform: 'Freedom24', notes: 'Глобальний акумулюючий ETF (0% податку на дивіденди всередині фонду)', createdAt: '2026-01-08' },
@@ -888,8 +888,13 @@
         badgeCode = pos.ticker || 'ASSET';
         const chgSign = pos.change24h >= 0 ? '+' : '';
         const chgColor = pos.change24h >= 0 ? 'var(--positive)' : 'var(--negative)';
+        const isStakedCrypto = pos.category === 'crypto' && pos.isStaked && pos.stakingApy > 0;
+        const rewardCoinsStr = isStakedCrypto
+          ? Number(pos.stakingRewardCoins || 0).toFixed(5).replace(/\.?0+$/, '') || '0'
+          : '';
         qtyOrRateHtml = `
-          <div class="dual-val-primary">${pos.quantity} шт.</div>
+          <div class="dual-val-primary">${pos.quantity} шт.${isStakedCrypto ? ` <span class="pill-badge pill-positive" style="margin-left:4px;" title="Стейкінг ${pos.stakingApy}% річних">⚡ ${pos.stakingApy}% APY</span>` : ''}</div>
+          ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive);">⚡ Стейкінг: +${rewardCoinsStr} ${escapeHtml(pos.ticker)} (${pos.stakingElapsedDays} дн.)</div>` : ''}
           <div class="dual-val-sub">Вкладено: ${fmtUsd(pos.investedUsd)}</div>
         `;
         priceComparisonHtml = `
@@ -904,6 +909,7 @@
           <div class="dual-val-sub">
             ${fmtUsd(pos.pnlUsd, true)} <span class="pill-badge ${pnlClass}">${fmtPct(pos.pnlPct)}</span>
           </div>
+          ${isStakedCrypto ? `<div class="dual-val-sub" style="color:var(--positive); font-size:11px; margin-top:2px;">⚡ Нараховано: +${fmtUsd(pos.stakingRewardUsd)} (${fmtUah(pos.stakingRewardUah, true)})</div>` : ''}
         `;
       } else if (pos.category === 'ovdp') {
         badgeCode = 'ОВДП';
@@ -1025,6 +1031,10 @@
       const buyVal = existing?.buyPriceUsd ?? (isCrypto ? 85000 : 520);
       const platVal = existing?.platform || (isCrypto ? 'Binance / Ledger' : 'Interactive Brokers');
       const notesVal = existing?.notes || '';
+      const isStakedVal = Boolean(existing?.isStaked);
+      const stakingApyVal = existing?.stakingApy ?? 4.5;
+      const stakingStartVal = existing?.stakingStartDate || existing?.createdAt || todayStr;
+      const stakingEarnedVal = existing?.stakingEarnedCoins ? existing.stakingEarnedCoins : '';
 
       container.innerHTML = `
         <div class="form-group full-width">
@@ -1050,11 +1060,41 @@
           <label class="form-label" for="f-buy-price">Середня ціна купівлі за 1 шт. ($ USD)</label>
           <input type="number" step="any" min="0" class="form-input tabular" id="f-buy-price" value="${buyVal}" required />
         </div>
+        ${isCrypto ? `
+        <div class="form-group full-width" style="padding: 12px 14px; border-radius: var(--radius-md); background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.22);">
+          <label class="checkbox-row" style="margin-bottom: 0;">
+            <input type="checkbox" id="f-is-staked" ${isStakedVal ? 'checked' : ''} />
+            <span>⚡ <strong>Актив у стейкінгу / крипто-депозиті (Earn)</strong> — нараховувати пасивний дохід</span>
+          </label>
+          <div id="crypto-staking-fields" class="form-grid" style="display: ${isStakedVal ? 'grid' : 'none'}; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08);">
+            <div class="form-group">
+              <label class="form-label" for="f-staking-apy">Річна ставка стейкінгу (% APY / APR)</label>
+              <input type="number" step="0.01" min="0" max="500" class="form-input tabular" id="f-staking-apy" value="${stakingApyVal}" placeholder="4.5" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="f-staking-start">Дата початку стейкінгу</label>
+              <input type="date" class="form-input tabular" id="f-staking-start" value="${stakingStartVal}" />
+            </div>
+            <div class="form-group full-width">
+              <label class="form-label" for="f-staking-earned">Вже нараховано монет (необов'язково — залиште порожнім для авторозрахунку за % APY)</label>
+              <input type="number" step="any" min="0" class="form-input tabular" id="f-staking-earned" value="${stakingEarnedVal}" placeholder="Авторозрахунок від дати початку" />
+            </div>
+          </div>
+        </div>
+        ` : ''}
         <div class="form-group full-width">
           <label class="form-label" for="f-notes">Коментар / Нотатка</label>
           <input type="text" class="form-input" id="f-notes" value="${escapeHtml(notesVal)}" placeholder="Напр. Довгостроковий портфель" />
         </div>
       `;
+
+      if (isCrypto) {
+        const stakedCheckbox = document.getElementById('f-is-staked');
+        const stakingFieldsBox = document.getElementById('crypto-staking-fields');
+        stakedCheckbox?.addEventListener('change', () => {
+          stakingFieldsBox.style.display = stakedCheckbox.checked ? 'grid' : 'none';
+        });
+      }
 
       container.querySelectorAll('[data-pick-ticker]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1271,6 +1311,7 @@
       const ticker = document.getElementById('f-ticker').value.toUpperCase().trim();
       const quoteBook = category === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
       const defaultName = quoteBook?.[ticker]?.name || ticker;
+      const isStaked = category === 'crypto' ? Boolean(document.getElementById('f-is-staked')?.checked) : false;
       newPos = {
         ...newPos,
         ticker,
@@ -1278,7 +1319,13 @@
         platform: document.getElementById('f-platform').value.trim(),
         quantity: parseFloat(document.getElementById('f-quantity').value) || 0,
         buyPriceUsd: parseFloat(document.getElementById('f-buy-price').value) || 0,
-        notes: document.getElementById('f-notes').value.trim()
+        notes: document.getElementById('f-notes').value.trim(),
+        ...(category === 'crypto' ? {
+          isStaked,
+          stakingApy: isStaked ? (parseFloat(document.getElementById('f-staking-apy')?.value) || 0) : 0,
+          stakingStartDate: isStaked ? (document.getElementById('f-staking-start')?.value || '') : '',
+          stakingEarnedCoins: isStaked ? (parseFloat(document.getElementById('f-staking-earned')?.value) || 0) : 0
+        } : {})
       };
     } else if (category === 'ovdp') {
       newPos = {
