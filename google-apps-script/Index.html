@@ -2096,12 +2096,20 @@ body {
 
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
             <label class="form-label" for="set-cloud-sync-url">☁️ Хмарна синхронізація з Google Диском (URL веб-додатка script.google.com/.../exec)</label>
-            <div style="display:flex; gap:8px;">
-              <input type="url" class="form-input mono" id="set-cloud-sync-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px; flex:1;" />
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <input type="url" class="form-input mono" id="set-cloud-sync-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px; flex:1; min-width:240px;" />
               <button type="button" class="btn btn-secondary" id="btn-test-cloud-sync">Перевірити зв'язок</button>
             </div>
-            <div id="cloud-sync-hint" style="font-size:11.5px; color: var(--text-muted); margin-top:4px;">
-              Коли вказано посилання <code>/exec</code> (з доступом «Усі / Anyone»), портфель автоматично синхронізується з вашим Google Диском на всіх пристроях.
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+              <button type="button" class="btn btn-primary" id="btn-push-cloud-now" style="font-size:12px; padding:6px 12px;">
+                ⬆️ Відправити дані з цього комп'ютера на Google Диск
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-pull-cloud-now" style="font-size:12px; padding:6px 12px;">
+                ⬇️ Завантажити дані з Google Диска сюди
+              </button>
+            </div>
+            <div id="cloud-sync-hint" style="font-size:11.5px; color: var(--text-muted); margin-top:6px; line-height:1.45;">
+              Щоб дані автоматично тягнулися між стаціонарним комп'ютером та іншими пристроями через GitHub Pages, у Google Apps Script (<code>script.google.com</code> → Розгорнути → Керувати розгортаннями → ✎) параметр <strong>«Хто має доступ» (Who has access)</strong> має бути встановлений у <strong>«Усі» (Anyone)</strong>.
             </div>
           </div>
 
@@ -2676,9 +2684,33 @@ body {
     { id: 'cash-eur-3', category: 'cash', name: 'Готівка та рахунок Wise (EUR)', location: 'Wise / Готівка', currency: 'EUR', amount: 1200, notes: 'Євровий резерв для поїздок' }
   ];
 
+  const DEMO_POSITION_IDS = new Set([
+    'crypto-btc-1', 'crypto-eth-2', 'crypto-sol-3',
+    'stock-voo-1', 'stock-nvda-2', 'stock-vwce-3',
+    'ovdp-uah-1', 'ovdp-usd-2',
+    'dep-mono-1', 'dep-pumb-2',
+    'cash-usd-1', 'cash-uah-2', 'cash-eur-3'
+  ]);
+
+  function isDemoPortfolioData(positions) {
+    if (!Array.isArray(positions) || positions.length === 0) return false;
+    return positions.every(p => p && DEMO_POSITION_IDS.has(p.id));
+  }
+
+  function readLocalBackupState() {
+    const raw = safeGetItem('kapital_backup_state');
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (_) {}
+    return null;
+  }
+
   const DEFAULT_CLOUD_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwoxq-PirVnix_5jvyuama9S_UBc187LwDRMk4moSg9RwhE3LyquTRu-r8VhfJdbqX8/exec';
   state.cloudSyncUrl = safeGetItem('kapital_cloud_sync_url') || DEFAULT_CLOUD_SYNC_URL;
   state.cloudSynced = false;
+  state.cloudSyncError = '';
   state.quotes = JSON.parse(JSON.stringify(DEFAULT_QUOTES));
 
   function isGoogleAppsScript() {
@@ -2744,14 +2776,21 @@ body {
   }
 
   async function loadPortfolioFromServer() {
+    const localBackup = readLocalBackupState();
+    const localPositions = Array.isArray(localBackup?.positions) ? localBackup.positions : [];
+    const localSettings = localBackup?.settings || null;
+    const localHasRealUserPositions = localPositions.length > 0 && !isDemoPortfolioData(localPositions);
+
     try {
       let data;
       if (isGoogleAppsScript()) {
         data = await gasCall('gasGetPortfolio');
         state.cloudSynced = true;
+        state.cloudSyncError = '';
       } else if (isStaticHost() && state.cloudSyncUrl) {
         data = await cloudSyncGet({ action: 'get' });
         state.cloudSynced = true;
+        state.cloudSyncError = '';
       } else {
         try {
           data = await apiFetch('/api/portfolio');
@@ -2760,23 +2799,41 @@ body {
           if (state.cloudSyncUrl) {
             data = await cloudSyncGet({ action: 'get' });
             state.cloudSynced = true;
+            state.cloudSyncError = '';
           } else {
             throw localErr;
           }
         }
       }
 
-      if (data && data.settings) {
-        state.settings = { ...state.settings, ...data.settings };
-        if (!data.settings.defaultUsdMigrated) {
-          state.settings.primaryCurrency = 'USD';
-          state.settings.defaultUsdMigrated = true;
+      const remotePositions = Array.isArray(data?.positions) ? data.positions : [];
+      const remoteHasRealUserPositions = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions) && !data?.isDemoSeed;
+      const localUpdatedAt = localSettings?.updatedAt || '';
+      const remoteUpdatedAt = data?.settings?.updatedAt || '';
+
+      // Protect real local user positions from EVER being overwritten by remote demo/empty data!
+      if (localHasRealUserPositions && (!remoteHasRealUserPositions || (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt))) {
+        if (localSettings) {
+          state.settings = { ...state.settings, ...localSettings };
+          state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
-        state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+        state.positions = localPositions;
+        // Automatically push the user's real local data to Google Drive / Server so all devices get it!
+        persistPortfolio();
+      } else {
+        if (data && data.settings) {
+          state.settings = { ...state.settings, ...data.settings };
+          if (!data.settings.defaultUsdMigrated) {
+            state.settings.primaryCurrency = 'USD';
+            state.settings.defaultUsdMigrated = true;
+          }
+          state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+        }
+        if (remotePositions.length > 0) {
+          state.positions = remotePositions;
+        }
       }
-      if (data && Array.isArray(data.positions) && data.positions.length > 0) {
-        state.positions = data.positions;
-      }
+
       if (data && data.quotes) {
         state.quotes = {
           fx: { ...DEFAULT_QUOTES.fx, ...(data.quotes.fx || {}) },
@@ -2794,23 +2851,21 @@ body {
       renderAll();
       refreshBrowserQuotesQuietly();
     } catch (err) {
+      state.cloudSynced = false;
+      state.cloudSyncError = String(err && err.message ? err.message : err);
       if (err && err.message !== 'Unauthorized') {
-        const cached = safeGetItem('kapital_backup_state');
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (parsed.settings) {
-              state.settings = { ...state.settings, ...parsed.settings };
-              if (!parsed.settings.defaultUsdMigrated) {
-                state.settings.primaryCurrency = 'USD';
-                state.settings.defaultUsdMigrated = true;
-              }
-              state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+        if (localBackup) {
+          if (localSettings) {
+            state.settings = { ...state.settings, ...localSettings };
+            if (!localSettings.defaultUsdMigrated) {
+              state.settings.primaryCurrency = 'USD';
+              state.settings.defaultUsdMigrated = true;
             }
-            if (Array.isArray(parsed.positions) && parsed.positions.length > 0) {
-              state.positions = parsed.positions;
-            }
-          } catch (_) {}
+            state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+          }
+          if (Array.isArray(localPositions)) {
+            state.positions = localPositions;
+          }
         } else if (!state.positions || state.positions.length === 0) {
           state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
         }
@@ -2821,6 +2876,7 @@ body {
   }
 
   async function persistPortfolio() {
+    state.settings.updatedAt = new Date().toISOString();
     safeSetItem('kapital_backup_state', JSON.stringify({
       settings: state.settings,
       positions: state.positions
@@ -2832,6 +2888,7 @@ body {
           positions: state.positions
         });
         state.cloudSynced = true;
+        state.cloudSyncError = '';
       } else if (isStaticHost() && state.cloudSyncUrl) {
         await cloudSyncPost({
           action: 'save',
@@ -2839,6 +2896,7 @@ body {
           positions: state.positions
         });
         state.cloudSynced = true;
+        state.cloudSyncError = '';
       } else {
         await apiFetch('/api/portfolio', {
           method: 'PUT',
@@ -2847,9 +2905,21 @@ body {
             positions: state.positions
           })
         });
+        if (state.cloudSyncUrl) {
+          try {
+            await cloudSyncPost({
+              action: 'save',
+              settings: state.settings,
+              positions: state.positions
+            });
+            state.cloudSynced = true;
+            state.cloudSyncError = '';
+          } catch (_) {}
+        }
       }
-    } catch (_) {
-      // Saved in localStorage backup if offline
+    } catch (err) {
+      state.cloudSynced = false;
+      state.cloudSyncError = String(err && err.message ? err.message : err);
     }
   }
 
@@ -3296,12 +3366,79 @@ body {
       if (mobBtn) mobBtn.classList.toggle('active', state.activeCategory === cat);
     });
 
-    // Update page heading
+    // Update page heading & Cloud Sync Status indicator
     const meta = CATEGORY_META[state.activeCategory] || CATEGORY_META.all;
     document.getElementById('page-main-heading').textContent = meta.title;
     const statusText = document.getElementById('quote-status-text');
     const timeStr = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     statusText.textContent = `${state.quotes.fx?.source || 'Автокотирування'} · Станом на ${timeStr}`;
+
+    const cloudLabelEl = document.getElementById('topbar-cloud-label');
+    const cloudBtnEl = document.getElementById('btn-topbar-cloud');
+    const isShowingDemo = isDemoPortfolioData(state.positions);
+    if (cloudLabelEl) {
+      if (state.cloudSynced) {
+        cloudLabelEl.textContent = isShowingDemo ? '☁️ Google Диск (Демо-дані)' : '🟢 ☁️ Google Диск';
+        if (cloudBtnEl) cloudBtnEl.style.borderColor = isShowingDemo ? 'var(--warning)' : 'rgba(16, 185, 129, 0.45)';
+      } else {
+        cloudLabelEl.textContent = '🟠 ☁️ Локальний режим';
+        if (cloudBtnEl) cloudBtnEl.style.borderColor = 'rgba(245, 158, 11, 0.5)';
+      }
+    }
+
+    // Show/hide Demo Data & Sync Notice Banner if unmodified demo positions (including demo deposits) are currently loaded
+    const heroEl = document.querySelector('.wealth-hero');
+    let demoBanner = document.getElementById('demo-data-notice-banner');
+    if (!demoBanner && heroEl && heroEl.parentNode) {
+      demoBanner = document.createElement('div');
+      demoBanner.id = 'demo-data-notice-banner';
+      demoBanner.style.display = 'none';
+      demoBanner.style.marginBottom = '16px';
+      demoBanner.style.padding = '12px 16px';
+      demoBanner.style.borderRadius = '10px';
+      demoBanner.style.background = 'rgba(245, 158, 11, 0.1)';
+      demoBanner.style.border = '1px solid rgba(245, 158, 11, 0.45)';
+      heroEl.parentNode.insertBefore(demoBanner, heroEl);
+    }
+    if (demoBanner) {
+      if (isShowingDemo) {
+        demoBanner.style.display = 'block';
+        demoBanner.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="font-size:12.5px; line-height:1.45; max-width:740px;">
+              <strong style="color:#f59e0b; font-size:13px;">⚠️ У цьому браузері зараз відкриті демонстраційні дані-приклади (зокрема тестові депозити Монобанк/ПУМБ)</strong>
+              <div style="color:var(--text-secondary); margin-top:3px;">
+                Ваші реальні активи, які ви вводили на <strong>стаціонарному комп'ютері</strong>, збережені у браузері того комп'ютера. Щоб вони автоматично підтягувалися на всі пристрої через Google Диск, у <code>script.google.com</code> (Розгорнути → Керувати розгортаннями → ✎) параметр <strong>«Хто має доступ»</strong> має бути <strong>«Усі» (Anyone)</strong>, після чого на стаціонарному ПК натисніть <em>«⬆️ Відправити дані на Google Диск»</em> (або перенесіть через <em>Експорт / Імпорт JSON</em>).
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-danger" id="btn-banner-clear-demo" style="font-size:12px; padding:6px 11px;">
+                🗑 Прибрати ці демо-дані
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-banner-import-json" style="font-size:12px; padding:6px 11px;">
+                ⬆ Імпортувати JSON
+              </button>
+              <button type="button" class="btn btn-primary" id="btn-banner-open-cloud" style="font-size:12px; padding:6px 11px;">
+                ☁️ Налаштувати Google Диск
+              </button>
+            </div>
+          </div>
+        `;
+        demoBanner.querySelector('#btn-banner-clear-demo')?.addEventListener('click', async () => {
+          state.positions = [];
+          await persistPortfolio();
+          renderAll();
+        });
+        demoBanner.querySelector('#btn-banner-import-json')?.addEventListener('click', () => {
+          document.getElementById('input-import-json-file')?.click();
+        });
+        demoBanner.querySelector('#btn-banner-open-cloud')?.addEventListener('click', () => {
+          openSettingsModal();
+        });
+      } else {
+        demoBanner.style.display = 'none';
+      }
+    }
 
     // Filter positions for active category
     const scopedPositions = state.activeCategory === 'all'
@@ -6781,17 +6918,41 @@ body {
           hintEl.textContent = 'Перевірка зв\'язку з Google Диском...';
         }
         try {
-          const data = await cloudSyncGet({ action: 'get' });
+          const data = isGoogleAppsScript()
+            ? await gasCall('gasGetPortfolio')
+            : await cloudSyncGet({ action: 'get' });
           if (data && (data.positions || data.settings)) {
             state.cloudSynced = true;
-            if (Array.isArray(data.positions) && data.positions.length > 0) {
-              state.positions = data.positions;
+            const localHasReal = state.positions.length > 0 && !isDemoPortfolioData(state.positions);
+            const remotePositions = Array.isArray(data.positions) ? data.positions : [];
+            const remoteHasReal = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions) && !data.isDemoSeed;
+
+            if (localHasReal && !remoteHasReal) {
+              // Local has real user data while Google Drive has only demo/empty data -> upload local data to Google Drive!
+              await persistPortfolio();
+              if (hintEl) {
+                hintEl.style.color = 'var(--positive)';
+                hintEl.textContent = '✅ Зв\'язок встановлено! Ваші локальні дані з цього браузера автоматично збережено на Google Диск.';
+              }
+            } else if (remoteHasReal) {
+              state.positions = remotePositions;
+              if (data.settings) {
+                state.settings = { ...state.settings, ...data.settings };
+                state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+              }
+              safeSetItem('kapital_backup_state', JSON.stringify({
+                settings: state.settings,
+                positions: state.positions
+              }));
+              if (hintEl) {
+                hintEl.style.color = 'var(--positive)';
+                hintEl.textContent = `✅ Зв'язок встановлено! Завантажено ${remotePositions.length} активів з вашого Google Диска.`;
+              }
             } else {
-              await cloudSyncPost({ action: 'save', settings: state.settings, positions: state.positions });
-            }
-            if (hintEl) {
-              hintEl.style.color = 'var(--positive)';
-              hintEl.textContent = '✅ Зв\'язок встановлено! Дані портфеля синхронізуються з вашим Google Диском.';
+              if (hintEl) {
+                hintEl.style.color = 'var(--positive)';
+                hintEl.textContent = '✅ Зв\'язок з Google Диском встановлено!';
+              }
             }
             renderAll();
           } else {
@@ -6801,7 +6962,99 @@ body {
           state.cloudSynced = false;
           if (hintEl) {
             hintEl.style.color = 'var(--warning)';
-            hintEl.textContent = '⚠️ Google не пускає зовнішній запит. Перевірте у script.google.com: Розгорнути → Керувати розгортаннями → ✎ → Версія: «Нова версія» та Хто має доступ: «Усі» (Anyone).';
+            hintEl.textContent = '⚠️ Google Apps Script заблокував зовнішній запит (редирект на вхід Google). Відкрийте script.google.com → Розгорнути → Керувати розгортаннями → ✎ → встановіть «Хто має доступ: Усі (Anyone)» та натисніть «Розгорнути».';
+          }
+          renderAll();
+        }
+      });
+    }
+
+    const pushCloudBtn = document.getElementById('btn-push-cloud-now');
+    if (pushCloudBtn) {
+      pushCloudBtn.addEventListener('click', async () => {
+        const hintEl = document.getElementById('cloud-sync-hint');
+        const inputEl = document.getElementById('set-cloud-sync-url');
+        const urlVal = (inputEl && inputEl.value.trim()) || state.cloudSyncUrl || '';
+        if (urlVal) {
+          state.cloudSyncUrl = urlVal;
+          safeSetItem('kapital_cloud_sync_url', urlVal);
+        }
+        if (hintEl) {
+          hintEl.style.color = 'var(--text-secondary)';
+          hintEl.textContent = 'Відправка даних з цього браузера на Google Диск...';
+        }
+        try {
+          state.settings.updatedAt = new Date().toISOString();
+          if (isGoogleAppsScript()) {
+            await gasCall('gasSavePortfolio', { settings: state.settings, positions: state.positions });
+          } else {
+            await cloudSyncPost({ action: 'save', settings: state.settings, positions: state.positions });
+          }
+          state.cloudSynced = true;
+          safeSetItem('kapital_backup_state', JSON.stringify({
+            settings: state.settings,
+            positions: state.positions
+          }));
+          if (hintEl) {
+            hintEl.style.color = 'var(--positive)';
+            hintEl.textContent = `✅ Успішно! Ваші активи (${state.positions.length} поз.) збережено у файл portfolio.json на Google Диску.`;
+          }
+          renderAll();
+        } catch (err) {
+          state.cloudSynced = false;
+          if (hintEl) {
+            hintEl.style.color = 'var(--warning)';
+            hintEl.textContent = '⚠️ Не вдалося записати на Google Диск через обмеження доступу в Apps Script. У script.google.com (Розгорнути → Керувати розгортаннями → ✎) змініть «Хто має доступ» з «Лише я» на «Усі (Anyone)», або скористайтеся кнопкою «⬇ Експорт JSON» нижче.';
+          }
+          renderAll();
+        }
+      });
+    }
+
+    const pullCloudBtn = document.getElementById('btn-pull-cloud-now');
+    if (pullCloudBtn) {
+      pullCloudBtn.addEventListener('click', async () => {
+        const hintEl = document.getElementById('cloud-sync-hint');
+        const inputEl = document.getElementById('set-cloud-sync-url');
+        const urlVal = (inputEl && inputEl.value.trim()) || state.cloudSyncUrl || '';
+        if (urlVal) {
+          state.cloudSyncUrl = urlVal;
+          safeSetItem('kapital_cloud_sync_url', urlVal);
+        }
+        if (hintEl) {
+          hintEl.style.color = 'var(--text-secondary)';
+          hintEl.textContent = 'Завантаження даних з Google Диска...';
+        }
+        try {
+          const data = isGoogleAppsScript()
+            ? await gasCall('gasGetPortfolio')
+            : await cloudSyncGet({ action: 'get' });
+          if (data && Array.isArray(data.positions)) {
+            state.cloudSynced = true;
+            if (data.positions.length > 0) {
+              state.positions = data.positions;
+            }
+            if (data.settings) {
+              state.settings = { ...state.settings, ...data.settings };
+              state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+            }
+            safeSetItem('kapital_backup_state', JSON.stringify({
+              settings: state.settings,
+              positions: state.positions
+            }));
+            if (hintEl) {
+              hintEl.style.color = 'var(--positive)';
+              hintEl.textContent = `✅ Завантажено з Google Диска (${state.positions.length} позицій).`;
+            }
+            renderAll();
+          } else {
+            throw new Error('Empty payload');
+          }
+        } catch (err) {
+          state.cloudSynced = false;
+          if (hintEl) {
+            hintEl.style.color = 'var(--warning)';
+            hintEl.textContent = '⚠️ Google Диск не відповів (перевірте у script.google.com доступ «Хто має доступ: Усі / Anyone»).';
           }
           renderAll();
         }

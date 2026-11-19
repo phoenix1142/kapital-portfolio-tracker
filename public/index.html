@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)</title>
   <meta name="description" content="Персональний трекер інвестицій Мані-кеш: Криптовалюта, Фондовий ринок, ОВДП, Депозити та Готівка. Автоматичні котирування та облік у гривні (₴) і доларах ($)." />
-  <link rel="stylesheet" href="/index.css?v=18" />
+  <link rel="stylesheet" href="/index.css?v=19" />
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -301,12 +301,20 @@
 
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
             <label class="form-label" for="set-cloud-sync-url">☁️ Хмарна синхронізація з Google Диском (URL веб-додатка script.google.com/.../exec)</label>
-            <div style="display:flex; gap:8px;">
-              <input type="url" class="form-input mono" id="set-cloud-sync-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px; flex:1;" />
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <input type="url" class="form-input mono" id="set-cloud-sync-url" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:12px; flex:1; min-width:240px;" />
               <button type="button" class="btn btn-secondary" id="btn-test-cloud-sync">Перевірити зв'язок</button>
             </div>
-            <div id="cloud-sync-hint" style="font-size:11.5px; color: var(--text-muted); margin-top:4px;">
-              Коли вказано посилання <code>/exec</code> (з доступом «Усі / Anyone»), портфель автоматично синхронізується з вашим Google Диском на всіх пристроях.
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+              <button type="button" class="btn btn-primary" id="btn-push-cloud-now" style="font-size:12px; padding:6px 12px;">
+                ⬆️ Відправити дані з цього комп'ютера на Google Диск
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-pull-cloud-now" style="font-size:12px; padding:6px 12px;">
+                ⬇️ Завантажити дані з Google Диска сюди
+              </button>
+            </div>
+            <div id="cloud-sync-hint" style="font-size:11.5px; color: var(--text-muted); margin-top:6px; line-height:1.45;">
+              Щоб дані автоматично тягнулися між стаціонарним комп'ютером та іншими пристроями через GitHub Pages, у Google Apps Script (<code>script.google.com</code> → Розгорнути → Керувати розгортаннями → ✎) параметр <strong>«Хто має доступ» (Who has access)</strong> має бути встановлений у <strong>«Усі» (Anyone)</strong>.
             </div>
           </div>
 
@@ -369,6 +377,6 @@
     </div>
   </div>
 
-  <script src="/app.js?v=18"></script>
+  <script src="/app.js?v=19"></script>
 </body>
 </html>
