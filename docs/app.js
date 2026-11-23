@@ -1708,6 +1708,9 @@
       overviewSection.style.display = 'none';
     }
 
+    // Render Real Invested UAH Capital Tracker (how many UAH were actually poured into Crypto, Stocks, etc. with editable override)
+    renderRealInvestedUahSection(evaluated);
+
     // Render Circular Donut Allocation Window (Categories + Individual Assets % by category and overall)
     renderCircularAllocationSection(evaluated);
 
@@ -3847,6 +3850,383 @@
         </div>
       `;
       currEl.appendChild(row);
+    });
+  }
+
+  // Real Invested UAH Capital Tracker (How much real UAH was poured into Crypto, Stocks & Other Categories, with editable amounts)
+  let realUahSaveTimer = null;
+  let showOtherRealUahCategories = false;
+
+  function schedulePersistRealUah() {
+    if (realUahSaveTimer) clearTimeout(realUahSaveTimer);
+    realUahSaveTimer = setTimeout(() => {
+      persistPortfolio();
+    }, 350);
+  }
+
+  function getRealInvestedUahForCategory(cat, catEvaluated) {
+    if (!state.settings.realInvestedUah || typeof state.settings.realInvestedUah !== 'object') {
+      state.settings.realInvestedUah = {};
+    }
+    const autoInvestedUah = Math.round(catEvaluated.reduce((s, p) => s + (p.investedUah || 0), 0));
+    const autoInvestedUsd = Number(catEvaluated.reduce((s, p) => s + (p.investedUsd || 0), 0).toFixed(2));
+    const currentValUah = Math.round(catEvaluated.reduce((s, p) => s + (p.currentValUah || 0), 0));
+    const currentValUsd = Number(catEvaluated.reduce((s, p) => s + (p.currentValUsd || 0), 0).toFixed(2));
+
+    const storedVal = state.settings.realInvestedUah[cat];
+    const hasCustom = storedVal !== undefined && storedVal !== null && storedVal !== '' && !Number.isNaN(Number(storedVal));
+    const realUah = hasCustom ? Math.max(0, Math.round(Number(storedVal))) : autoInvestedUah;
+    const netProfitUah = currentValUah - realUah;
+    const netProfitPct = realUah > 0 ? (netProfitUah / realUah) * 100 : 0;
+    // Effective average UAH/USD buy rate if category is USD-based (crypto/stocks)
+    const effectiveRate = autoInvestedUsd > 0 ? (realUah / autoInvestedUsd) : getEffectiveRates().USD_UAH;
+
+    return {
+      cat,
+      hasCustom,
+      realUah,
+      autoInvestedUah,
+      autoInvestedUsd,
+      currentValUah,
+      currentValUsd,
+      netProfitUah,
+      netProfitPct,
+      effectiveRate,
+      count: catEvaluated.length
+    };
+  }
+
+  function renderRealInvestedUahSection(allEvaluated) {
+    let sectionEl = document.getElementById('real-uah-invested-section');
+    if (!sectionEl) {
+      const overviewSection = document.getElementById('overview-breakdown-section');
+      if (overviewSection && overviewSection.parentNode) {
+        sectionEl = document.createElement('section');
+        sectionEl.className = 'panel-card';
+        sectionEl.id = 'real-uah-invested-section';
+        sectionEl.style.marginBottom = '20px';
+        overviewSection.parentNode.insertBefore(sectionEl, overviewSection.nextSibling);
+      } else {
+        return;
+      }
+    }
+
+    const rates = getEffectiveRates();
+    const allCats = ['crypto', 'stocks', 'ovdp', 'deposits', 'cash'];
+    const statsByCat = {};
+    allCats.forEach(c => {
+      const catPos = allEvaluated.filter(p => p.category === c);
+      statsByCat[c] = getRealInvestedUahForCategory(c, catPos);
+    });
+
+    // Determine which category cards to show based on active tab or user toggle
+    let visibleCats = ['crypto', 'stocks'];
+    if (state.activeCategory === 'crypto') {
+      visibleCats = ['crypto'];
+    } else if (state.activeCategory === 'stocks') {
+      visibleCats = ['stocks'];
+    } else if (['ovdp', 'deposits', 'cash'].includes(state.activeCategory)) {
+      visibleCats = [state.activeCategory];
+    } else if (showOtherRealUahCategories) {
+      visibleCats = ['crypto', 'stocks', 'ovdp', 'deposits', 'cash'];
+    }
+
+    // Totals for Crypto + Stocks (and for all visible categories)
+    const sumCats = visibleCats;
+    const totalRealUah = sumCats.reduce((s, c) => s + statsByCat[c].realUah, 0);
+    const totalCurrentUah = sumCats.reduce((s, c) => s + statsByCat[c].currentValUah, 0);
+    const totalCurrentUsd = sumCats.reduce((s, c) => s + statsByCat[c].currentValUsd, 0);
+    const totalAutoUsd = sumCats.reduce((s, c) => s + statsByCat[c].autoInvestedUsd, 0);
+    const totalNetProfitUah = totalCurrentUah - totalRealUah;
+    const totalNetProfitPct = totalRealUah > 0 ? (totalNetProfitUah / totalRealUah) * 100 : 0;
+
+    // Check if an input inside this section currently has focus so we don't interrupt typing
+    const activeInputEl = document.activeElement;
+    if (activeInputEl && sectionEl.contains(activeInputEl) && activeInputEl.hasAttribute('data-real-uah-input')) {
+      return;
+    }
+
+    const sumTitleLabel = (visibleCats.length === 2 && visibleCats[0] === 'crypto' && visibleCats[1] === 'stocks')
+      ? 'Разом Крипта + Фондовий ринок'
+      : (visibleCats.length === 1 ? CATEGORY_META[visibleCats[0]]?.shortName : 'Разом по всіх категоріях');
+
+    sectionEl.innerHTML = `
+      <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
+        <div>
+          <div class="panel-title">🇺🇦 Скільки реально влито гривень (₴ UAH) у кожну категорію</div>
+          <div class="panel-subtitle">Облік ваших реальних гривневих вкладень у Криптовалюту та Фондовий ринок: змінюйте суму вручну або додавайте/віднімайте поповнення</div>
+        </div>
+        ${state.activeCategory === 'all' ? `
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="chip-btn" id="btn-toggle-other-real-uah" style="padding:5px 11px; font-size:12px;">
+              ${showOtherRealUahCategories ? 'Показати тільки Крипту та Фонду' : '+ Показати також ОВДП / Депозити / Готівку'}
+            </button>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Summary Banner of Real UAH Invested vs Current Value -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:12px; margin-bottom:14px; padding:12px 14px; border-radius:10px; background:var(--bg-elevated); border:1px solid var(--border-subtle);">
+        <div>
+          <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Всього реально влито (${escapeHtml(sumTitleLabel)})</div>
+          <div class="tabular" id="real-uah-summary-invested" style="font-size:20px; font-weight:800; color:var(--accent-primary); margin-top:2px;">${fmtUah(totalRealUah)}</div>
+          <div class="tabular" style="font-size:11.5px; color:var(--text-secondary);">В активах за ціною купівлі: ${fmtUsd(totalAutoUsd)}</div>
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Поточна вартість цих активів зараз</div>
+          <div class="tabular" id="real-uah-summary-current" style="font-size:20px; font-weight:800; color:var(--text-primary); margin-top:2px;">${fmtUah(totalCurrentUah)}</div>
+          <div class="tabular" style="font-size:11.5px; color:var(--text-secondary);">У доларах за курсом ${rates.USD_UAH.toFixed(2)} ₴: ${fmtUsd(totalCurrentUsd)}</div>
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Реальний прибуток у гривні (Зараз − Влито)</div>
+          <div class="tabular" id="real-uah-summary-profit" style="font-size:20px; font-weight:800; color:${totalNetProfitUah >= 0 ? 'var(--positive)' : 'var(--negative)'}; margin-top:2px;">
+            ${fmtUah(totalNetProfitUah, true)}
+            <span class="pill-badge ${totalNetProfitUah >= 0 ? 'pill-positive' : 'pill-negative'}" style="font-size:12px; vertical-align:middle; margin-left:4px;">${fmtPct(totalNetProfitPct, true)}</span>
+          </div>
+          <div class="tabular" style="font-size:11.5px; color:var(--text-secondary);">Еквівалент прибутку: ${fmtUsd(rates.USD_UAH > 0 ? totalNetProfitUah / rates.USD_UAH : 0, true)}</div>
+        </div>
+      </div>
+
+      <!-- Editable Per-Category Real UAH Cards -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap:14px;">
+        ${visibleCats.map(cat => {
+          const info = CATEGORY_META[cat] || CATEGORY_META.all;
+          const st = statsByCat[cat];
+          const isProfit = st.netProfitUah >= 0;
+          const isUsdCat = (cat === 'crypto' || cat === 'stocks');
+
+          return `
+            <div data-real-uah-card="${cat}" style="background:var(--bg-elevated); border:1px solid var(--border-subtle); border-top:3px solid ${info.color}; border-radius:12px; padding:15px; display:flex; flex-direction:column; gap:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="width:11px; height:11px; border-radius:50%; background:${info.color}; flex-shrink:0;"></span>
+                  <div>
+                    <div style="font-size:14.5px; font-weight:800; color:var(--text-primary);">${escapeHtml(info.shortName)}</div>
+                    <div style="font-size:11.5px; color:var(--text-muted);">
+                      ${st.count} поз. · Зараз коштує: <strong style="color:var(--text-primary);">${fmtUah(st.currentValUah)}</strong> (${fmtUsd(st.currentValUsd)})
+                    </div>
+                  </div>
+                </div>
+                <span class="pill-badge ${st.hasCustom ? 'pill-positive' : ''}" data-real-uah-mode-badge="${cat}" style="font-size:10.5px;">
+                  ${st.hasCustom ? '✍️ Вказано вручну' : '⚙️ Авторозрахунок'}
+                </span>
+              </div>
+
+              <!-- Editable UAH Input Field -->
+              <div style="background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:10px; padding:11px 12px;">
+                <label for="input-real-uah-${cat}" style="display:block; font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:6px;">
+                  💰 Скільки реально влито гривень у «${escapeHtml(info.shortName)}» (₴):
+                </label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <div style="position:relative; flex:1;">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      id="input-real-uah-${cat}"
+                      data-real-uah-input="${cat}"
+                      class="form-input tabular"
+                      value="${st.realUah}"
+                      style="font-size:17px; font-weight:800; padding:8px 34px 8px 12px; color:var(--accent-primary); width:100%;"
+                    />
+                    <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); font-weight:800; color:var(--text-secondary); pointer-events:none;">₴</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    data-real-uah-reset="${cat}"
+                    title="Скинути до автоматичного розрахунку від вартості активів (${fmtUah(st.autoInvestedUah)})"
+                    style="font-size:11.5px; padding:7px 10px; white-space:nowrap;"
+                  >
+                    ↺ Авто (${fmtUah(st.autoInvestedUah)})
+                  </button>
+                </div>
+
+                <!-- Quick Add / Subtract UAH Adjuster -->
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--border-subtle);">
+                  <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+                    <span style="font-size:11px; color:var(--text-muted); margin-right:2px;">Швидко змінити:</span>
+                    <button type="button" class="chip-btn" data-real-uah-delta="${cat}:1000" style="padding:2px 7px; font-size:11px;">+1 000 ₴</button>
+                    <button type="button" class="chip-btn" data-real-uah-delta="${cat}:5000" style="padding:2px 7px; font-size:11px;">+5 000 ₴</button>
+                    <button type="button" class="chip-btn" data-real-uah-delta="${cat}:10000" style="padding:2px 7px; font-size:11px;">+10 000 ₴</button>
+                    <button type="button" class="chip-btn" data-real-uah-delta="${cat}:-1000" style="padding:2px 7px; font-size:11px;">−1 000 ₴</button>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:4px;">
+                    <input
+                      type="number"
+                      step="1"
+                      placeholder="Сума ₴..."
+                      data-real-uah-custom-add-inp="${cat}"
+                      class="form-input tabular"
+                      style="width:105px; padding:3px 7px; font-size:11.5px; height:26px;"
+                    />
+                    <button type="button" class="btn btn-ghost" data-real-uah-custom-add-btn="${cat}" style="padding:3px 8px; font-size:11.5px; height:26px; color:var(--positive); font-weight:700;" title="Додати цю суму в грн до влитого капіталу">+ Додати</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Real UAH PnL & Effective FX Rate Summary -->
+              <div class="tabular" data-real-uah-stats="${cat}" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px; padding:2px 2px 0;">
+                <div>
+                  <span style="color:var(--text-secondary);">Реальний результат у ₴:</span>
+                  <strong style="color:${isProfit ? 'var(--positive)' : 'var(--negative)'}; font-size:13.5px; margin-left:4px;">
+                    ${fmtUah(st.netProfitUah, true)} (${fmtPct(st.netProfitPct, true)})
+                  </strong>
+                </div>
+                <div style="color:var(--text-muted); font-size:11.5px;">
+                  ${isUsdCat && st.autoInvestedUsd > 0
+                    ? `Середній курс входу: <strong style="color:var(--text-secondary);">${st.effectiveRate.toFixed(2)} ₴/$</strong> (вкладено ${fmtUsd(st.autoInvestedUsd)})`
+                    : `Поточна вартість: <strong style="color:var(--text-secondary);">${fmtUah(st.currentValUah)}</strong>`}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    // Helper to update card & summary banner live without losing input focus
+    const refreshLiveRealUahDom = () => {
+      allCats.forEach(c => {
+        const catPos = allEvaluated.filter(p => p.category === c);
+        statsByCat[c] = getRealInvestedUahForCategory(c, catPos);
+      });
+
+      const newTotalRealUah = sumCats.reduce((s, c) => s + statsByCat[c].realUah, 0);
+      const newTotalProfitUah = totalCurrentUah - newTotalRealUah;
+      const newTotalProfitPct = newTotalRealUah > 0 ? (newTotalProfitUah / newTotalRealUah) * 100 : 0;
+
+      const sumInvEl = sectionEl.querySelector('#real-uah-summary-invested');
+      if (sumInvEl) sumInvEl.textContent = fmtUah(newTotalRealUah);
+
+      const sumProfEl = sectionEl.querySelector('#real-uah-summary-profit');
+      if (sumProfEl) {
+        sumProfEl.style.color = newTotalProfitUah >= 0 ? 'var(--positive)' : 'var(--negative)';
+        sumProfEl.innerHTML = `
+          ${fmtUah(newTotalProfitUah, true)}
+          <span class="pill-badge ${newTotalProfitUah >= 0 ? 'pill-positive' : 'pill-negative'}" style="font-size:12px; vertical-align:middle; margin-left:4px;">${fmtPct(newTotalProfitPct, true)}</span>
+        `;
+      }
+
+      visibleCats.forEach(cat => {
+        const st = statsByCat[cat];
+        const isProfit = st.netProfitUah >= 0;
+        const isUsdCat = (cat === 'crypto' || cat === 'stocks');
+        const badgeEl = sectionEl.querySelector(`[data-real-uah-mode-badge="${cat}"]`);
+        if (badgeEl) {
+          badgeEl.className = `pill-badge ${st.hasCustom ? 'pill-positive' : ''}`;
+          badgeEl.textContent = st.hasCustom ? '✍️ Вказано вручну' : '⚙️ Авторозрахунок';
+        }
+        const statsEl = sectionEl.querySelector(`[data-real-uah-stats="${cat}"]`);
+        if (statsEl) {
+          statsEl.innerHTML = `
+            <div>
+              <span style="color:var(--text-secondary);">Реальний результат у ₴:</span>
+              <strong style="color:${isProfit ? 'var(--positive)' : 'var(--negative)'}; font-size:13.5px; margin-left:4px;">
+                ${fmtUah(st.netProfitUah, true)} (${fmtPct(st.netProfitPct, true)})
+              </strong>
+            </div>
+            <div style="color:var(--text-muted); font-size:11.5px;">
+              ${isUsdCat && st.autoInvestedUsd > 0
+                ? `Середній курс входу: <strong style="color:var(--text-secondary);">${st.effectiveRate.toFixed(2)} ₴/$</strong> (вкладено ${fmtUsd(st.autoInvestedUsd)})`
+                : `Поточна вартість: <strong style="color:var(--text-secondary);">${fmtUah(st.currentValUah)}</strong>`}
+            </div>
+          `;
+        }
+      });
+    };
+
+    const toggleOtherBtn = sectionEl.querySelector('#btn-toggle-other-real-uah');
+    if (toggleOtherBtn) {
+      toggleOtherBtn.addEventListener('click', () => {
+        showOtherRealUahCategories = !showOtherRealUahCategories;
+        renderRealInvestedUahSection(allEvaluated);
+      });
+    }
+
+    // Wire up direct number inputs
+    sectionEl.querySelectorAll('[data-real-uah-input]').forEach(inp => {
+      const cat = inp.getAttribute('data-real-uah-input');
+      inp.addEventListener('input', () => {
+        if (!state.settings.realInvestedUah || typeof state.settings.realInvestedUah !== 'object') {
+          state.settings.realInvestedUah = {};
+        }
+        const raw = inp.value.trim();
+        if (raw === '') {
+          delete state.settings.realInvestedUah[cat];
+        } else {
+          const val = Math.max(0, Math.round(parseFloat(raw) || 0));
+          state.settings.realInvestedUah[cat] = val;
+        }
+        schedulePersistRealUah();
+        refreshLiveRealUahDom();
+      });
+    });
+
+    // Wire up Reset to Auto buttons
+    sectionEl.querySelectorAll('[data-real-uah-reset]').forEach(btn => {
+      const cat = btn.getAttribute('data-real-uah-reset');
+      btn.addEventListener('click', () => {
+        if (state.settings.realInvestedUah && typeof state.settings.realInvestedUah === 'object') {
+          delete state.settings.realInvestedUah[cat];
+        }
+        const inp = sectionEl.querySelector(`[data-real-uah-input="${cat}"]`);
+        const catPos = allEvaluated.filter(p => p.category === cat);
+        const st = getRealInvestedUahForCategory(cat, catPos);
+        if (inp) inp.value = st.realUah;
+        schedulePersistRealUah();
+        refreshLiveRealUahDom();
+      });
+    });
+
+    // Wire up quick delta buttons (+1000, +5000, +10000, -1000)
+    sectionEl.querySelectorAll('[data-real-uah-delta]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const [cat, deltaStr] = (btn.getAttribute('data-real-uah-delta') || '').split(':');
+        const delta = parseInt(deltaStr, 10) || 0;
+        if (!cat || !delta) return;
+        const catPos = allEvaluated.filter(p => p.category === cat);
+        const st = getRealInvestedUahForCategory(cat, catPos);
+        const nextVal = Math.max(0, st.realUah + delta);
+        if (!state.settings.realInvestedUah || typeof state.settings.realInvestedUah !== 'object') {
+          state.settings.realInvestedUah = {};
+        }
+        state.settings.realInvestedUah[cat] = nextVal;
+        const inp = sectionEl.querySelector(`[data-real-uah-input="${cat}"]`);
+        if (inp) inp.value = nextVal;
+        schedulePersistRealUah();
+        refreshLiveRealUahDom();
+      });
+    });
+
+    // Wire up custom add input + button
+    sectionEl.querySelectorAll('[data-real-uah-custom-add-btn]').forEach(btn => {
+      const cat = btn.getAttribute('data-real-uah-custom-add-btn');
+      const addInp = sectionEl.querySelector(`[data-real-uah-custom-add-inp="${cat}"]`);
+      const applyAdd = () => {
+        if (!addInp) return;
+        const delta = Math.round(parseFloat(addInp.value) || 0);
+        if (!delta) return;
+        const catPos = allEvaluated.filter(p => p.category === cat);
+        const st = getRealInvestedUahForCategory(cat, catPos);
+        const nextVal = Math.max(0, st.realUah + delta);
+        if (!state.settings.realInvestedUah || typeof state.settings.realInvestedUah !== 'object') {
+          state.settings.realInvestedUah = {};
+        }
+        state.settings.realInvestedUah[cat] = nextVal;
+        const mainInp = sectionEl.querySelector(`[data-real-uah-input="${cat}"]`);
+        if (mainInp) mainInp.value = nextVal;
+        addInp.value = '';
+        schedulePersistRealUah();
+        refreshLiveRealUahDom();
+      };
+      btn.addEventListener('click', applyAdd);
+      addInp?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyAdd();
+        }
+      });
     });
   }
 
