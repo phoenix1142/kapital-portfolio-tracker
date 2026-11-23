@@ -2913,10 +2913,13 @@ body {
     }
     try {
       state.settings.updatedAt = new Date().toISOString();
-      await directCloudSlotSave({
-        settings: state.settings,
-        positions: state.positions
-      });
+      await Promise.all([
+        directCloudSlotSave({
+          settings: state.settings,
+          positions: state.positions
+        }),
+        saveRealInvestedUahToCloudSlot()
+      ]);
       state.cloudSynced = true;
       state.justSyncedFromBridge = 'imported_to_device';
       safeSetItem('kapital_backup_state', JSON.stringify({
@@ -2939,11 +2942,22 @@ body {
       btnEl.textContent = '⏳ Завантаження з хмари...';
     }
     try {
-      const data = await directCloudSlotLoad();
+      const [data, dedicatedRealUahObj] = await Promise.all([
+        directCloudSlotLoad(),
+        loadRealInvestedUahFromCloudSlot()
+      ]);
       if (data && Array.isArray(data.positions) && data.positions.length > 0) {
         state.positions = data.positions;
         if (data.settings) {
-          state.settings = { ...state.settings, ...data.settings };
+          state.settings = {
+            ...state.settings,
+            ...data.settings,
+            realInvestedUah: {
+              ...(state.settings.realInvestedUah || {}),
+              ...(data.settings.realInvestedUah || {}),
+              ...(dedicatedRealUahObj?.realInvestedUah || {})
+            }
+          };
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
         state.cloudSynced = true;
@@ -3031,6 +3045,42 @@ body {
     return res.json();
   }
 
+  // Dedicated cloud slot for Real Invested UAH (19th slot, < 200 bytes, instant sync)
+  const REAL_UAH_CLOUD_SLOT_ID = CLOUD_STORE_SLOT_IDS[19];
+
+  async function saveRealInvestedUahToCloudSlot() {
+    const map = state.settings?.realInvestedUah || {};
+    const updatedAt = state.settings?.realInvestedUahUpdatedAt || state.settings?.updatedAt || new Date().toISOString();
+    const enc = encodeEncryptedCloudString({ realInvestedUah: map, updatedAt });
+    try {
+      await fetch(`${CLOUD_STORE_BASE_URL}/${REAL_UAH_CLOUD_SLOT_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'mk-slot-real-uah',
+          data: { ts: Date.now(), updatedAt, v: enc }
+        })
+      });
+    } catch (_) {}
+  }
+
+  async function loadRealInvestedUahFromCloudSlot() {
+    try {
+      const res = await fetch(`${CLOUD_STORE_BASE_URL}/${REAL_UAH_CLOUD_SLOT_ID}?_t=${Date.now()}`, {
+        method: 'GET'
+      });
+      if (!res.ok) return null;
+      const item = await res.json();
+      const v = item?.data?.v;
+      if (!v || v === 'test') return null;
+      const decoded = decodeEncryptedCloudString(v);
+      if (decoded && decoded.realInvestedUah && typeof decoded.realInvestedUah === 'object') {
+        return decoded;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   async function loadPortfolioFromServer() {
     // 1. Check if we just returned from 1-click Google Drive Bridge with #cloud_data=...
     if (typeof window !== 'undefined' && window.location && window.location.hash && window.location.hash.includes('cloud_data=')) {
@@ -3106,6 +3156,7 @@ body {
 
     try {
       let data;
+      const dedicatedRealUahPromise = !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null);
       if (isGoogleAppsScript()) {
         data = await gasCall('gasGetPortfolio');
         state.cloudSynced = true;
@@ -3128,16 +3179,37 @@ body {
           }
         }
       }
+      const dedicatedRealUahObj = await dedicatedRealUahPromise;
 
       const remotePositions = Array.isArray(data?.positions) ? data.positions : [];
       const remoteHasRealUserPositions = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions) && !data?.isDemoSeed;
       const localUpdatedAt = localSettings?.updatedAt || '';
       const remoteUpdatedAt = data?.settings?.updatedAt || '';
 
+      const localRealMap = (localSettings?.realInvestedUah && typeof localSettings.realInvestedUah === 'object')
+        ? localSettings.realInvestedUah
+        : ((state.settings?.realInvestedUah && typeof state.settings.realInvestedUah === 'object') ? state.settings.realInvestedUah : {});
+      const remoteRealMap = {
+        ...(data?.settings?.realInvestedUah || {}),
+        ...(dedicatedRealUahObj?.realInvestedUah || {})
+      };
+
+      const localRealKeys = Object.keys(localRealMap);
+      const remoteRealKeys = Object.keys(remoteRealMap);
+
+      const localRealTs = localSettings?.realInvestedUahUpdatedAt || localUpdatedAt || '';
+      const remoteRealTs = dedicatedRealUahObj?.updatedAt || data?.settings?.realInvestedUahUpdatedAt || remoteUpdatedAt || '';
+
       // Merge realInvestedUah from both local and cloud based on whichever device updated later
-      const mergedRealInvestedUah = (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt)
-        ? { ...(data?.settings?.realInvestedUah || {}), ...(localSettings?.realInvestedUah || {}) }
-        : { ...(localSettings?.realInvestedUah || {}), ...(data?.settings?.realInvestedUah || {}) };
+      const mergedRealInvestedUah = (localRealTs && remoteRealTs && localRealTs > remoteRealTs)
+        ? { ...remoteRealMap, ...localRealMap }
+        : { ...localRealMap, ...remoteRealMap };
+
+      // If this device (e.g. Desktop PC) already has realInvestedUah entered locally, but the cloud didn't have it yet, push it to cloud immediately!
+      const shouldPushLocalRealUahToCloud = localRealKeys.length > 0 && (
+        remoteRealKeys.length === 0 ||
+        JSON.stringify(mergedRealInvestedUah) !== JSON.stringify(remoteRealMap)
+      );
 
       // Protect real local user positions from EVER being overwritten by remote demo/empty data!
       if (localHasRealUserPositions && (!remoteHasRealUserPositions || (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt))) {
@@ -3158,6 +3230,9 @@ body {
         }
         if (remotePositions.length > 0) {
           state.positions = remotePositions;
+        }
+        if (shouldPushLocalRealUahToCloud) {
+          persistPortfolio();
         }
       }
 
@@ -3209,34 +3284,58 @@ body {
     if (realUahSaveTimer || strategySaveTimer) return;
     isPullingCloudQuietly = true;
     try {
-      const data = isGoogleAppsScript()
-        ? await gasCall('gasGetPortfolio')
-        : await directCloudSlotLoad();
-      if (!data || data.isDemoSeed) return;
+      const [data, dedicatedRealUahObj] = await Promise.all([
+        isGoogleAppsScript() ? gasCall('gasGetPortfolio') : directCloudSlotLoad(),
+        !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null)
+      ]);
+      if (!data && !dedicatedRealUahObj) return;
 
-      const remoteUpdatedAt = data.settings?.updatedAt || '';
-      const localUpdatedAt = state.settings?.updatedAt || '';
-      const remotePositions = Array.isArray(data.positions) ? data.positions : [];
-      const remoteHasReal = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions);
+      let changed = false;
 
-      const remoteRealUahStr = JSON.stringify(data.settings?.realInvestedUah || {});
-      const localRealUahStr = JSON.stringify(state.settings?.realInvestedUah || {});
-
-      if ((remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) || (remoteRealUahStr !== '{}' && localRealUahStr === '{}')) {
-        if (data.settings) {
-          state.settings = {
-            ...state.settings,
-            ...data.settings,
-            realInvestedUah: {
-              ...(state.settings.realInvestedUah || {}),
-              ...(data.settings.realInvestedUah || {})
-            }
-          };
-          state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+      if (dedicatedRealUahObj && dedicatedRealUahObj.realInvestedUah) {
+        const localRealTs = state.settings?.realInvestedUahUpdatedAt || '';
+        const remoteRealTs = dedicatedRealUahObj.updatedAt || '';
+        const curStr = JSON.stringify(state.settings?.realInvestedUah || {});
+        const nextMap = (!localRealTs || (remoteRealTs && remoteRealTs >= localRealTs))
+          ? { ...(state.settings?.realInvestedUah || {}), ...dedicatedRealUahObj.realInvestedUah }
+          : { ...dedicatedRealUahObj.realInvestedUah, ...(state.settings?.realInvestedUah || {}) };
+        if (JSON.stringify(nextMap) !== curStr) {
+          state.settings.realInvestedUah = nextMap;
+          if (remoteRealTs) state.settings.realInvestedUahUpdatedAt = remoteRealTs;
+          changed = true;
         }
-        if (remoteHasReal) {
-          state.positions = remotePositions;
+      }
+
+      if (data && !data.isDemoSeed) {
+        const remoteUpdatedAt = data.settings?.updatedAt || '';
+        const localUpdatedAt = state.settings?.updatedAt || '';
+        const remotePositions = Array.isArray(data.positions) ? data.positions : [];
+        const remoteHasReal = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions);
+
+        const remoteRealMap = data.settings?.realInvestedUah || {};
+        const localRealMap = state.settings?.realInvestedUah || {};
+
+        if ((remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) || (Object.keys(remoteRealMap).length > 0 && Object.keys(localRealMap).length === 0)) {
+          if (data.settings) {
+            state.settings = {
+              ...state.settings,
+              ...data.settings,
+              realInvestedUah: {
+                ...localRealMap,
+                ...remoteRealMap,
+                ...(dedicatedRealUahObj?.realInvestedUah || {})
+              }
+            };
+            state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+          }
+          if (remoteHasReal) {
+            state.positions = remotePositions;
+          }
+          changed = true;
         }
+      }
+
+      if (changed) {
         state.cloudSynced = true;
         safeSetItem('kapital_backup_state', JSON.stringify({
           settings: state.settings,
@@ -3256,6 +3355,9 @@ body {
       settings: state.settings,
       positions: state.positions
     }));
+    if (!isGoogleAppsScript() && state.settings?.realInvestedUah && Object.keys(state.settings.realInvestedUah).length > 0) {
+      saveRealInvestedUahToCloudSlot();
+    }
     try {
       if (isGoogleAppsScript()) {
         await gasCall('gasSavePortfolio', {
@@ -6107,11 +6209,15 @@ body {
   }
 
   function schedulePersistRealUah() {
+    state.settings.realInvestedUahUpdatedAt = new Date().toISOString();
     setRealUahCloudBadgeState('saving');
     if (realUahSaveTimer) clearTimeout(realUahSaveTimer);
     realUahSaveTimer = setTimeout(async () => {
       realUahSaveTimer = null;
-      await persistPortfolio();
+      await Promise.all([
+        saveRealInvestedUahToCloudSlot(),
+        persistPortfolio()
+      ]);
       setRealUahCloudBadgeState('saved');
     }, 350);
   }
