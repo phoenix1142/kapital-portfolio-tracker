@@ -1714,7 +1714,7 @@
     // Show/hide overview breakdown section
     const overviewSection = document.getElementById('overview-breakdown-section');
     if (state.activeCategory === 'all') {
-      overviewSection.style.display = 'grid';
+      overviewSection.style.display = 'block';
       renderOverviewBreakdown(evaluated, totalUah);
     } else {
       overviewSection.style.display = 'none';
@@ -3796,73 +3796,16 @@
   function renderOverviewBreakdown(allEvaluated, grandTotalUah) {
     const rates = getEffectiveRates();
     const isUsdPrimary = state.primaryCurrency === 'USD';
-    const categoriesOrder = ['crypto', 'stocks', 'ovdp', 'deposits', 'cash'];
-    const catTotals = {};
-    categoriesOrder.forEach(c => {
-      catTotals[c] = { uah: 0, usd: 0, count: 0 };
-    });
-
     const currTotals = { UAH: 0, USD: 0, EUR: 0 };
 
     allEvaluated.forEach(p => {
-      if (catTotals[p.category]) {
-        catTotals[p.category].uah += p.currentValUah;
-        catTotals[p.category].usd += p.currentValUsd;
-        catTotals[p.category].count += 1;
-      }
       const c = p.nativeCurrency || 'UAH';
       currTotals[c] = (currTotals[c] || 0) + p.currentValUah;
     });
 
-    // 1. Stacked Bar & Category Cards
-    const barEl = document.getElementById('allocation-stacked-bar');
-    const cardsEl = document.getElementById('allocation-cards-grid');
-    barEl.innerHTML = '';
-    cardsEl.innerHTML = '';
-
-    categoriesOrder.forEach(cat => {
-      const info = CATEGORY_META[cat];
-      const stats = catTotals[cat];
-      const sharePct = grandTotalUah > 0 ? (stats.uah / grandTotalUah) * 100 : 0;
-
-      if (sharePct > 0) {
-        const seg = document.createElement('div');
-        seg.className = 'allocation-segment';
-        seg.style.width = `${Math.max(2, sharePct)}%`;
-        seg.style.backgroundColor = info.color;
-        seg.title = `${info.shortName}: ${sharePct.toFixed(1)}%`;
-        barEl.appendChild(seg);
-      }
-
-      const primaryCatVal = isUsdPrimary ? fmtUsd(stats.usd) : fmtUah(stats.uah);
-      const secondaryCatVal = isUsdPrimary ? fmtUah(stats.uah) : fmtUsd(stats.usd);
-      const strategyHint = cat === 'stocks'
-        ? `<span class="pill-badge pill-positive" style="margin-left:6px; font-size:10.5px;">🎯 Стратегія та калькулятор</span>`
-        : '';
-
-      const card = document.createElement('div');
-      card.className = 'allocation-item';
-      card.innerHTML = `
-        <div class="allocation-item-left">
-          <span class="cat-dot" style="background: ${info.color}; width:10px; height:10px;"></span>
-          <div>
-            <div class="allocation-item-name">${info.shortName}${strategyHint}</div>
-            <div class="allocation-item-share tabular">${sharePct.toFixed(1)}% портфеля · ${stats.count} поз.</div>
-          </div>
-        </div>
-        <div class="allocation-item-right">
-          <div class="allocation-item-uah">${primaryCatVal}</div>
-          <div class="allocation-item-usd">${secondaryCatVal}</div>
-        </div>
-      `;
-      card.addEventListener('click', () => {
-        setActiveCategory(cat);
-      });
-      cardsEl.appendChild(card);
-    });
-
-    // 2. Currency Exposure Bars
+    // Currency Exposure Bars
     const currEl = document.getElementById('currency-exposure-list');
+    if (!currEl) return;
     currEl.innerHTML = '';
     const currencyLabels = {
       USD: '🇺🇸 Долар США (USD — Крипта, Акції, Валюта)',
