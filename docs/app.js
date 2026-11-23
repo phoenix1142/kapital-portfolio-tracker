@@ -1708,6 +1708,9 @@
       overviewSection.style.display = 'none';
     }
 
+    // Render Circular Donut Allocation Window (Categories + Individual Assets % by category and overall)
+    renderCircularAllocationSection(evaluated);
+
     // Show/hide Category Dynamics Chart Section (for 'all', 'crypto', and 'stocks' tabs)
     let dynamicsSection = document.getElementById('category-dynamics-section');
     if (!dynamicsSection && overviewSection && overviewSection.parentNode) {
@@ -3844,6 +3847,396 @@
         </div>
       `;
       currEl.appendChild(row);
+    });
+  }
+
+  // Circular Donut Allocation Panel (Categories & Individual Assets % by category and overall)
+  let circularAllocationScope = 'all'; // 'all' | 'crypto' | 'stocks' | 'ovdp' | 'deposits' | 'cash'
+  let lastActiveCatForCircle = 'all';
+  let hoveredCategorySlice = '';
+  let hoveredAssetSliceId = '';
+
+  const ASSET_SLICE_PALETTE = [
+    '#38bdf8', '#10b981', '#f59e0b', '#a855f7', '#f43f5e',
+    '#2dd4bf', '#6366f1', '#fb923c', '#34d399', '#e879f9',
+    '#60a5fa', '#facc15', '#4ade80', '#c084fc', '#fb7185'
+  ];
+
+  function buildDonutSvgMarkup(slices, centerTopLabel, centerMainVal, centerSubVal, activeKey, dataAttrName) {
+    const size = 216;
+    const cx = size / 2;
+    const cy = size / 2;
+    const r = 78;
+    const strokeW = 24;
+    const circum = 2 * Math.PI * r;
+
+    const validSlices = slices.filter(s => s.pct > 0);
+    if (validSlices.length === 0) {
+      return `
+        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="display:block; margin:0 auto;">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(148,163,184,0.15)" stroke-width="${strokeW}" />
+          <text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="var(--text-muted)" font-size="12" font-weight="600">Немає даних</text>
+        </svg>
+      `;
+    }
+
+    let accumPct = 0;
+    const circlesHtml = validSlices.map((s) => {
+      const isHovered = activeKey && activeKey === s.key;
+      const segLen = Math.max(0, (s.pct / 100) * circum);
+      const gap = validSlices.length > 1 ? Math.min(2.2, segLen * 0.25) : 0;
+      const visibleLen = Math.max(0.5, segLen - gap);
+      const dashArray = `${visibleLen.toFixed(2)} ${(circum - visibleLen).toFixed(2)}`;
+      const dashOffset = (circum * 0.25 - (accumPct / 100) * circum).toFixed(2);
+      accumPct += s.pct;
+
+      return `
+        <circle
+          cx="${cx}"
+          cy="${cy}"
+          r="${r}"
+          fill="none"
+          stroke="${s.color}"
+          stroke-width="${isHovered ? strokeW + 5 : strokeW}"
+          stroke-dasharray="${dashArray}"
+          stroke-dashoffset="${dashOffset}"
+          ${dataAttrName}="${escapeHtml(s.key)}"
+          style="cursor:pointer; transition: stroke-width 0.15s ease, opacity 0.15s ease; opacity:${activeKey && !isHovered ? '0.55' : '1'};"
+        >
+          <title>${escapeHtml(s.label)}: ${s.pct.toFixed(1)}% (${escapeHtml(s.valFormatted)})</title>
+        </circle>
+      `;
+    }).join('');
+
+    return `
+      <div style="position:relative; width:${size}px; height:${size}px; margin:0 auto; flex-shrink:0;">
+        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="display:block;">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(148,163,184,0.1)" stroke-width="${strokeW}" />
+          ${circlesHtml}
+        </svg>
+        <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; text-align:center; padding:0 32px;">
+          <div style="font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;">${escapeHtml(centerTopLabel)}</div>
+          <div class="tabular" style="font-size:16px; font-weight:800; color:var(--text-primary); line-height:1.25; margin-top:2px;">${escapeHtml(centerMainVal)}</div>
+          <div class="tabular" style="font-size:11.5px; font-weight:600; color:var(--accent-primary); margin-top:1px;">${escapeHtml(centerSubVal)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderCircularAllocationSection(allEvaluated) {
+    let sectionEl = document.getElementById('circular-allocation-section');
+    if (!sectionEl) {
+      const overviewSection = document.getElementById('overview-breakdown-section');
+      if (overviewSection && overviewSection.parentNode) {
+        sectionEl = document.createElement('section');
+        sectionEl.className = 'panel-card';
+        sectionEl.id = 'circular-allocation-section';
+        sectionEl.style.marginBottom = '20px';
+        overviewSection.parentNode.insertBefore(sectionEl, overviewSection.nextSibling);
+      } else {
+        return;
+      }
+    }
+
+    // Sync filter scope when user changes sidebar category tab
+    if (state.activeCategory !== lastActiveCatForCircle) {
+      lastActiveCatForCircle = state.activeCategory;
+      circularAllocationScope = state.activeCategory;
+      hoveredAssetSliceId = '';
+    }
+
+    const isUsdPrimary = state.primaryCurrency === 'USD';
+    const fmtPrimary = (pUsd, pUah) => isUsdPrimary ? fmtUsd(pUsd) : fmtUah(pUah);
+    const fmtSecondary = (pUsd, pUah) => isUsdPrimary ? fmtUah(pUah) : fmtUsd(pUsd);
+
+    const grandTotalUsd = allEvaluated.reduce((s, p) => s + (p.currentValUsd || 0), 0);
+    const grandTotalUah = allEvaluated.reduce((s, p) => s + (p.currentValUah || 0), 0);
+
+    // 1. CategoryTotals for Left Circular Chart
+    const categoriesOrder = ['crypto', 'stocks', 'ovdp', 'deposits', 'cash'];
+    const catSlices = categoriesOrder.map(cat => {
+      const info = CATEGORY_META[cat];
+      const catPos = allEvaluated.filter(p => p.category === cat);
+      const valUsd = catPos.reduce((s, p) => s + (p.currentValUsd || 0), 0);
+      const valUah = catPos.reduce((s, p) => s + (p.currentValUah || 0), 0);
+      const pct = grandTotalUsd > 0 ? (valUsd / grandTotalUsd) * 100 : 0;
+      return {
+        key: cat,
+        label: info.shortName,
+        color: info.color,
+        usd: valUsd,
+        uah: valUah,
+        count: catPos.length,
+        pct,
+        valFormatted: fmtPrimary(valUsd, valUah)
+      };
+    });
+
+    // 2. Scoped Assets for Right Circular Chart (either all portfolio assets or assets in selected category)
+    // Group positions with the same ticker+category if user wants clean asset slices, or keep each position clearly labeled
+    const scopedPositions = circularAllocationScope === 'all'
+      ? [...allEvaluated]
+      : allEvaluated.filter(p => p.category === circularAllocationScope);
+
+    scopedPositions.sort((a, b) => (b.currentValUsd || 0) - (a.currentValUsd || 0));
+
+    const scopedTotalUsd = scopedPositions.reduce((s, p) => s + (p.currentValUsd || 0), 0);
+    const scopedTotalUah = scopedPositions.reduce((s, p) => s + (p.currentValUah || 0), 0);
+
+    const assetSlices = scopedPositions.map((pos, idx) => {
+      const valUsd = pos.currentValUsd || 0;
+      const valUah = pos.currentValUah || 0;
+      const pctInScope = scopedTotalUsd > 0 ? (valUsd / scopedTotalUsd) * 100 : 0;
+      const pctInTotal = grandTotalUsd > 0 ? (valUsd / grandTotalUsd) * 100 : 0;
+      const catColor = CATEGORY_META[pos.category]?.color || '#38bdf8';
+      const sliceColor = ASSET_SLICE_PALETTE[idx % ASSET_SLICE_PALETTE.length] || catColor;
+      const code = pos.ticker || (pos.category === 'ovdp' ? 'ОВДП' : (pos.category === 'deposits' ? 'ДЕП' : (pos.nativeCurrency || 'АКТИВ')));
+
+      return {
+        key: pos.id,
+        pos,
+        code,
+        label: pos.displayName || code,
+        catName: CATEGORY_META[pos.category]?.shortName || pos.category,
+        catColor,
+        color: sliceColor,
+        usd: valUsd,
+        uah: valUah,
+        pct: pctInScope,
+        pctInScope,
+        pctInTotal,
+        valFormatted: fmtPrimary(valUsd, valUah)
+      };
+    });
+
+    // Center text for Category Circle
+    const activeCatSlice = catSlices.find(c => c.key === (hoveredCategorySlice || (circularAllocationScope !== 'all' ? circularAllocationScope : '')));
+    const catCenterTop = activeCatSlice ? activeCatSlice.label : 'Увесь портфель';
+    const catCenterMain = activeCatSlice ? fmtPrimary(activeCatSlice.usd, activeCatSlice.uah) : fmtPrimary(grandTotalUsd, grandTotalUah);
+    const catCenterSub = activeCatSlice ? `${activeCatSlice.pct.toFixed(1)}% портфеля` : `100% · ${allEvaluated.length} поз.`;
+
+    // Center text for Asset Circle
+    const activeAssetSlice = assetSlices.find(a => a.key === hoveredAssetSliceId);
+    const scopeMeta = CATEGORY_META[circularAllocationScope] || CATEGORY_META.all;
+    const assetCenterTop = activeAssetSlice
+      ? activeAssetSlice.code
+      : (circularAllocationScope === 'all' ? 'Усі активи' : scopeMeta.shortName);
+    const assetCenterMain = activeAssetSlice
+      ? fmtPrimary(activeAssetSlice.usd, activeAssetSlice.uah)
+      : fmtPrimary(scopedTotalUsd, scopedTotalUah);
+    const assetCenterSub = activeAssetSlice
+      ? (circularAllocationScope === 'all'
+          ? `${activeAssetSlice.pctInTotal.toFixed(1)}% портфеля`
+          : `${activeAssetSlice.pctInScope.toFixed(1)}% кат. (${activeAssetSlice.pctInTotal.toFixed(1)}% заг.)`)
+      : `${scopedPositions.length} активів · ${grandTotalUsd > 0 ? ((scopedTotalUsd / grandTotalUsd) * 100).toFixed(1) : '0.0'}%`;
+
+    const catDonutHtml = buildDonutSvgMarkup(
+      catSlices,
+      catCenterTop,
+      catCenterMain,
+      catCenterSub,
+      hoveredCategorySlice || (circularAllocationScope !== 'all' ? circularAllocationScope : ''),
+      'data-circle-cat'
+    );
+
+    const assetDonutHtml = buildDonutSvgMarkup(
+      assetSlices,
+      assetCenterTop,
+      assetCenterMain,
+      assetCenterSub,
+      hoveredAssetSliceId,
+      'data-circle-asset'
+    );
+
+    const filterTabs = [
+      { key: 'all', label: '🌐 Разом (Усі активи)', count: allEvaluated.length },
+      { key: 'crypto', label: '₿ Криптовалюта', count: catSlices.find(c => c.key === 'crypto')?.count || 0 },
+      { key: 'stocks', label: '📈 Фондовий ринок', count: catSlices.find(c => c.key === 'stocks')?.count || 0 },
+      { key: 'ovdp', label: '🇺🇦 ОВДП', count: catSlices.find(c => c.key === 'ovdp')?.count || 0 },
+      { key: 'deposits', label: '🏦 Депозити', count: catSlices.find(c => c.key === 'deposits')?.count || 0 },
+      { key: 'cash', label: '💵 Готівка', count: catSlices.find(c => c.key === 'cash')?.count || 0 }
+    ];
+
+    sectionEl.innerHTML = `
+      <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
+        <div>
+          <div class="panel-title">🍩 Кругова алокація портфеля (% по категоріях та по кожному активу)</div>
+          <div class="panel-subtitle">Наочний розподіл капіталу у формі кола: частка кожної категорії та частка кожного окремого активу</div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          ${filterTabs.map(t => {
+            const isAct = circularAllocationScope === t.key;
+            return `
+              <button
+                type="button"
+                class="chip-btn"
+                data-alloc-scope="${t.key}"
+                style="padding:5px 11px; font-size:12px; font-weight:${isAct ? '700' : '500'}; ${isAct ? 'background:var(--accent-primary); color:#090d16; border-color:var(--accent-primary);' : ''}"
+              >
+                ${t.label} <span style="opacity:0.8;">(${t.count})</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap:16px; margin-top:8px;">
+        <!-- Left Box: Categories Circular Allocation -->
+        <div style="background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size:13.5px; font-weight:700; color:var(--text-primary);">1. Алокація по категоріях (Разом 100%)</div>
+              <div style="font-size:11.5px; color:var(--text-muted);">Натисніть на сектор або рядок, щоб відфільтрувати активи праворуч</div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center;">
+            ${catDonutHtml}
+
+            <div style="flex:1; min-width:210px; display:flex; flex-direction:column; gap:7px;">
+              ${catSlices.map(c => {
+                const isSelected = circularAllocationScope === c.key;
+                const isHov = hoveredCategorySlice === c.key;
+                return `
+                  <div
+                    data-circle-cat="${c.key}"
+                    style="display:flex; justify-content:space-between; align-items:center; padding:7px 10px; border-radius:8px; cursor:pointer; border:1px solid ${isSelected || isHov ? c.color : 'var(--border-subtle)'}; background:${isSelected ? 'rgba(56,189,248,0.08)' : 'var(--bg-surface)'}; transition:all 0.15s ease;"
+                  >
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                      <span style="width:11px; height:11px; border-radius:50%; background:${c.color}; flex-shrink:0;"></span>
+                      <div>
+                        <div style="font-size:12.5px; font-weight:700; color:var(--text-primary);">${escapeHtml(c.label)}</div>
+                        <div style="font-size:11px; color:var(--text-muted);">${c.count} поз. · ${fmtSecondary(c.usd, c.uah)}</div>
+                      </div>
+                    </div>
+                    <div class="tabular" style="text-align:right;">
+                      <div style="font-size:13.5px; font-weight:800; color:${c.pct > 0 ? c.color : 'var(--text-muted)'};">${c.pct.toFixed(1)}%</div>
+                      <div style="font-size:11.5px; font-weight:600; color:var(--text-secondary);">${fmtPrimary(c.usd, c.uah)}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Box: Individual Assets Circular Allocation -->
+        <div style="background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+            <div>
+              <div style="font-size:13.5px; font-weight:700; color:var(--text-primary);">
+                2. Алокація по активах: <span style="color:var(--accent-primary);">${circularAllocationScope === 'all' ? 'Усі активи разом' : escapeHtml(scopeMeta.shortName)}</span>
+              </div>
+              <div style="font-size:11.5px; color:var(--text-muted);">
+                ${circularAllocationScope === 'all'
+                  ? 'Частка кожного активу у загальному капіталі портфеля (%)'
+                  : `Частка кожного активу всередині категорії «${escapeHtml(scopeMeta.shortName)}» та від усього портфеля`}
+              </div>
+            </div>
+            ${circularAllocationScope !== 'all' ? `
+              <button type="button" class="btn btn-ghost" id="btn-reset-circle-scope" style="font-size:11.5px; padding:3px 9px;">
+                Показати всі разом
+              </button>
+            ` : ''}
+          </div>
+
+          <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center;">
+            ${assetDonutHtml}
+
+            <div style="flex:1; min-width:225px; max-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding-right:3px;">
+              ${assetSlices.length === 0 ? `
+                <div style="text-align:center; padding:24px 12px; color:var(--text-muted); font-size:12.5px;">
+                  У цій категорії ще немає активів.
+                </div>
+              ` : assetSlices.map(a => {
+                const isHov = hoveredAssetSliceId === a.key;
+                return `
+                  <div
+                    data-circle-asset="${escapeHtml(a.key)}"
+                    style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-radius:8px; cursor:pointer; border:1px solid ${isHov ? a.color : 'var(--border-subtle)'}; background:${isHov ? 'rgba(56,189,248,0.08)' : 'var(--bg-surface)'};"
+                  >
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                      <span style="width:11px; height:11px; border-radius:3px; background:${a.color}; flex-shrink:0;"></span>
+                      <div style="min-width:0;">
+                        <div style="display:flex; align-items:center; gap:5px;">
+                          <span style="font-size:12px; font-weight:800; color:var(--text-primary);">${escapeHtml(a.code)}</span>
+                          <span style="font-size:11.5px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;" title="${escapeHtml(a.label)}">${escapeHtml(a.label)}</span>
+                        </div>
+                        <div style="font-size:10.5px; color:var(--text-muted);">
+                          ${escapeHtml(a.catName)} · ${fmtPrimary(a.usd, a.uah)}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="tabular" style="text-align:right; flex-shrink:0;">
+                      <div style="font-size:13.5px; font-weight:800; color:${a.color};">${a.pctInScope.toFixed(1)}%</div>
+                      <div style="font-size:10.5px; color:var(--text-muted);">
+                        ${circularAllocationScope === 'all' ? fmtSecondary(a.usd, a.uah) : `${a.pctInTotal.toFixed(1)}% заг.`}
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Wire up scope tabs
+    sectionEl.querySelectorAll('[data-alloc-scope]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        circularAllocationScope = btn.dataset.allocScope || 'all';
+        hoveredAssetSliceId = '';
+        renderCircularAllocationSection(allEvaluated);
+      });
+    });
+
+    const resetBtn = sectionEl.querySelector('#btn-reset-circle-scope');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        circularAllocationScope = 'all';
+        hoveredAssetSliceId = '';
+        renderCircularAllocationSection(allEvaluated);
+      });
+    }
+
+    // Wire up Category slices & legend rows (hover highlights, click switches right chart scope)
+    sectionEl.querySelectorAll('[data-circle-cat]').forEach(el => {
+      const catKey = el.getAttribute('data-circle-cat');
+      el.addEventListener('mouseenter', () => {
+        if (hoveredCategorySlice !== catKey) {
+          hoveredCategorySlice = catKey;
+          renderCircularAllocationSection(allEvaluated);
+        }
+      });
+      el.addEventListener('mouseleave', () => {
+        if (hoveredCategorySlice) {
+          hoveredCategorySlice = '';
+          renderCircularAllocationSection(allEvaluated);
+        }
+      });
+      el.addEventListener('click', () => {
+        circularAllocationScope = circularAllocationScope === catKey ? 'all' : catKey;
+        hoveredAssetSliceId = '';
+        renderCircularAllocationSection(allEvaluated);
+      });
+    });
+
+    // Wire up Asset slices & legend rows (hover highlights in donut center)
+    sectionEl.querySelectorAll('[data-circle-asset]').forEach(el => {
+      const assetKey = el.getAttribute('data-circle-asset');
+      el.addEventListener('mouseenter', () => {
+        if (hoveredAssetSliceId !== assetKey) {
+          hoveredAssetSliceId = assetKey;
+          renderCircularAllocationSection(allEvaluated);
+        }
+      });
+      el.addEventListener('mouseleave', () => {
+        if (hoveredAssetSliceId) {
+          hoveredAssetSliceId = '';
+          renderCircularAllocationSection(allEvaluated);
+        }
+      });
     });
   }
 
