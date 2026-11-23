@@ -935,17 +935,22 @@
       const localUpdatedAt = localSettings?.updatedAt || '';
       const remoteUpdatedAt = data?.settings?.updatedAt || '';
 
+      // Merge realInvestedUah from both local and cloud based on whichever device updated later
+      const mergedRealInvestedUah = (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt)
+        ? { ...(data?.settings?.realInvestedUah || {}), ...(localSettings?.realInvestedUah || {}) }
+        : { ...(localSettings?.realInvestedUah || {}), ...(data?.settings?.realInvestedUah || {}) };
+
       // Protect real local user positions from EVER being overwritten by remote demo/empty data!
       if (localHasRealUserPositions && (!remoteHasRealUserPositions || (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt))) {
         if (localSettings) {
-          state.settings = { ...state.settings, ...localSettings };
+          state.settings = { ...state.settings, ...localSettings, realInvestedUah: mergedRealInvestedUah };
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
         state.positions = localPositions;
         persistPortfolio();
       } else {
         if (data && data.settings) {
-          state.settings = { ...state.settings, ...data.settings };
+          state.settings = { ...state.settings, ...data.settings, realInvestedUah: mergedRealInvestedUah };
           if (!data.settings.defaultUsdMigrated) {
             state.settings.primaryCurrency = 'USD';
             state.settings.defaultUsdMigrated = true;
@@ -995,6 +1000,54 @@
         renderAll();
         refreshBrowserQuotesQuietly();
       }
+    }
+  }
+
+  let isPullingCloudQuietly = false;
+  async function syncLatestFromCloudQuietly() {
+    if (isPullingCloudQuietly) return;
+    // Do not overwrite while user has an unsaved edit timer running
+    if (realUahSaveTimer || strategySaveTimer) return;
+    isPullingCloudQuietly = true;
+    try {
+      const data = isGoogleAppsScript()
+        ? await gasCall('gasGetPortfolio')
+        : await directCloudSlotLoad();
+      if (!data || data.isDemoSeed) return;
+
+      const remoteUpdatedAt = data.settings?.updatedAt || '';
+      const localUpdatedAt = state.settings?.updatedAt || '';
+      const remotePositions = Array.isArray(data.positions) ? data.positions : [];
+      const remoteHasReal = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions);
+
+      const remoteRealUahStr = JSON.stringify(data.settings?.realInvestedUah || {});
+      const localRealUahStr = JSON.stringify(state.settings?.realInvestedUah || {});
+
+      if ((remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) || (remoteRealUahStr !== '{}' && localRealUahStr === '{}')) {
+        if (data.settings) {
+          state.settings = {
+            ...state.settings,
+            ...data.settings,
+            realInvestedUah: {
+              ...(state.settings.realInvestedUah || {}),
+              ...(data.settings.realInvestedUah || {})
+            }
+          };
+          state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+        }
+        if (remoteHasReal) {
+          state.positions = remotePositions;
+        }
+        state.cloudSynced = true;
+        safeSetItem('kapital_backup_state', JSON.stringify({
+          settings: state.settings,
+          positions: state.positions
+        }));
+        renderAll();
+      }
+    } catch (_) {
+    } finally {
+      isPullingCloudQuietly = false;
     }
   }
 
@@ -3840,10 +3893,27 @@
   let realUahSaveTimer = null;
   let showOtherRealUahCategories = false;
 
+  function setRealUahCloudBadgeState(mode) {
+    const badgeEl = document.getElementById('real-uah-cloud-sync-badge');
+    if (!badgeEl) return;
+    if (mode === 'saving') {
+      badgeEl.className = 'pill-badge';
+      badgeEl.style.color = '#38bdf8';
+      badgeEl.textContent = '⏳ Автозбереження в хмару...';
+    } else if (mode === 'saved') {
+      badgeEl.className = 'pill-badge pill-positive';
+      badgeEl.style.color = '';
+      badgeEl.textContent = '☁️ Автосинхронізовано в хмару (ПК ↔ Ноутбук)';
+    }
+  }
+
   function schedulePersistRealUah() {
+    setRealUahCloudBadgeState('saving');
     if (realUahSaveTimer) clearTimeout(realUahSaveTimer);
-    realUahSaveTimer = setTimeout(() => {
-      persistPortfolio();
+    realUahSaveTimer = setTimeout(async () => {
+      realUahSaveTimer = null;
+      await persistPortfolio();
+      setRealUahCloudBadgeState('saved');
     }, 350);
   }
 
@@ -3936,10 +4006,15 @@
     sectionEl.innerHTML = `
       <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
         <div>
-          <div class="panel-title">🇺🇦 Скільки реально влито гривень (₴ UAH) у кожну категорію</div>
-          <div class="panel-subtitle">Облік ваших реальних гривневих вкладень у Криптовалюту та Фондовий ринок: змінюйте суму вручну або додавайте/віднімайте поповнення</div>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <div class="panel-title">🇺🇦 Скільки реально влито гривень (₴ UAH) у кожну категорію</div>
+            <span id="real-uah-cloud-sync-badge" class="pill-badge pill-positive" style="font-size:11px;">
+              ☁️ Автосинхронізовано в хмару (ПК ↔ Ноутбук)
+            </span>
+          </div>
+          <div class="panel-subtitle">Будь-яка зміна суми тут автоматично зберігається в хмару і одразу підтягується на стаціонарному ПК та ноутбуці</div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <button type="button" class="chip-btn" id="btn-toggle-other-real-uah" style="padding:5px 11px; font-size:12px;">
             ${showOtherRealUahCategories ? 'Показати тільки Крипту та Фонду' : '+ Показати також ОВДП / Депозити / Готівку'}
           </button>
@@ -5463,6 +5538,9 @@
     historyCategoryFilter = cat;
     historyAssetFilter = 'all';
     renderAll();
+    if (cat === 'invested_uah') {
+      syncLatestFromCloudQuietly();
+    }
   }
 
   // Dynamic Form Fields inside Add/Edit Modal
@@ -6568,6 +6646,16 @@
         }
       });
     }
+
+    // Automatically check cloud for newer changes when switching back to browser tab on PC or laptop
+    window.addEventListener('focus', () => {
+      syncLatestFromCloudQuietly();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        syncLatestFromCloudQuietly();
+      }
+    });
 
     // Currency switcher
     document.querySelectorAll('[data-currency]').forEach(btn => {
