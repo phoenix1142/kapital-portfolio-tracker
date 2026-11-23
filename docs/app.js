@@ -532,11 +532,58 @@
     return null;
   }
 
+  function encodePortfolioBase64(obj) {
+    try {
+      const json = JSON.stringify(obj);
+      const bytes = new TextEncoder().encode(json);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) {
+        bin += String.fromCharCode(bytes[i]);
+      }
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function decodePortfolioBase64(b64url) {
+    try {
+      const b64 = String(b64url || '').replace(/-/g, '+').replace(/_/g, '/');
+      const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+      const bin = atob(b64 + pad);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) {
+        bytes[i] = bin.charCodeAt(i);
+      }
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  const GITHUB_PAGES_HOME_URL = 'https://phoenix1142.github.io/kapital-portfolio-tracker/';
   const DEFAULT_CLOUD_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwoxq-PirVnix_5jvyuama9S_UBc187LwDRMk4moSg9RwhE3LyquTRu-r8VhfJdbqX8/exec';
   state.cloudSyncUrl = safeGetItem('kapital_cloud_sync_url') || DEFAULT_CLOUD_SYNC_URL;
   state.cloudSynced = false;
   state.cloudSyncError = '';
+  state.justSyncedFromBridge = '';
   state.quotes = JSON.parse(JSON.stringify(DEFAULT_QUOTES));
+
+  function triggerOneClickGoogleDrivePush() {
+    const targetGasUrl = (state.cloudSyncUrl || DEFAULT_CLOUD_SYNC_URL).trim();
+    state.settings.updatedAt = new Date().toISOString();
+    const b64 = encodePortfolioBase64({
+      settings: state.settings,
+      positions: state.positions
+    });
+    if (!b64) return;
+    window.location.href = `${targetGasUrl}#sync_push=${b64}`;
+  }
+
+  function triggerOneClickGoogleDrivePull() {
+    const targetGasUrl = (state.cloudSyncUrl || DEFAULT_CLOUD_SYNC_URL).trim();
+    window.location.href = `${targetGasUrl}#sync_pull=1`;
+  }
 
   function isGoogleAppsScript() {
     return typeof window !== 'undefined' && Boolean(window.google && window.google.script && window.google.script.run);
@@ -576,7 +623,6 @@
     if (!baseUrl) throw new Error('No cloud sync URL configured');
     const bodyStr = JSON.stringify(payloadObj);
 
-    // 1. If payload is compact (< 6000 chars), try GET ?action=save&payload=... first because GET redirects never fail POST->302 CORS in browsers
     if (bodyStr.length < 6000 && payloadObj && payloadObj.action === 'save') {
       try {
         const getRes = await cloudSyncGet({ action: 'save', payload: bodyStr });
@@ -584,34 +630,18 @@
       } catch (_) {}
     }
 
-    // 2. Standard CORS POST
-    try {
-      const res = await fetch(baseUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: bodyStr,
-        redirect: 'follow'
-      });
-      if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
-      const text = await res.text();
-      if (text.trim().startsWith('<')) {
-        throw new Error('OLD_GAS_CODE_HTML');
-      }
-      return JSON.parse(text);
-    } catch (postErr) {
-      // 3. Fallback: no-cors POST (executes doPost on Google's server without choking on 302 redirect CORS) + verify via GET
-      await fetch(baseUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: bodyStr
-      });
-      const verify = await cloudSyncGet({ action: 'get' });
-      if (verify && (verify.positions || verify.settings)) {
-        return { ok: true, ...verify };
-      }
-      throw postErr;
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: bodyStr,
+      redirect: 'follow'
+    });
+    if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
+    const text = await res.text();
+    if (text.trim().startsWith('<')) {
+      throw new Error('OLD_GAS_CODE_HTML');
     }
+    return JSON.parse(text);
   }
 
   // API / Storage Sync
@@ -635,6 +665,73 @@
   }
 
   async function loadPortfolioFromServer() {
+    // 1. Check if we just returned from 1-click Google Drive Bridge with #cloud_data=...
+    if (typeof window !== 'undefined' && window.location && window.location.hash && window.location.hash.includes('cloud_data=')) {
+      const m = window.location.hash.match(/cloud_data=([A-Za-z0-9_-]+)/);
+      if (m && m[1]) {
+        const imported = decodePortfolioBase64(m[1]);
+        if (imported && Array.isArray(imported.positions) && imported.positions.length > 0) {
+          state.positions = imported.positions;
+          if (imported.settings) {
+            state.settings = { ...state.settings, ...imported.settings };
+            state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+          }
+          state.cloudSynced = true;
+          state.justSyncedFromBridge = 'imported_to_device';
+          safeSetItem('kapital_backup_state', JSON.stringify({
+            settings: state.settings,
+            positions: state.positions
+          }));
+          try {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          } catch (_) {}
+          renderAll();
+          refreshBrowserQuotesQuietly();
+          return;
+        }
+      }
+    }
+
+    // 2. If running inside Google Apps Script, check if opened via 1-click #sync_push=... or #sync_pull=1
+    if (isGoogleAppsScript() && window.google?.script?.url?.getLocation) {
+      const loc = await new Promise(resolve => {
+        try {
+          window.google.script.url.getLocation(resolve);
+        } catch (_) {
+          resolve(null);
+        }
+      });
+      const hashStr = (loc && loc.hash) ? String(loc.hash) : '';
+      const pushMatch = hashStr.match(/sync_push=([A-Za-z0-9_-]+)/);
+      if (pushMatch && pushMatch[1]) {
+        const pushed = decodePortfolioBase64(pushMatch[1]);
+        if (pushed && Array.isArray(pushed.positions) && pushed.positions.length > 0) {
+          state.positions = pushed.positions;
+          if (pushed.settings) {
+            state.settings = { ...state.settings, ...pushed.settings };
+            state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+          }
+          try {
+            await gasCall('gasSavePortfolio', {
+              settings: state.settings,
+              positions: state.positions
+            });
+            state.cloudSynced = true;
+            state.justSyncedFromBridge = 'pushed_to_drive';
+          } catch (_) {}
+          safeSetItem('kapital_backup_state', JSON.stringify({
+            settings: state.settings,
+            positions: state.positions
+          }));
+          renderAll();
+          refreshBrowserQuotesQuietly();
+          return;
+        }
+      } else if (hashStr.includes('sync_pull')) {
+        state.justSyncedFromBridge = 'pulled_from_drive';
+      }
+    }
+
     const localBackup = readLocalBackupState();
     const localPositions = Array.isArray(localBackup?.positions) ? localBackup.positions : [];
     const localSettings = localBackup?.settings || null;
@@ -677,7 +774,6 @@
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
         state.positions = localPositions;
-        // Automatically push the user's real local data to Google Drive / Server so all devices get it!
         persistPortfolio();
       } else {
         if (data && data.settings) {
@@ -1245,7 +1341,7 @@
       }
     }
 
-    // Show/hide Demo Data & Sync Notice Banner if unmodified demo positions (including demo deposits) are currently loaded
+    // Show 1-Click Cloud Sync Banner for seamless cross-device sync (Desktop <-> Google Drive <-> Laptop)
     const heroEl = document.querySelector('.wealth-hero');
     let demoBanner = document.getElementById('demo-data-notice-banner');
     if (!demoBanner && heroEl && heroEl.parentNode) {
@@ -1255,30 +1351,51 @@
       demoBanner.style.marginBottom = '16px';
       demoBanner.style.padding = '12px 16px';
       demoBanner.style.borderRadius = '10px';
-      demoBanner.style.background = 'rgba(245, 158, 11, 0.1)';
-      demoBanner.style.border = '1px solid rgba(245, 158, 11, 0.45)';
       heroEl.parentNode.insertBefore(demoBanner, heroEl);
     }
     if (demoBanner) {
-      if (isShowingDemo) {
+      if (isGoogleAppsScript()) {
+        const b64Return = encodePortfolioBase64({
+          settings: state.settings,
+          positions: state.positions
+        });
+        const returnHref = `${GITHUB_PAGES_HOME_URL}#cloud_data=${b64Return}`;
         demoBanner.style.display = 'block';
+        demoBanner.style.background = 'rgba(16, 185, 129, 0.12)';
+        demoBanner.style.border = '1px solid rgba(16, 185, 129, 0.45)';
+        const titleMsg = state.justSyncedFromBridge === 'pushed_to_drive'
+          ? `✅ Ваші активи (${state.positions.length} поз.) успішно збережено на Google Диск!`
+          : `🟢 Підключено до Google Диска (${state.positions.length} поз. у хмарі)`;
         demoBanner.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-            <div style="font-size:12.5px; line-height:1.45; max-width:740px;">
-              <strong style="color:#f59e0b; font-size:13px;">⚠️ У цьому браузері зараз відкриті демонстраційні дані-приклади (зокрема тестові депозити Монобанк/ПУМБ)</strong>
-              <div style="color:var(--text-secondary); margin-top:3px;">
-                Ваші реальні активи, які ви вводили на <strong>стаціонарному комп'ютері</strong>, збережені у браузері того комп'ютера. Щоб перенести їх сюди за 5 секунд: на стаціонарному ПК у <strong>⚙️ Налаштуваннях</strong> натисніть <em>«📋 Скопіювати портфель (текстом у буфер)»</em> (або <em>«⬇ Експорт JSON»</em>), а тут натисніть <em>«📥 Вставити портфель»</em> або <em>«⬆ Імпортувати JSON»</em>.
+            <div style="font-size:12.5px; line-height:1.45;">
+              <strong style="color:#10b981; font-size:13.5px;">${titleMsg}</strong>
+              <div style="color:var(--text-secondary); margin-top:2px;">
+                Натисніть кнопку справа, щоб повернутися на основний сайт з цими синхронізованими даними у браузері цього пристрою.
               </div>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-primary" id="btn-banner-paste-text" style="font-size:12px; padding:6px 11px;">
-                📥 Вставити портфель (текстом)
-              </button>
-              <button type="button" class="btn btn-secondary" id="btn-banner-import-json" style="font-size:12px; padding:6px 11px;">
-                ⬆ Імпортувати JSON
-              </button>
-              <button type="button" class="btn btn-secondary" id="btn-banner-open-cloud" style="font-size:12px; padding:6px 11px;">
-                ☁️ Налаштувати Google Диск
+              <a target="_top" href="${returnHref}" class="btn btn-primary" style="font-size:12.5px; padding:7px 14px; text-decoration:none;">
+                ⚡ Відкрити та зберегти на цьому пристрої (GitHub Pages)
+              </a>
+            </div>
+          </div>
+        `;
+      } else if (isShowingDemo) {
+        demoBanner.style.display = 'block';
+        demoBanner.style.background = 'rgba(245, 158, 11, 0.1)';
+        demoBanner.style.border = '1px solid rgba(245, 158, 11, 0.45)';
+        demoBanner.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="font-size:12.5px; line-height:1.45; max-width:680px;">
+              <strong style="color:#f59e0b; font-size:13px;">☁️ На цьому пристрої ще не завантажені ваші дані з Google Диска (показано демо-приклади)</strong>
+              <div style="color:var(--text-secondary); margin-top:3px;">
+                Натисніть <strong>«⬇️ Завантажити мої дані з Google Диска»</strong>, щоб в 1 клік підтягнути ваш портфель без копіювання файлів.
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-primary" id="btn-banner-oneclick-pull" style="font-size:12.5px; padding:7px 14px;">
+                ⬇️ Завантажити мої дані з Google Диска (в 1 клік)
               </button>
               <button type="button" class="btn btn-danger" id="btn-banner-clear-demo" style="font-size:12px; padding:6px 11px;">
                 🗑 Прибрати демо-дані
@@ -1286,19 +1403,66 @@
             </div>
           </div>
         `;
+        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', () => {
+          triggerOneClickGoogleDrivePull();
+        });
         demoBanner.querySelector('#btn-banner-clear-demo')?.addEventListener('click', async () => {
           state.positions = [];
           await persistPortfolio();
           renderAll();
         });
-        demoBanner.querySelector('#btn-banner-paste-text')?.addEventListener('click', () => {
-          document.getElementById('btn-paste-portfolio-clipboard')?.click();
+      } else if (!state.cloudSynced) {
+        demoBanner.style.display = 'block';
+        demoBanner.style.background = 'rgba(56, 189, 248, 0.08)';
+        demoBanner.style.border = '1px solid rgba(56, 189, 248, 0.35)';
+        demoBanner.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="font-size:12.5px; line-height:1.45; max-width:680px;">
+              <strong style="color:var(--accent-primary); font-size:13px;">☁️ Швидка синхронізація між стаціонарним ПК та ноутбуком</strong>
+              <div style="color:var(--text-secondary); margin-top:2px;">
+                Натисніть <strong>«⬆️ Зберегти дані на Google Диск»</strong> на стаціонарному ПК, а потім <strong>«⬇️ Завантажити з Google Диска»</strong> на ноутбуці — усе відбудеться автоматично через кнопку.
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-primary" id="btn-banner-oneclick-push" style="font-size:12.5px; padding:7px 14px;">
+                ⬆️ Зберегти дані на Google Диск (в 1 клік)
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-banner-oneclick-pull" style="font-size:12px; padding:6px 12px;">
+                ⬇️ Завантажити з Google Диска
+              </button>
+            </div>
+          </div>
+        `;
+        demoBanner.querySelector('#btn-banner-oneclick-push')?.addEventListener('click', () => {
+          triggerOneClickGoogleDrivePush();
         });
-        demoBanner.querySelector('#btn-banner-import-json')?.addEventListener('click', () => {
-          document.getElementById('input-import-json-file')?.click();
+        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', () => {
+          triggerOneClickGoogleDrivePull();
         });
-        demoBanner.querySelector('#btn-banner-open-cloud')?.addEventListener('click', () => {
-          openSettingsModal();
+      } else if (state.justSyncedFromBridge === 'imported_to_device') {
+        demoBanner.style.display = 'block';
+        demoBanner.style.background = 'rgba(16, 185, 129, 0.1)';
+        demoBanner.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+        demoBanner.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="font-size:12.5px;">
+              <strong style="color:#10b981;">✅ Дані портфеля (${state.positions.length} поз.) успішно синхронізовано з Google Диском на цьому пристрої!</strong>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button type="button" class="btn btn-secondary" id="btn-banner-oneclick-push" style="font-size:11.5px; padding:5px 10px;">
+                ⬆️ Оновити на Google Диску
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-banner-oneclick-pull" style="font-size:11.5px; padding:5px 10px;">
+                ⬇️ Підтягнути з Google Диска
+              </button>
+            </div>
+          </div>
+        `;
+        demoBanner.querySelector('#btn-banner-oneclick-push')?.addEventListener('click', () => {
+          triggerOneClickGoogleDrivePush();
+        });
+        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', () => {
+          triggerOneClickGoogleDrivePull();
         });
       } else {
         demoBanner.style.display = 'none';
@@ -4931,7 +5095,7 @@
         }
         if (hintEl) {
           hintEl.style.color = 'var(--text-secondary)';
-          hintEl.textContent = 'Відправка даних з цього браузера на Google Диск...';
+          hintEl.textContent = 'Збереження даних на Google Диск...';
         }
         try {
           state.settings.updatedAt = new Date().toISOString();
@@ -4951,12 +5115,8 @@
           }
           renderAll();
         } catch (err) {
-          state.cloudSynced = false;
-          if (hintEl) {
-            hintEl.style.color = 'var(--warning)';
-            hintEl.innerHTML = '⚠️ <strong>Причина помилки:</strong> у вашому <code>script.google.com</code> все ще працює стара версія коду від 17 листопада (у ній не було функції прийому даних <code>doPost</code>).<br/>Натисніть кнопку <strong>«📋 1. Скопіювати новий код для script.google.com»</strong>, вставте його в <code>script.google.com</code> (<code>Ctrl+A</code> → <code>Ctrl+V</code> → <code>Ctrl+S</code>), а потім у <strong>Розгорнути → Керувати розгортаннями → ✎</strong> обов\'язково виберіть <strong>Версія: «Нова версія»</strong> та <strong>Хто має доступ: «Усі (Anyone)»</strong>.';
-          }
-          renderAll();
+          // Automatic 1-click bridge via Google Apps Script session (zero copy/paste!)
+          triggerOneClickGoogleDrivePush();
         }
       });
     }
@@ -5001,12 +5161,8 @@
             throw new Error('Empty payload');
           }
         } catch (err) {
-          state.cloudSynced = false;
-          if (hintEl) {
-            hintEl.style.color = 'var(--warning)';
-            hintEl.innerHTML = '⚠️ <strong>Google Диск не повернув JSON.</strong> Оновіть код у <code>script.google.com</code> через кнопку <strong>«📋 1. Скопіювати новий код для script.google.com»</strong> та розгорніть <strong>«Нову версію»</strong> з доступом <strong>«Усі (Anyone)»</strong>.';
-          }
-          renderAll();
+          // Automatic 1-click bridge via Google Apps Script session (zero copy/paste!)
+          triggerOneClickGoogleDrivePull();
         }
       });
     }
