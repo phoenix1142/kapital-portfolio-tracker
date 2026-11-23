@@ -564,7 +564,11 @@
     url.searchParams.set('_t', String(Date.now()));
     const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow' });
     if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
-    return res.json();
+    const text = await res.text();
+    if (text.trim().startsWith('<')) {
+      throw new Error('OLD_GAS_CODE_HTML');
+    }
+    return JSON.parse(text);
   }
 
   async function cloudSyncPost(payloadObj) {
@@ -577,7 +581,11 @@
       redirect: 'follow'
     });
     if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
-    return res.json();
+    const text = await res.text();
+    if (text.trim().startsWith('<')) {
+      throw new Error('OLD_GAS_CODE_HTML');
+    }
+    return JSON.parse(text);
   }
 
   // API / Storage Sync
@@ -1233,18 +1241,21 @@
             <div style="font-size:12.5px; line-height:1.45; max-width:740px;">
               <strong style="color:#f59e0b; font-size:13px;">⚠️ У цьому браузері зараз відкриті демонстраційні дані-приклади (зокрема тестові депозити Монобанк/ПУМБ)</strong>
               <div style="color:var(--text-secondary); margin-top:3px;">
-                Ваші реальні активи, які ви вводили на <strong>стаціонарному комп'ютері</strong>, збережені у браузері того комп'ютера. Щоб вони автоматично підтягувалися на всі пристрої через Google Диск, у <code>script.google.com</code> (Розгорнути → Керувати розгортаннями → ✎) параметр <strong>«Хто має доступ»</strong> має бути <strong>«Усі» (Anyone)</strong>, після чого на стаціонарному ПК натисніть <em>«⬆️ Відправити дані на Google Диск»</em> (або перенесіть через <em>Експорт / Імпорт JSON</em>).
+                Ваші реальні активи, які ви вводили на <strong>стаціонарному комп'ютері</strong>, збережені у браузері того комп'ютера. Щоб перенести їх сюди за 5 секунд: на стаціонарному ПК у <strong>⚙️ Налаштуваннях</strong> натисніть <em>«📋 Скопіювати портфель (текстом у буфер)»</em> (або <em>«⬇ Експорт JSON»</em>), а тут натисніть <em>«📥 Вставити портфель»</em> або <em>«⬆ Імпортувати JSON»</em>.
               </div>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-danger" id="btn-banner-clear-demo" style="font-size:12px; padding:6px 11px;">
-                🗑 Прибрати ці демо-дані
+              <button type="button" class="btn btn-primary" id="btn-banner-paste-text" style="font-size:12px; padding:6px 11px;">
+                📥 Вставити портфель (текстом)
               </button>
               <button type="button" class="btn btn-secondary" id="btn-banner-import-json" style="font-size:12px; padding:6px 11px;">
                 ⬆ Імпортувати JSON
               </button>
-              <button type="button" class="btn btn-primary" id="btn-banner-open-cloud" style="font-size:12px; padding:6px 11px;">
+              <button type="button" class="btn btn-secondary" id="btn-banner-open-cloud" style="font-size:12px; padding:6px 11px;">
                 ☁️ Налаштувати Google Диск
+              </button>
+              <button type="button" class="btn btn-danger" id="btn-banner-clear-demo" style="font-size:12px; padding:6px 11px;">
+                🗑 Прибрати демо-дані
               </button>
             </div>
           </div>
@@ -1253,6 +1264,9 @@
           state.positions = [];
           await persistPortfolio();
           renderAll();
+        });
+        demoBanner.querySelector('#btn-banner-paste-text')?.addEventListener('click', () => {
+          document.getElementById('btn-paste-portfolio-clipboard')?.click();
         });
         demoBanner.querySelector('#btn-banner-import-json')?.addEventListener('click', () => {
           document.getElementById('input-import-json-file')?.click();
@@ -4787,9 +4801,94 @@
           state.cloudSynced = false;
           if (hintEl) {
             hintEl.style.color = 'var(--warning)';
-            hintEl.textContent = '⚠️ Google Apps Script заблокував зовнішній запит (редирект на вхід Google). Відкрийте script.google.com → Розгорнути → Керувати розгортаннями → ✎ → встановіть «Хто має доступ: Усі (Anyone)» та натисніть «Розгорнути».';
+            hintEl.innerHTML = '⚠️ <strong>Ваш скрипт у script.google.com ще містить старий код від 17 листопада (без функції синхронізації).</strong><br/>1) Натисніть кнопку <strong>«📋 1. Скопіювати новий код для script.google.com»</strong> нижче та вставте його в <a href="https://script.google.com" target="_blank" style="color:var(--accent-primary);">script.google.com</a> замість старого коду (<code>Ctrl+A</code> → <code>Ctrl+V</code> → <code>Ctrl+S</code>).<br/>2) Натисніть <strong>Розгорнути → Нове розгортання</strong> (Хто має доступ: <strong>«Усі / Anyone»</strong>) і вставте нове посилання <code>/exec</code> у поле вище.';
           }
           renderAll();
+        }
+      });
+    }
+
+    const copyGasCodeBtn = document.getElementById('btn-copy-gas-code');
+    if (copyGasCodeBtn) {
+      copyGasCodeBtn.addEventListener('click', async () => {
+        const hintEl = document.getElementById('cloud-sync-hint');
+        const gasCode = [
+          'const DRIVE_FOLDER_ID = "1X_VHDRMMMszQhb_0TFPg-64joSRfcgaO";',
+          'const DRIVE_INDEX_HTML_ID = "19jktydYnWk6NB-rhp_Fni4QO8tqcGlMh";',
+          'const DRIVE_PORTFOLIO_FILE_ID = "11Td-OdFHtuVCfmoqm0VBUiAso6MqRMvb";',
+          'const PORTFOLIO_FILE_NAME = "portfolio.json";',
+          '',
+          'function jsonOutput_(obj) {',
+          '  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);',
+          '}',
+          '',
+          'function doGet(e) {',
+          '  var action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action) : "";',
+          '  if (action === "get") return jsonOutput_(gasGetPortfolio());',
+          '  if (action === "save" && e.parameter.payload) return jsonOutput_(gasSavePortfolio(JSON.parse(e.parameter.payload)));',
+          '  var html = DriveApp.getFileById(DRIVE_INDEX_HTML_ID).getBlob().getDataAsString("UTF-8");',
+          '  return HtmlService.createHtmlOutput(html).setTitle("Мані-кеш — Трекер інвестицій").addMetaTag("viewport", "width=device-width, initial-scale=1.0").setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);',
+          '}',
+          '',
+          'function doPost(e) {',
+          '  try {',
+          '    var raw = (e && e.postData && e.postData.contents) ? e.postData.contents : "{}";',
+          '    var body = JSON.parse(raw);',
+          '    return jsonOutput_(gasSavePortfolio(body));',
+          '  } catch (err) {',
+          '    return jsonOutput_({ ok: false, error: String(err) });',
+          '  }',
+          '}',
+          '',
+          'function loadStoreFromDrive_() {',
+          '  try {',
+          '    var file = DriveApp.getFileById(DRIVE_PORTFOLIO_FILE_ID);',
+          '    return JSON.parse(file.getBlob().getDataAsString("UTF-8"));',
+          '  } catch (e) {',
+          '    try {',
+          '      var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);',
+          '      var files = folder.getFilesByName(PORTFOLIO_FILE_NAME);',
+          '      if (files.hasNext()) return JSON.parse(files.next().getBlob().getDataAsString("UTF-8"));',
+          '    } catch (e2) {}',
+          '  }',
+          '  return { settings: { primaryCurrency: "USD" }, positions: [] };',
+          '}',
+          '',
+          'function saveStoreToDrive_(store) {',
+          '  var json = JSON.stringify(store, null, 2);',
+          '  try {',
+          '    DriveApp.getFileById(DRIVE_PORTFOLIO_FILE_ID).setContent(json);',
+          '    return;',
+          '  } catch (e) {',
+          '    var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);',
+          '    var files = folder.getFilesByName(PORTFOLIO_FILE_NAME);',
+          '    if (files.hasNext()) files.next().setContent(json);',
+          '    else folder.createFile(PORTFOLIO_FILE_NAME, json, MimeType.PLAIN_TEXT);',
+          '  }',
+          '}',
+          '',
+          'function gasGetPortfolio() {',
+          '  var store = loadStoreFromDrive_();',
+          '  return { settings: store.settings || {}, positions: store.positions || [], auth: { requireAuth: false } };',
+          '}',
+          '',
+          'function gasSavePortfolio(payload) {',
+          '  var store = loadStoreFromDrive_();',
+          '  if (payload && Array.isArray(payload.positions)) store.positions = payload.positions;',
+          '  if (payload && payload.settings) store.settings = payload.settings;',
+          '  saveStoreToDrive_(store);',
+          '  return { ok: true, settings: store.settings, positions: store.positions };',
+          '}'
+        ].join('\n');
+
+        try {
+          await navigator.clipboard.writeText(gasCode);
+          if (hintEl) {
+            hintEl.style.color = 'var(--positive)';
+            hintEl.innerHTML = '✅ <strong>Новий код для script.google.com скопійовано в буфер обміну!</strong><br/>Тепер: 1) Відкрийте ваш проект у <a href="https://script.google.com" target="_blank" style="color:var(--accent-primary);">script.google.com</a>, виділіть увесь старий код (<code>Ctrl+A</code>), вставте новий (<code>Ctrl+V</code>) та збережіть (<code>Ctrl+S</code>).<br/>2) Натисніть <strong>Розгорнути → Нове розгортання</strong> (або <em>Керувати розгортаннями → ✎ → Версія: «Нова версія»</em>), перевірте <strong>Хто має доступ: «Усі (Anyone)»</strong>, натисніть <strong>Розгорнути</strong> і вставте отримане посилання <code>/exec</code> у поле вище.';
+          }
+        } catch (_) {
+          window.prompt('Скопіюйте цей код (Ctrl+C) та вставте у script.google.com:', gasCode);
         }
       });
     }
@@ -4829,7 +4928,7 @@
           state.cloudSynced = false;
           if (hintEl) {
             hintEl.style.color = 'var(--warning)';
-            hintEl.textContent = '⚠️ Не вдалося записати на Google Диск через обмеження доступу в Apps Script. У script.google.com (Розгорнути → Керувати розгортаннями → ✎) змініть «Хто має доступ» з «Лише я» на «Усі (Anyone)», або скористайтеся кнопкою «⬇ Експорт JSON» нижче.';
+            hintEl.innerHTML = '⚠️ <strong>Причина помилки:</strong> у вашому <code>script.google.com</code> все ще працює стара версія коду від 17 листопада (у ній не було функції прийому даних <code>doPost</code>).<br/>Натисніть кнопку <strong>«📋 1. Скопіювати новий код для script.google.com»</strong>, вставте його в <code>script.google.com</code> (<code>Ctrl+A</code> → <code>Ctrl+V</code> → <code>Ctrl+S</code>), а потім у <strong>Розгорнути → Керувати розгортаннями → ✎</strong> обов\'язково виберіть <strong>Версія: «Нова версія»</strong> та <strong>Хто має доступ: «Усі (Anyone)»</strong>.';
           }
           renderAll();
         }
@@ -4879,9 +4978,52 @@
           state.cloudSynced = false;
           if (hintEl) {
             hintEl.style.color = 'var(--warning)';
-            hintEl.textContent = '⚠️ Google Диск не відповів (перевірте у script.google.com доступ «Хто має доступ: Усі / Anyone»).';
+            hintEl.innerHTML = '⚠️ <strong>Google Диск не повернув JSON.</strong> Оновіть код у <code>script.google.com</code> через кнопку <strong>«📋 1. Скопіювати новий код для script.google.com»</strong> та розгорніть <strong>«Нову версію»</strong> з доступом <strong>«Усі (Anyone)»</strong>.';
           }
           renderAll();
+        }
+      });
+    }
+
+    // 1-Click Copy / Paste Portfolio via Clipboard (for instant transfer or sending to chat)
+    const copyPortfolioClipboardBtn = document.getElementById('btn-copy-portfolio-clipboard');
+    if (copyPortfolioClipboardBtn) {
+      copyPortfolioClipboardBtn.addEventListener('click', async () => {
+        const payload = JSON.stringify({
+          exportedAt: new Date().toISOString(),
+          settings: state.settings,
+          positions: state.positions
+        });
+        try {
+          await navigator.clipboard.writeText(payload);
+          const origText = copyPortfolioClipboardBtn.textContent;
+          copyPortfolioClipboardBtn.textContent = `✅ Скопійовано (${state.positions.length} поз.)!`;
+          setTimeout(() => { copyPortfolioClipboardBtn.textContent = origText; }, 3000);
+        } catch (_) {
+          window.prompt('Скопіюйте цей текст портфеля (Ctrl+C):', payload);
+        }
+      });
+    }
+
+    const pastePortfolioClipboardBtn = document.getElementById('btn-paste-portfolio-clipboard');
+    if (pastePortfolioClipboardBtn) {
+      pastePortfolioClipboardBtn.addEventListener('click', async () => {
+        const raw = window.prompt('Вставте скопійований текст портфеля (JSON) зі стаціонарного комп\'ютера:');
+        if (!raw || !raw.trim()) return;
+        try {
+          const parsed = JSON.parse(raw.trim());
+          if (Array.isArray(parsed.positions)) {
+            state.positions = parsed.positions;
+          }
+          if (parsed.settings && typeof parsed.settings === 'object') {
+            state.settings = { ...state.settings, ...parsed.settings };
+            state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+          }
+          await persistPortfolio();
+          closeSettingsModal();
+          renderAll();
+        } catch (e) {
+          window.alert('Не вдалося розпізнати JSON портфеля. Перевірте, що ви скопіювали весь текст повністю.');
         }
       });
     }
