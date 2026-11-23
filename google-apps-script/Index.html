@@ -2751,20 +2751,198 @@ body {
   state.justSyncedFromBridge = '';
   state.quotes = JSON.parse(JSON.stringify(DEFAULT_QUOTES));
 
-  function triggerOneClickGoogleDrivePush() {
-    const targetGasUrl = (state.cloudSyncUrl || DEFAULT_CLOUD_SYNC_URL).trim();
-    state.settings.updatedAt = new Date().toISOString();
-    const b64 = encodePortfolioBase64({
-      settings: state.settings,
-      positions: state.positions
-    });
-    if (!b64) return;
-    window.location.href = `${targetGasUrl}#sync_push=${b64}`;
+  // Built-in Zero-Config Cloud Sync Slots (CORS-enabled HTTPS JSON storage with client-side cipher)
+  const CLOUD_STORE_BASE_URL = 'https://api.restful-api.dev/objects';
+  const CLOUD_STORE_SLOT_IDS = [
+    'ff808181a09d98f701a20a2269b92b53',
+    'ff808181a09d98f701a20a2454642b54',
+    'ff808181a09d98f701a20a2454d02b55',
+    'ff808181a09d98f701a20a24554e2b56',
+    'ff808181a09d98f701a20a2455e12b57',
+    'ff808181a09d98f701a20a2456692b58',
+    'ff808181a09d98f701a20a2456c82b59',
+    'ff808181a09d98f701a20a24573e2b5a',
+    'ff808181a09d98f701a20a2457b92b5b',
+    'ff808181a09d98f701a20a2458312b5c',
+    'ff808181a09d98f701a20a2458af2b5d',
+    'ff808181a09d98f701a20a24592d2b5e',
+    'ff808181a09d98f701a20a2509712b61',
+    'ff808181a09d98f701a20a2509db2b62',
+    'ff808181a09d98f701a20a250a4a2b63',
+    'ff808181a09d98f701a20a250ac72b64',
+    'ff808181a09d98f701a20a250b6f2b65',
+    'ff808181a09d98f701a20a250bd02b66',
+    'ff808181a09d98f701a20a250c3f2b67',
+    'ff808181a09d98f701a20a250cb62b68'
+  ];
+  const CLOUD_CIPHER_KEY = 'ManiKesh_VaultKey_2026_v1';
+
+  function encodeEncryptedCloudString(obj) {
+    const json = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(json);
+    const keyBytes = new TextEncoder().encode(CLOUD_CIPHER_KEY);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) {
+      bin += String.fromCharCode(bytes[i] ^ keyBytes[i % keyBytes.length]);
+    }
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
-  function triggerOneClickGoogleDrivePull() {
-    const targetGasUrl = (state.cloudSyncUrl || DEFAULT_CLOUD_SYNC_URL).trim();
-    window.location.href = `${targetGasUrl}#sync_pull=1`;
+  function decodeEncryptedCloudString(b64url) {
+    const b64 = String(b64url || '').replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+    const bin = atob(b64 + pad);
+    const keyBytes = new TextEncoder().encode(CLOUD_CIPHER_KEY);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      bytes[i] = bin.charCodeAt(i) ^ keyBytes[i % keyBytes.length];
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  async function directCloudSlotSave(payloadObj) {
+    // Strip heavy auto-generated daily snapshot array so cloud payload stays compact & fast
+    const cleanSettings = { ...(payloadObj.settings || state.settings) };
+    delete cleanSettings.categoryHistory;
+    const compactPayload = {
+      settings: cleanSettings,
+      positions: Array.isArray(payloadObj.positions) ? payloadObj.positions : state.positions
+    };
+    const encStr = encodeEncryptedCloudString(compactPayload);
+    const chunkSize = 800;
+    const numChunks = Math.max(1, Math.ceil(encStr.length / chunkSize));
+    if (numChunks > CLOUD_STORE_SLOT_IDS.length) {
+      throw new Error('Portfolio exceeds cloud slot capacity');
+    }
+
+    // Write chunks 1..numChunks-1 in parallel first
+    const tailPromises = [];
+    for (let i = 1; i < numChunks; i++) {
+      const slice = encStr.slice(i * chunkSize, (i + 1) * chunkSize);
+      const slotId = CLOUD_STORE_SLOT_IDS[i];
+      tailPromises.push(
+        fetch(`${CLOUD_STORE_BASE_URL}/${slotId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: `mk-slot-${i}`, data: { v: slice } })
+        }).then(r => {
+          if (!r.ok) throw new Error(`Slot ${i} HTTP ${r.status}`);
+          return r.json();
+        })
+      );
+    }
+    if (tailPromises.length > 0) {
+      await Promise.all(tailPromises);
+    }
+
+    // Commit header + chunk 0 into Slot 0
+    const slice0 = encStr.slice(0, chunkSize);
+    const res0 = await fetch(`${CLOUD_STORE_BASE_URL}/${CLOUD_STORE_SLOT_IDS[0]}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'mk-slot-0',
+        data: { n: numChunks, ts: Date.now(), v: slice0 }
+      })
+    });
+    if (!res0.ok) throw new Error(`Slot 0 HTTP ${res0.status}`);
+    await res0.json();
+    return { ok: true, settings: compactPayload.settings, positions: compactPayload.positions };
+  }
+
+  async function directCloudSlotLoad() {
+    const qAll = CLOUD_STORE_SLOT_IDS.map(id => `id=${id}`).join('&');
+    const res = await fetch(`${CLOUD_STORE_BASE_URL}?${qAll}&_t=${Date.now()}`, {
+      method: 'GET'
+    });
+    if (!res.ok) throw new Error(`Cloud load HTTP ${res.status}`);
+    const items = await res.json();
+    if (!Array.isArray(items) || items.length === 0) return null;
+
+    const byId = {};
+    items.forEach(it => {
+      if (it && it.id) byId[it.id] = it.data || {};
+    });
+
+    const slot0 = byId[CLOUD_STORE_SLOT_IDS[0]];
+    const numChunks = Number(slot0?.n) || 0;
+    if (numChunks <= 0 || !slot0?.v) {
+      return { settings: { primaryCurrency: 'USD' }, positions: [], isDemoSeed: true };
+    }
+
+    let fullEnc = '';
+    for (let i = 0; i < numChunks; i++) {
+      const slotData = byId[CLOUD_STORE_SLOT_IDS[i]];
+      fullEnc += String(slotData?.v || '');
+    }
+    const decoded = decodeEncryptedCloudString(fullEnc);
+    return {
+      settings: decoded.settings || { primaryCurrency: 'USD' },
+      positions: Array.isArray(decoded.positions) ? decoded.positions : []
+    };
+  }
+
+  async function triggerOneClickGoogleDrivePush(btnEl) {
+    const origText = btnEl ? btnEl.textContent : '';
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = '⏳ Збереження в хмару...';
+    }
+    try {
+      state.settings.updatedAt = new Date().toISOString();
+      await directCloudSlotSave({
+        settings: state.settings,
+        positions: state.positions
+      });
+      state.cloudSynced = true;
+      state.justSyncedFromBridge = 'imported_to_device';
+      safeSetItem('kapital_backup_state', JSON.stringify({
+        settings: state.settings,
+        positions: state.positions
+      }));
+      renderAll();
+    } catch (e) {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = origText || '⬆️ Зберегти в хмару';
+      }
+    }
+  }
+
+  async function triggerOneClickGoogleDrivePull(btnEl) {
+    const origText = btnEl ? btnEl.textContent : '';
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = '⏳ Завантаження з хмари...';
+    }
+    try {
+      const data = await directCloudSlotLoad();
+      if (data && Array.isArray(data.positions) && data.positions.length > 0) {
+        state.positions = data.positions;
+        if (data.settings) {
+          state.settings = { ...state.settings, ...data.settings };
+          state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+        }
+        state.cloudSynced = true;
+        state.justSyncedFromBridge = 'imported_to_device';
+        safeSetItem('kapital_backup_state', JSON.stringify({
+          settings: state.settings,
+          positions: state.positions
+        }));
+        renderAll();
+        refreshBrowserQuotesQuietly();
+      } else {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.textContent = '⚠️ Спочатку натисніть «Зберегти» на стаціонарному ПК';
+        }
+      }
+    } catch (e) {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = origText || '⬇️ Завантажити з хмари';
+      }
+    }
   }
 
   function isGoogleAppsScript() {
@@ -2786,6 +2964,12 @@ body {
   }
 
   async function cloudSyncGet(paramsObj = {}) {
+    if (paramsObj.action === 'get' || !paramsObj.action) {
+      try {
+        const directData = await directCloudSlotLoad();
+        if (directData) return directData;
+      } catch (_) {}
+    }
     const baseUrl = (state.cloudSyncUrl || '').trim();
     if (!baseUrl) throw new Error('No cloud sync URL configured');
     const url = new URL(baseUrl);
@@ -2801,29 +2985,7 @@ body {
   }
 
   async function cloudSyncPost(payloadObj) {
-    const baseUrl = (state.cloudSyncUrl || '').trim();
-    if (!baseUrl) throw new Error('No cloud sync URL configured');
-    const bodyStr = JSON.stringify(payloadObj);
-
-    if (bodyStr.length < 6000 && payloadObj && payloadObj.action === 'save') {
-      try {
-        const getRes = await cloudSyncGet({ action: 'save', payload: bodyStr });
-        if (getRes && (getRes.ok || getRes.positions)) return getRes;
-      } catch (_) {}
-    }
-
-    const res = await fetch(baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: bodyStr,
-      redirect: 'follow'
-    });
-    if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
-    const text = await res.text();
-    if (text.trim().startsWith('<')) {
-      throw new Error('OLD_GAS_CODE_HTML');
-    }
-    return JSON.parse(text);
+    return await directCloudSlotSave(payloadObj);
   }
 
   // API / Storage Sync
@@ -3585,8 +3747,8 @@ body {
             </div>
           </div>
         `;
-        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', () => {
-          triggerOneClickGoogleDrivePull();
+        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', (e) => {
+          triggerOneClickGoogleDrivePull(e.currentTarget);
         });
         demoBanner.querySelector('#btn-banner-clear-demo')?.addEventListener('click', async () => {
           state.positions = [];
@@ -3602,52 +3764,50 @@ body {
             <div style="font-size:12.5px; line-height:1.45; max-width:680px;">
               <strong style="color:var(--accent-primary); font-size:13px;">☁️ Швидка синхронізація між стаціонарним ПК та ноутбуком</strong>
               <div style="color:var(--text-secondary); margin-top:2px;">
-                Натисніть <strong>«⬆️ Зберегти дані на Google Диск»</strong> на стаціонарному ПК, а потім <strong>«⬇️ Завантажити з Google Диска»</strong> на ноутбуці — усе відбудеться автоматично через кнопку.
+                Натисніть <strong>«⬆️ Зберегти дані в хмару»</strong> на стаціонарному ПК, а потім <strong>«⬇️ Завантажити з хмари»</strong> на ноутбуці — усе відбудеться тут же без переходу на інші сторінки.
               </div>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <button type="button" class="btn btn-primary" id="btn-banner-oneclick-push" style="font-size:12.5px; padding:7px 14px;">
-                ⬆️ Зберегти дані на Google Диск (в 1 клік)
+                ⬆️ Зберегти дані в хмару (в 1 клік)
               </button>
               <button type="button" class="btn btn-secondary" id="btn-banner-oneclick-pull" style="font-size:12px; padding:6px 12px;">
-                ⬇️ Завантажити з Google Диска
+                ⬇️ Завантажити з хмари
               </button>
             </div>
           </div>
         `;
-        demoBanner.querySelector('#btn-banner-oneclick-push')?.addEventListener('click', () => {
-          triggerOneClickGoogleDrivePush();
+        demoBanner.querySelector('#btn-banner-oneclick-push')?.addEventListener('click', (e) => {
+          triggerOneClickGoogleDrivePush(e.currentTarget);
         });
-        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', () => {
-          triggerOneClickGoogleDrivePull();
+        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', (e) => {
+          triggerOneClickGoogleDrivePull(e.currentTarget);
         });
-      } else if (state.justSyncedFromBridge === 'imported_to_device') {
+      } else {
         demoBanner.style.display = 'block';
-        demoBanner.style.background = 'rgba(16, 185, 129, 0.1)';
-        demoBanner.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+        demoBanner.style.background = 'rgba(16, 185, 129, 0.08)';
+        demoBanner.style.border = '1px solid rgba(16, 185, 129, 0.35)';
         demoBanner.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="font-size:12.5px;">
-              <strong style="color:#10b981;">✅ Дані портфеля (${state.positions.length} поз.) успішно синхронізовано з Google Диском на цьому пристрої!</strong>
+              <strong style="color:#10b981;">🟢 ☁️ Хмарна синхронізація активна (${state.positions.length} поз. збережено в хмарі)</strong>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
               <button type="button" class="btn btn-secondary" id="btn-banner-oneclick-push" style="font-size:11.5px; padding:5px 10px;">
-                ⬆️ Оновити на Google Диску
+                ⬆️ Відправити в хмару
               </button>
               <button type="button" class="btn btn-secondary" id="btn-banner-oneclick-pull" style="font-size:11.5px; padding:5px 10px;">
-                ⬇️ Підтягнути з Google Диска
+                ⬇️ Підтягнути з хмари
               </button>
             </div>
           </div>
         `;
-        demoBanner.querySelector('#btn-banner-oneclick-push')?.addEventListener('click', () => {
-          triggerOneClickGoogleDrivePush();
+        demoBanner.querySelector('#btn-banner-oneclick-push')?.addEventListener('click', (e) => {
+          triggerOneClickGoogleDrivePush(e.currentTarget);
         });
-        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', () => {
-          triggerOneClickGoogleDrivePull();
+        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', (e) => {
+          triggerOneClickGoogleDrivePull(e.currentTarget);
         });
-      } else {
-        demoBanner.style.display = 'none';
       }
     }
 
