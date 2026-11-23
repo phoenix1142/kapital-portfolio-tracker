@@ -624,6 +624,27 @@
     return JSON.parse(new TextDecoder().decode(bytes));
   }
 
+  const NTFY_VAULT_BASE_URL = 'https://ntfy.sh/mk_vault_1X_VHDRMMMszQhb_0TFPg';
+
+  async function ntfyFetchLatestJson(topicUrl) {
+    const res = await fetch(`${topicUrl}/json?poll=1&since=all&_t=${Date.now()}`, {
+      method: 'GET'
+    });
+    if (!res.ok) throw new Error(`ntfy HTTP ${res.status}`);
+    const text = await res.text();
+    const lines = text.trim().split('\n').filter(Boolean);
+    let lastMsg = null;
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        const parsed = JSON.parse(lines[i]);
+        if (parsed && parsed.event === 'message' && parsed.message) {
+          lastMsg = JSON.parse(parsed.message);
+        }
+      } catch (_) {}
+    }
+    return lastMsg;
+  }
+
   async function directCloudSlotSave(payloadObj) {
     // Strip heavy auto-generated daily snapshot array so cloud payload stays compact & fast
     const cleanSettings = { ...(payloadObj.settings || state.settings) };
@@ -633,48 +654,57 @@
       positions: Array.isArray(payloadObj.positions) ? payloadObj.positions : state.positions
     };
     const encStr = encodeEncryptedCloudString(compactPayload);
-    const chunkSize = 800;
-    const numChunks = Math.max(1, Math.ceil(encStr.length / chunkSize));
-    if (numChunks > CLOUD_STORE_SLOT_IDS.length) {
-      throw new Error('Portfolio exceeds cloud slot capacity');
-    }
+    const ntfyChunkSize = 3500;
+    const numNtfyChunks = Math.max(1, Math.ceil(encStr.length / ntfyChunkSize));
+    const ts = Date.now();
 
-    // Write chunks 1..numChunks-1 in parallel first
-    const tailPromises = [];
-    for (let i = 1; i < numChunks; i++) {
-      const slice = encStr.slice(i * chunkSize, (i + 1) * chunkSize);
-      const slotId = CLOUD_STORE_SLOT_IDS[i];
-      tailPromises.push(
-        fetch(`${CLOUD_STORE_BASE_URL}/${slotId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: `mk-slot-${i}`, data: { v: slice } })
+    // 1. Primary: write via CORS-preflight-free simple POST (text/plain) to ntfy.sh
+    const ntfyPromises = [];
+    for (let i = 0; i < numNtfyChunks; i++) {
+      const slice = encStr.slice(i * ntfyChunkSize, (i + 1) * ntfyChunkSize);
+      const bodyStr = JSON.stringify({ n: numNtfyChunks, i, ts, v: slice });
+      ntfyPromises.push(
+        fetch(`${NTFY_VAULT_BASE_URL}_s${i}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: bodyStr
         }).then(r => {
-          if (!r.ok) throw new Error(`Slot ${i} HTTP ${r.status}`);
+          if (!r.ok) throw new Error(`ntfy slot ${i} HTTP ${r.status}`);
           return r.json();
         })
       );
     }
-    if (tailPromises.length > 0) {
-      await Promise.all(tailPromises);
-    }
-
-    // Commit header + chunk 0 into Slot 0
-    const slice0 = encStr.slice(0, chunkSize);
-    const res0 = await fetch(`${CLOUD_STORE_BASE_URL}/${CLOUD_STORE_SLOT_IDS[0]}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'mk-slot-0',
-        data: { n: numChunks, ts: Date.now(), v: slice0 }
-      })
-    });
-    if (!res0.ok) throw new Error(`Slot 0 HTTP ${res0.status}`);
-    await res0.json();
+    await Promise.all(ntfyPromises);
     return { ok: true, settings: compactPayload.settings, positions: compactPayload.positions };
   }
 
   async function directCloudSlotLoad() {
+    // 1. Primary: load from ntfy.sh
+    try {
+      const s0 = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_s0`);
+      if (s0 && s0.n > 0 && s0.v) {
+        let fullEnc = String(s0.v);
+        if (s0.n > 1) {
+          const tailPromises = [];
+          for (let i = 1; i < s0.n; i++) {
+            tailPromises.push(ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_s${i}`));
+          }
+          const tailResults = await Promise.all(tailPromises);
+          for (let i = 0; i < tailResults.length; i++) {
+            fullEnc += String(tailResults[i]?.v || '');
+          }
+        }
+        const decoded = decodeEncryptedCloudString(fullEnc);
+        if (decoded && Array.isArray(decoded.positions)) {
+          return {
+            settings: decoded.settings || { primaryCurrency: 'USD' },
+            positions: decoded.positions
+          };
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fallback: load from restful-api.dev slots
     const qAll = CLOUD_STORE_SLOT_IDS.map(id => `id=${id}`).join('&');
     const res = await fetch(`${CLOUD_STORE_BASE_URL}?${qAll}&_t=${Date.now()}`, {
       method: 'GET'
@@ -846,37 +876,28 @@
     return res.json();
   }
 
-  // Dedicated cloud slot for Real Invested UAH (19th slot, < 200 bytes, instant sync)
-  const REAL_UAH_CLOUD_SLOT_ID = CLOUD_STORE_SLOT_IDS[19];
-
+  // Dedicated cloud topic for Real Invested UAH (< 200 bytes, instant CORS-preflight-free POST)
   async function saveRealInvestedUahToCloudSlot() {
     const map = state.settings?.realInvestedUah || {};
     const updatedAt = state.settings?.realInvestedUahUpdatedAt || state.settings?.updatedAt || new Date().toISOString();
     const enc = encodeEncryptedCloudString({ realInvestedUah: map, updatedAt });
     try {
-      await fetch(`${CLOUD_STORE_BASE_URL}/${REAL_UAH_CLOUD_SLOT_ID}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'mk-slot-real-uah',
-          data: { ts: Date.now(), updatedAt, v: enc }
-        })
+      await fetch(`${NTFY_VAULT_BASE_URL}_real_uah`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ ts: Date.now(), updatedAt, v: enc })
       });
     } catch (_) {}
   }
 
   async function loadRealInvestedUahFromCloudSlot() {
     try {
-      const res = await fetch(`${CLOUD_STORE_BASE_URL}/${REAL_UAH_CLOUD_SLOT_ID}?_t=${Date.now()}`, {
-        method: 'GET'
-      });
-      if (!res.ok) return null;
-      const item = await res.json();
-      const v = item?.data?.v;
-      if (!v || v === 'test') return null;
-      const decoded = decodeEncryptedCloudString(v);
-      if (decoded && decoded.realInvestedUah && typeof decoded.realInvestedUah === 'object') {
-        return decoded;
+      const msg = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_real_uah`);
+      if (msg && msg.v) {
+        const decoded = decodeEncryptedCloudString(msg.v);
+        if (decoded && decoded.realInvestedUah && typeof decoded.realInvestedUah === 'object') {
+          return decoded;
+        }
       }
     } catch (_) {}
     return null;
