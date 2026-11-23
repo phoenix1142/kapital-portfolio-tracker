@@ -574,18 +574,44 @@
   async function cloudSyncPost(payloadObj) {
     const baseUrl = (state.cloudSyncUrl || '').trim();
     if (!baseUrl) throw new Error('No cloud sync URL configured');
-    const res = await fetch(baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payloadObj),
-      redirect: 'follow'
-    });
-    if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
-    const text = await res.text();
-    if (text.trim().startsWith('<')) {
-      throw new Error('OLD_GAS_CODE_HTML');
+    const bodyStr = JSON.stringify(payloadObj);
+
+    // 1. If payload is compact (< 6000 chars), try GET ?action=save&payload=... first because GET redirects never fail POST->302 CORS in browsers
+    if (bodyStr.length < 6000 && payloadObj && payloadObj.action === 'save') {
+      try {
+        const getRes = await cloudSyncGet({ action: 'save', payload: bodyStr });
+        if (getRes && (getRes.ok || getRes.positions)) return getRes;
+      } catch (_) {}
     }
-    return JSON.parse(text);
+
+    // 2. Standard CORS POST
+    try {
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: bodyStr,
+        redirect: 'follow'
+      });
+      if (!res.ok) throw new Error(`Cloud HTTP ${res.status}`);
+      const text = await res.text();
+      if (text.trim().startsWith('<')) {
+        throw new Error('OLD_GAS_CODE_HTML');
+      }
+      return JSON.parse(text);
+    } catch (postErr) {
+      // 3. Fallback: no-cors POST (executes doPost on Google's server without choking on 302 redirect CORS) + verify via GET
+      await fetch(baseUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: bodyStr
+      });
+      const verify = await cloudSyncGet({ action: 'get' });
+      if (verify && (verify.positions || verify.settings)) {
+        return { ok: true, ...verify };
+      }
+      throw postErr;
+    }
   }
 
   // API / Storage Sync
