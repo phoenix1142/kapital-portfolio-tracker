@@ -38,6 +38,12 @@
       subtitle: 'Облік готівкових заощаджень, сейфу та банківських карток у різних валютах',
       color: 'var(--cat-cash)',
       shortName: 'Готівка'
+    },
+    invested_uah: {
+      title: '🇺🇦 Скільки реально влито гривень (₴ UAH)',
+      subtitle: 'Облік реальних гривневих вкладень у Криптовалюту, Фондовий ринок та інші категорії з можливістю змінювати суму',
+      color: '#10b981',
+      shortName: 'Влито в грн (₴)'
     }
   };
 
@@ -1482,6 +1488,10 @@
       const mobBtn = document.getElementById(`mob-cat-${cat}`);
       if (mobBtn) mobBtn.classList.toggle('active', state.activeCategory === cat);
     });
+    const navInvestedBtn = document.getElementById('nav-cat-invested_uah');
+    if (navInvestedBtn) navInvestedBtn.classList.toggle('active', state.activeCategory === 'invested_uah');
+    const mobInvestedBtn = document.getElementById('mob-cat-invested_uah');
+    if (mobInvestedBtn) mobInvestedBtn.classList.toggle('active', state.activeCategory === 'invested_uah');
 
     // Update page heading & Cloud Sync Status indicator
     const meta = CATEGORY_META[state.activeCategory] || CATEGORY_META.all;
@@ -1629,8 +1639,10 @@
       }
     }
 
+    const isInvestedUahView = state.activeCategory === 'invested_uah';
+
     // Filter positions for active category
-    const scopedPositions = state.activeCategory === 'all'
+    const scopedPositions = (state.activeCategory === 'all' || isInvestedUahView)
       ? evaluated
       : evaluated.filter(p => p.category === state.activeCategory);
 
@@ -1657,7 +1669,7 @@
 
     // Render Hero Strip (Always shows both UAH & USD side-by-side!)
     document.getElementById('hero-scope-label').textContent =
-      state.activeCategory === 'all'
+      (state.activeCategory === 'all' || isInvestedUahView)
         ? 'Сукупний капітал (Усі інвестиції та готівка)'
         : `Капітал категорії: ${meta.shortName}`;
 
@@ -1708,11 +1720,27 @@
       overviewSection.style.display = 'none';
     }
 
-    // Render Real Invested UAH Capital Tracker (how many UAH were actually poured into Crypto, Stocks, etc. with editable override)
-    renderRealInvestedUahSection(evaluated);
+    // Show Real Invested UAH Capital Tracker ONLY when 'invested_uah' tab is selected in sidebar
+    const realUahSection = document.getElementById('real-uah-invested-section');
+    if (realUahSection) {
+      if (isInvestedUahView) {
+        realUahSection.style.display = 'block';
+        renderRealInvestedUahSection(evaluated);
+      } else {
+        realUahSection.style.display = 'none';
+      }
+    }
 
-    // Render Circular Donut Allocation Window (Categories + Individual Assets % by category and overall)
-    renderCircularAllocationSection(evaluated);
+    // Render Circular Donut Allocation Window (hide on dedicated 'invested_uah' view so that tab is clean)
+    const circularSection = document.getElementById('circular-allocation-section');
+    if (circularSection) {
+      if (isInvestedUahView) {
+        circularSection.style.display = 'none';
+      } else {
+        circularSection.style.display = 'block';
+        renderCircularAllocationSection(evaluated);
+      }
+    }
 
     // Show/hide Category Dynamics Chart Section (for 'all', 'crypto', and 'stocks' tabs)
     let dynamicsSection = document.getElementById('category-dynamics-section');
@@ -1752,12 +1780,24 @@
       }
     }
 
-    // Render Positions Table
-    renderPositionsTable(scopedPositions);
+    // Render Positions Table (hide when viewing the dedicated 'invested_uah' tab)
+    const posTableSection = document.getElementById('positions-table-section');
+    if (posTableSection) {
+      posTableSection.style.display = isInvestedUahView ? 'none' : 'block';
+    }
+    if (!isInvestedUahView) {
+      renderPositionsTable(scopedPositions);
+    }
 
     // Ensure purchase history is seeded from existing positions and render Purchase History Section
     ensurePurchaseHistorySeeded();
-    renderPurchaseHistorySection(evaluated);
+    const historySectionEl = document.getElementById('purchase-history-section');
+    if (historySectionEl) {
+      historySectionEl.style.display = isInvestedUahView ? 'none' : 'block';
+    }
+    if (!isInvestedUahView) {
+      renderPurchaseHistorySection(evaluated);
+    }
   }
 
   let selectedDynamicsPointIdx = -1;
@@ -3956,13 +3996,11 @@
           <div class="panel-title">🇺🇦 Скільки реально влито гривень (₴ UAH) у кожну категорію</div>
           <div class="panel-subtitle">Облік ваших реальних гривневих вкладень у Криптовалюту та Фондовий ринок: змінюйте суму вручну або додавайте/віднімайте поповнення</div>
         </div>
-        ${state.activeCategory === 'all' ? `
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" class="chip-btn" id="btn-toggle-other-real-uah" style="padding:5px 11px; font-size:12px;">
-              ${showOtherRealUahCategories ? 'Показати тільки Крипту та Фонду' : '+ Показати також ОВДП / Депозити / Готівку'}
-            </button>
-          </div>
-        ` : ''}
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="chip-btn" id="btn-toggle-other-real-uah" style="padding:5px 11px; font-size:12px;">
+            ${showOtherRealUahCategories ? 'Показати тільки Крипту та Фонду' : '+ Показати також ОВДП / Депозити / Готівку'}
+          </button>
+        </div>
       </div>
 
       <!-- Summary Banner of Real UAH Invested vs Current Value -->
@@ -6578,6 +6616,9 @@
     const jumpHistoryBtn = document.getElementById('nav-jump-history');
     if (jumpHistoryBtn) {
       jumpHistoryBtn.addEventListener('click', () => {
+        if (state.activeCategory === 'invested_uah') {
+          setActiveCategory('all');
+        }
         const histSection = document.getElementById('purchase-history-section');
         if (histSection) {
           histSection.scrollIntoView({ behavior: 'smooth', block: 'start' });

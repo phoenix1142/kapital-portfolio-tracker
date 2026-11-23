@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)</title>
   <meta name="description" content="Персональний трекер інвестицій Мані-кеш: Криптовалюта, Фондовий ринок, ОВДП, Депозити та Готівка. Автоматичні котирування та облік у гривні (₴) і доларах ($)." />
-  <link rel="stylesheet" href="index.css?v=27" />
+  <link rel="stylesheet" href="index.css?v=28" />
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -81,6 +81,15 @@
           </button>
         </li>
         <li style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-subtle);">
+          <button type="button" class="nav-btn" data-category="invested_uah" id="nav-cat-invested_uah">
+            <span class="nav-btn-left">
+              <span style="font-size:13px;">🇺🇦</span>
+              <span>Влито в грн (₴)</span>
+            </span>
+            <span class="nav-badge" id="badge-count-invested_uah">₴</span>
+          </button>
+        </li>
+        <li>
           <button type="button" class="nav-btn" id="nav-jump-history">
             <span class="nav-btn-left">
               <span style="font-size:13px;">📜</span>
@@ -203,8 +212,8 @@
           </div>
         </section>
 
-        <!-- Real Invested UAH Capital Tracker (Crypto, Stocks & Other Categories with Editable Amounts) -->
-        <section class="panel-card" id="real-uah-invested-section" style="margin-bottom:20px;" aria-label="Скільки реально влито гривень (₴) у кожну категорію"></section>
+        <!-- Real Invested UAH Capital Tracker (Shown ONLY when 'invested_uah' tab is selected in sidebar) -->
+        <section class="panel-card" id="real-uah-invested-section" style="display:none; margin-bottom:20px;" aria-label="Скільки реально влито гривень (₴) у кожну категорію"></section>
 
         <!-- Circular Donut Allocation Panel (Categories & Individual Assets %) -->
         <section class="panel-card" id="circular-allocation-section" style="margin-bottom:20px;" aria-label="Кругова діаграма алокації активів та категорій"></section>
@@ -216,7 +225,7 @@
         <section class="panel-card" id="stocks-strategy-section" style="display:none; margin-bottom:20px;" aria-label="Стратегія фондового портфеля та калькулятор ребалансування"></section>
 
         <!-- Positions Table Panel -->
-        <section class="panel-card" aria-label="Список активів">
+        <section class="panel-card" id="positions-table-section" aria-label="Список активів">
           <div class="panel-header">
             <div>
               <div class="panel-title" id="table-section-title">Усі активи портфеля</div>
@@ -254,6 +263,7 @@
       <button type="button" class="mobile-nav-btn" data-category="ovdp" id="mob-cat-ovdp">ОВДП</button>
       <button type="button" class="mobile-nav-btn" data-category="deposits" id="mob-cat-deposits">Депозит</button>
       <button type="button" class="mobile-nav-btn" data-category="cash" id="mob-cat-cash">Готівка</button>
+      <button type="button" class="mobile-nav-btn" data-category="invested_uah" id="mob-cat-invested_uah">Влито ₴</button>
     </nav>
   </div>
 
@@ -402,6 +412,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=27"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>
