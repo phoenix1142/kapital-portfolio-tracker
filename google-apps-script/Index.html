@@ -336,7 +336,7 @@ body {
   background-color: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: border-color var(--transition-fast), transform var(--transition-fast);
+  transition: border-color var(--transition-fast), transform var(--transition-fast), background-color 260ms ease;
   min-width: 148px;
 }
 
@@ -345,10 +345,47 @@ body {
   transform: translateY(-1px);
 }
 
+.market-ticker-card.tick-up {
+  animation: tickerFlashUp 650ms ease-out;
+}
+
+.market-ticker-card.tick-down {
+  animation: tickerFlashDown 650ms ease-out;
+}
+
+@keyframes tickerFlashUp {
+  0% {
+    border-color: rgba(16, 185, 129, 0.72);
+    background-color: rgba(16, 185, 129, 0.14);
+  }
+  100% {
+    border-color: var(--border-subtle);
+    background-color: var(--bg-elevated);
+  }
+}
+
+@keyframes tickerFlashDown {
+  0% {
+    border-color: rgba(239, 68, 68, 0.72);
+    background-color: rgba(239, 68, 68, 0.14);
+  }
+  100% {
+    border-color: var(--border-subtle);
+    background-color: var(--bg-elevated);
+  }
+}
+
 .market-ticker-info {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
+}
+
+.market-ticker-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -359,6 +396,22 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.market-ticker-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--text-muted);
+  opacity: 0.35;
+  transition: background-color 200ms ease, opacity 200ms ease, box-shadow 200ms ease;
+}
+
+.market-ticker-live-dot.is-live {
+  background-color: var(--positive);
+  opacity: 0.95;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.75);
 }
 
 .market-ticker-price {
@@ -1882,7 +1935,6 @@ body {
     grid-template-columns: 1fr;
   }
 }
-
 </style>
 </head>
 <body>
@@ -2886,11 +2938,78 @@ body {
 
   const GITHUB_PAGES_HOME_URL = 'https://phoenix1142.github.io/kapital-portfolio-tracker/';
   const DEFAULT_CLOUD_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwoxq-PirVnix_5jvyuama9S_UBc187LwDRMk4moSg9RwhE3LyquTRu-r8VhfJdbqX8/exec';
+  const LIVE_QUOTES_CACHE_KEY = 'kapital_live_quotes_cache_v1';
   state.cloudSyncUrl = safeGetItem('kapital_cloud_sync_url') || DEFAULT_CLOUD_SYNC_URL;
   state.cloudSynced = false;
   state.cloudSyncError = '';
   state.justSyncedFromBridge = '';
   state.quotes = JSON.parse(JSON.stringify(DEFAULT_QUOTES));
+
+  function mergeQuoteBookKeepingFresher(book, incoming) {
+    if (!incoming || typeof incoming !== 'object') return;
+    Object.keys(incoming).forEach(sym => {
+      const next = incoming[sym];
+      if (!next || typeof next !== 'object') return;
+      const cur = book[sym];
+      const curTs = Number(cur?.updatedAtMs) || 0;
+      const nextTs = Number(next.updatedAtMs) || 0;
+      // Never overwrite a fresh live ticker quote with an older/un-timestamped snapshot
+      if (cur && cur.isLive && curTs > 0 && (nextTs === 0 || nextTs < curTs)) {
+        // Still allow filling in missing sparkline or name without regressing live price
+        if ((!Array.isArray(cur.sparkline) || cur.sparkline.length < 2) && Array.isArray(next.sparkline) && next.sparkline.length >= 2) {
+          book[sym] = { ...cur, sparkline: next.sparkline };
+        }
+        return;
+      }
+      book[sym] = { ...(cur || {}), ...next };
+    });
+  }
+
+  // Hydrate last known live quotes immediately (0ms) so reload never flashes stale defaults
+  (function restoreCachedLiveQuotes() {
+    const raw = safeGetItem(LIVE_QUOTES_CACHE_KEY);
+    if (!raw) return;
+    try {
+      const cached = JSON.parse(raw);
+      if (cached && typeof cached === 'object') {
+        if (cached.fx && typeof cached.fx === 'object') {
+          state.quotes.fx = { ...state.quotes.fx, ...cached.fx };
+        }
+        if (cached.crypto && typeof cached.crypto === 'object') {
+          Object.keys(cached.crypto).forEach(sym => {
+            const q = cached.crypto[sym];
+            if (q && typeof q.priceUsd === 'number' && q.priceUsd > 0) {
+              state.quotes.crypto[sym] = { ...(state.quotes.crypto[sym] || {}), ...q, isLive: false };
+            }
+          });
+        }
+        if (cached.stocks && typeof cached.stocks === 'object') {
+          Object.keys(cached.stocks).forEach(sym => {
+            const q = cached.stocks[sym];
+            if (q && typeof q.priceUsd === 'number' && q.priceUsd > 0) {
+              state.quotes.stocks[sym] = { ...(state.quotes.stocks[sym] || {}), ...q, isLive: false };
+            }
+          });
+        }
+      }
+    } catch (_) {}
+  })();
+
+  let persistLiveQuotesTimer = null;
+  function schedulePersistLiveQuotesCache() {
+    if (persistLiveQuotesTimer) return;
+    persistLiveQuotesTimer = setTimeout(() => {
+      persistLiveQuotesTimer = null;
+      try {
+        safeSetItem(LIVE_QUOTES_CACHE_KEY, JSON.stringify({
+          savedAt: Date.now(),
+          fx: state.quotes.fx,
+          crypto: state.quotes.crypto,
+          stocks: state.quotes.stocks
+        }));
+      } catch (_) {}
+    }, 2500);
+  }
 
   // Built-in Zero-Config Cloud Sync Slots (CORS-enabled HTTPS JSON storage with client-side cipher)
   const CLOUD_STORE_BASE_URL = 'https://api.restful-api.dev/objects';
@@ -3376,11 +3495,11 @@ body {
       }
 
       if (data && data.quotes) {
-        state.quotes = {
-          fx: { ...DEFAULT_QUOTES.fx, ...(data.quotes.fx || {}) },
-          crypto: { ...DEFAULT_QUOTES.crypto, ...(data.quotes.crypto || {}) },
-          stocks: { ...DEFAULT_QUOTES.stocks, ...(data.quotes.stocks || {}) }
-        };
+        if (data.quotes.fx) {
+          state.quotes.fx = { ...state.quotes.fx, ...data.quotes.fx };
+        }
+        mergeQuoteBookKeepingFresher(state.quotes.crypto, data.quotes.crypto);
+        mergeQuoteBookKeepingFresher(state.quotes.stocks, data.quotes.stocks);
       }
       if (data && data.auth) {
         state.auth = data.auth;
@@ -3546,25 +3665,26 @@ body {
     const cryptoTickers = state.positions.filter(p => p.category === 'crypto').map(p => p.ticker).join(',');
     const stockTickers = state.positions.filter(p => p.category === 'stocks').map(p => p.ticker).join(',');
 
-    try {
-      let quotes;
-      if (isGoogleAppsScript()) {
-        quotes = await gasCall('gasRefreshQuotes', cryptoTickers, stockTickers);
-      } else if (isStaticHost() && state.cloudSyncUrl) {
-        quotes = await cloudSyncGet({ action: 'quotes', crypto: cryptoTickers, stocks: stockTickers });
-      } else {
-        quotes = await apiFetch(`/api/quotes?crypto=${encodeURIComponent(cryptoTickers)}&stocks=${encodeURIComponent(stockTickers)}`);
-      }
-      if (quotes && quotes.fx) {
-        state.quotes = {
-          fx: { ...state.quotes.fx, ...quotes.fx },
-          crypto: { ...state.quotes.crypto, ...(quotes.crypto || {}) },
-          stocks: { ...state.quotes.stocks, ...(quotes.stocks || {}) }
-        };
-      }
-    } catch (_) {}
+    // Immediately fire ultra-fast top ticker refresh (stocks + crypto + sparklines) in parallel
+    const topTickerPromise = refreshTopTickerAllNow(true);
 
-    await refreshBrowserQuotesQuietly();
+    const backendPromise = (async () => {
+      try {
+        let quotes;
+        if (isGoogleAppsScript()) {
+          quotes = await gasCall('gasRefreshQuotes', cryptoTickers, stockTickers);
+        } else if (!isStaticHost()) {
+          quotes = await apiFetch(`/api/quotes?crypto=${encodeURIComponent(cryptoTickers)}&stocks=${encodeURIComponent(stockTickers)}`);
+        }
+        if (quotes && quotes.fx) {
+          state.quotes.fx = { ...state.quotes.fx, ...quotes.fx };
+          mergeQuoteBookKeepingFresher(state.quotes.crypto, quotes.crypto);
+          mergeQuoteBookKeepingFresher(state.quotes.stocks, quotes.stocks);
+        }
+      } catch (_) {}
+    })();
+
+    await Promise.allSettled([topTickerPromise, backendPromise, refreshBrowserQuotesQuietly()]);
     renderAll();
   }
 
@@ -3829,79 +3949,646 @@ body {
     ONDO: 21159, PYTH: 28177, STRK: 22691, ZRO: 26997, WETH: 2396, WSTETH: 12409
   };
 
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 4500) {
+    if (typeof AbortController === 'undefined') {
+      return fetch(url, options);
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function parseQuoteNum(val) {
+    if (typeof val === 'number') return Number.isFinite(val) ? val : NaN;
+    if (val === null || val === undefined) return NaN;
+    const cleaned = String(val).replace(/[,%+\s]/g, '').trim();
+    if (!cleaned) return NaN;
+    const num = parseFloat(cleaned);
+    return Number.isFinite(num) ? num : NaN;
+  }
+
+  function extractCnbcQuoteData(q) {
+    if (!q || typeof q !== 'object') return null;
+    const regPrice = parseQuoteNum(q.last);
+    const prevClose = parseQuoteNum(q.previous_day_closing);
+    const regChgPct = parseQuoteNum(q.change_pct);
+
+    let price = regPrice;
+    let chgPct = regChgPct;
+
+    // Prefer extended-hours quote only when regular market is closed AND extended timestamp is newer
+    const ext = q.ExtendedMktQuote;
+    if (ext && q.curmktstatus && q.curmktstatus !== 'REG_MKT') {
+      const extPrice = parseQuoteNum(ext.last);
+      const regTs = q.last_time ? Date.parse(q.last_time) : 0;
+      const extTs = ext.last_time ? Date.parse(ext.last_time) : 0;
+      if (Number.isFinite(extPrice) && extPrice > 0 && (!regTs || !extTs || extTs > regTs)) {
+        price = extPrice;
+        if (Number.isFinite(prevClose) && prevClose > 0) {
+          chgPct = ((extPrice - prevClose) / prevClose) * 100;
+        } else {
+          const extPct = parseQuoteNum(ext.change_pct);
+          if (Number.isFinite(extPct)) chgPct = extPct;
+        }
+      }
+    }
+
+    if (!Number.isFinite(price) || price <= 0) return null;
+    const finalPrev = (Number.isFinite(prevClose) && prevClose > 0)
+      ? prevClose
+      : ((Number.isFinite(chgPct) && (1 + chgPct / 100) > 0) ? price / (1 + chgPct / 100) : price);
+    const finalChg = Number.isFinite(chgPct)
+      ? chgPct
+      : (finalPrev > 0 ? ((price - finalPrev) / finalPrev) * 100 : 0);
+
+    return {
+      name: q.shortName || q.name || q.symbol,
+      priceUsd: Number(price.toFixed(price < 1 ? 6 : 2)),
+      prevClose: Number(finalPrev.toFixed(finalPrev < 1 ? 6 : 2)),
+      change24h: Number(finalChg.toFixed(2)),
+      source: 'CNBC Live'
+    };
+  }
+
+  function downsamplePoints(arr, maxPoints = 28) {
+    if (!Array.isArray(arr) || arr.length <= maxPoints) return arr || [];
+    const out = [];
+    const step = (arr.length - 1) / (maxPoints - 1);
+    for (let i = 0; i < maxPoints; i++) {
+      const idx = i === maxPoints - 1 ? arr.length - 1 : Math.round(i * step);
+      out.push(arr[idx]);
+    }
+    return out;
+  }
+
   async function fetchCmcJsonWithFallback(cmcUrl) {
     try {
-      const directRes = await fetch(cmcUrl, { headers: { 'Accept': 'application/json' } });
+      const directRes = await fetchWithTimeout(cmcUrl, { headers: { 'Accept': 'application/json' } }, 2800);
       if (directRes.ok) return await directRes.json();
     } catch (_) {}
 
-    // If browser CORS blocks direct api.coinmarketcap.com call, use public CORS JSON proxy
     try {
-      const proxyRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(cmcUrl)}`);
+      const proxyRes = await fetchWithTimeout(`https://api.allorigins.win/raw?url=${encodeURIComponent(cmcUrl)}`, {}, 3500);
       if (proxyRes.ok) return await proxyRes.json();
     } catch (_) {}
 
     return null;
   }
 
-  // Direct browser fetch for NBU FX + CoinMarketCap Crypto API + Aave Live APY
-  async function refreshBrowserQuotesQuietly() {
-    let updatedAny = false;
-    let cryptoSourceLabel = 'CoinMarketCap';
+  const TOP_TICKER_WATCHLIST = [
+    { key: 'SP500', label: 'S&P 500', type: 'stocks', navCat: 'stocks', cnbc: '.SPX', tv: 'SP:SPX' },
+    { key: 'VOO',   label: 'VOO (S&P 500 ETF)', type: 'stocks', navCat: 'stocks', cnbc: 'VOO', tv: 'AMEX:VOO' },
+    { key: 'BTC',   label: 'Bitcoin (BTC)', type: 'crypto', navCat: 'crypto', binance: 'BTCUSDT', cnbc: 'BTC.CM=' },
+    { key: 'ETH',   label: 'Ethereum (ETH)', type: 'crypto', navCat: 'crypto', binance: 'ETHUSDT', cnbc: 'ETH.CM=' },
+    { key: 'BNDW',  label: 'BNDW (World Bond)', type: 'stocks', navCat: 'stocks', cnbc: 'BNDW', tv: 'NASDAQ:BNDW' },
+    { key: 'GLD',   label: 'GLD (Золото)', type: 'stocks', navCat: 'stocks', cnbc: 'GLD', tv: 'AMEX:GLD' }
+  ];
+  const TOP_TICKER_BY_KEY = Object.fromEntries(TOP_TICKER_WATCHLIST.map(item => [item.key, item]));
 
-    try {
-      const nbuRes = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json');
-      if (nbuRes.ok) {
-        const nbu = await nbuRes.json();
-        if (Array.isArray(nbu)) {
-          const usd = nbu.find(r => r.cc === 'USD');
-          const eur = nbu.find(r => r.cc === 'EUR');
-          const gbp = nbu.find(r => r.cc === 'GBP');
-          const pln = nbu.find(r => r.cc === 'PLN');
-          if (usd && usd.rate) state.quotes.fx.USD_UAH = Number(usd.rate.toFixed(2));
-          if (eur && eur.rate) state.quotes.fx.EUR_UAH = Number(eur.rate.toFixed(2));
-          if (gbp && gbp.rate) state.quotes.fx.GBP_UAH = Number(gbp.rate.toFixed(2));
-          if (pln && pln.rate) state.quotes.fx.PLN_UAH = Number(pln.rate.toFixed(2));
-          updatedAny = true;
-        }
+  let tickerPortfolioRenderTimer = null;
+  let tickerHasPendingPortfolioSync = false;
+
+  function isUserEditingOrModalOpen() {
+    if (document.querySelector('.modal-overlay.open')) return true;
+    const active = document.activeElement;
+    if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return true;
+    return false;
+  }
+
+  function scheduleThrottledPortfolioRender() {
+    tickerHasPendingPortfolioSync = true;
+    if (tickerPortfolioRenderTimer) return;
+    tickerPortfolioRenderTimer = setTimeout(() => {
+      tickerPortfolioRenderTimer = null;
+      if (!tickerHasPendingPortfolioSync) return;
+      if (document.visibilityState === 'hidden' || isUserEditingOrModalOpen()) {
+        // Retry once user finishes typing or returns to tab
+        scheduleThrottledPortfolioRender();
+        return;
       }
-    } catch (_) {}
+      tickerHasPendingPortfolioSync = false;
+      renderAll();
+    }, 8000);
+  }
+
+  function updateQuoteStatusLiveIndicator() {
+    const statusText = document.getElementById('quote-status-text');
+    if (!statusText) return;
+    const timeStr = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    statusText.textContent = `Live • ${timeStr}`;
+  }
+
+  function applyLiveTickerQuote(type, key, patch) {
+    if (!patch || typeof patch.priceUsd !== 'number' || !Number.isFinite(patch.priceUsd) || patch.priceUsd <= 0) {
+      return false;
+    }
+    const book = type === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
+    const cur = book[key] || (DEFAULT_QUOTES[type] && DEFAULT_QUOTES[type][key]) || {};
+    const nowMs = patch.updatedAtMs || Date.now();
+    if (cur.updatedAtMs && nowMs < cur.updatedAtMs) return false;
+
+    const prevPrice = Number(cur.priceUsd) || 0;
+    const nextPrice = Number(patch.priceUsd);
+    const priceChanged = prevPrice > 0 && Math.abs(nextPrice - prevPrice) >= 0.005;
+    const dir = priceChanged ? (nextPrice > prevPrice ? 'up' : 'down') : '';
+
+    // Keep sparkline tip synchronized with the newest live price
+    let nextSpark = Array.isArray(patch.sparkline) && patch.sparkline.length >= 2
+      ? patch.sparkline.slice()
+      : (Array.isArray(cur.sparkline) && cur.sparkline.length >= 2 ? cur.sparkline.slice() : null);
+    if (nextSpark && nextSpark.length >= 2) {
+      nextSpark[nextSpark.length - 1] = nextPrice;
+    }
+
+    book[key] = {
+      ...cur,
+      ...patch,
+      priceUsd: nextPrice,
+      sparkline: nextSpark || cur.sparkline,
+      isLive: true,
+      updatedAtMs: nowMs
+    };
+
+    state.quotes.fx.updatedAt = new Date(nowMs).toISOString();
+    patchMarketTickerCard(key, dir);
+    updateQuoteStatusLiveIndicator();
+    schedulePersistLiveQuotesCache();
+
+    // If this ticker is also held in the user's portfolio, gently sync totals without interrupting UI
+    if (priceChanged && state.positions.some(p => (p.ticker || '').toUpperCase().trim() === key)) {
+      scheduleThrottledPortfolioRender();
+    }
+    return true;
+  }
+
+  // Fast Crypto Snapshot (Binance Vision global CORS-free REST -> CNBC -> CoinGecko fallback)
+  let isFetchingTopCryptoRest = false;
+  async function fetchTopTickerCryptoRest() {
+    if (isFetchingTopCryptoRest) return false;
+    isFetchingTopCryptoRest = true;
+    try {
+      // 1. Primary: Binance Vision Data API (~150ms, CORS: *, works worldwide)
+      try {
+        const res = await fetchWithTimeout(
+          'https://data-api.binance.vision/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22,%22ETHUSDT%22%5D',
+          { cache: 'no-store' },
+          3500
+        );
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            let hits = 0;
+            const nowMs = Date.now();
+            for (const item of list) {
+              const sym = String(item.symbol || '').replace(/USDT$/, '').toUpperCase();
+              const price = parseFloat(item.lastPrice);
+              const openPrice = parseFloat(item.openPrice);
+              const chg = parseFloat(item.priceChangePercent);
+              if ((sym === 'BTC' || sym === 'ETH') && Number.isFinite(price) && price > 0) {
+                const prev = Number.isFinite(openPrice) && openPrice > 0
+                  ? openPrice
+                  : ((1 + (Number.isFinite(chg) ? chg : 0) / 100) > 0 ? price / (1 + chg / 100) : price);
+                applyLiveTickerQuote('crypto', sym, {
+                  name: sym === 'BTC' ? 'Bitcoin' : 'Ethereum',
+                  priceUsd: Number(price.toFixed(2)),
+                  prevClose: Number(prev.toFixed(2)),
+                  change24h: Number((Number.isFinite(chg) ? chg : 0).toFixed(2)),
+                  source: 'Binance Live',
+                  updatedAtMs: nowMs
+                });
+                hits++;
+              }
+            }
+            if (hits >= 2) return true;
+          }
+        }
+      } catch (_) {}
+
+      // 2. Fallback: CNBC Crypto Quotes (CORS: *, ~300ms)
+      try {
+        const cnbcRes = await fetchWithTimeout(
+          `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=BTC.CM%3D%7CETH.CM%3D&requestMethod=itv&noform=1&partnerId=2&fund=1&output=json&_=${Date.now()}`,
+          { cache: 'no-store' },
+          3500
+        );
+        if (cnbcRes.ok) {
+          const cnbcJson = await cnbcRes.json();
+          const quotes = cnbcJson?.FormattedQuoteResult?.FormattedQuote || [];
+          let hits = 0;
+          const nowMs = Date.now();
+          for (const q of quotes) {
+            const sym = q.symbol === 'BTC.CM=' ? 'BTC' : (q.symbol === 'ETH.CM=' ? 'ETH' : '');
+            const parsed = sym ? extractCnbcQuoteData(q) : null;
+            if (sym && parsed) {
+              applyLiveTickerQuote('crypto', sym, { ...parsed, name: sym === 'BTC' ? 'Bitcoin' : 'Ethereum', updatedAtMs: nowMs });
+              hits++;
+            }
+          }
+          if (hits >= 2) return true;
+        }
+      } catch (_) {}
+
+      // 3. Fallback: CoinGecko Simple Price (CORS: *)
+      try {
+        const cgRes = await fetchWithTimeout(
+          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true',
+          { cache: 'no-store' },
+          4000
+        );
+        if (cgRes.ok) {
+          const cg = await cgRes.json();
+          const nowMs = Date.now();
+          if (cg?.bitcoin?.usd > 0) {
+            const p = Number(cg.bitcoin.usd);
+            const chg = Number((cg.bitcoin.usd_24h_change || 0).toFixed(2));
+            applyLiveTickerQuote('crypto', 'BTC', {
+              name: 'Bitcoin',
+              priceUsd: p,
+              prevClose: (1 + chg / 100) > 0 ? Number((p / (1 + chg / 100)).toFixed(2)) : p,
+              change24h: chg,
+              source: 'CoinGecko Live',
+              updatedAtMs: nowMs
+            });
+          }
+          if (cg?.ethereum?.usd > 0) {
+            const p = Number(cg.ethereum.usd);
+            const chg = Number((cg.ethereum.usd_24h_change || 0).toFixed(2));
+            applyLiveTickerQuote('crypto', 'ETH', {
+              name: 'Ethereum',
+              priceUsd: p,
+              prevClose: (1 + chg / 100) > 0 ? Number((p / (1 + chg / 100)).toFixed(2)) : p,
+              change24h: chg,
+              source: 'CoinGecko Live',
+              updatedAtMs: nowMs
+            });
+          }
+          return true;
+        }
+      } catch (_) {}
+
+      return false;
+    } finally {
+      isFetchingTopCryptoRest = false;
+    }
+  }
+
+  // True Real-Time Crypto WebSocket Stream (BTC & ETH live tick-by-tick push every ~1s)
+  let cryptoTickerWs = null;
+  let cryptoWsReconnectTimer = null;
+  let cryptoWsBackoffMs = 1500;
+  let lastCryptoWsTickMs = 0;
+
+  function scheduleCryptoWsReconnect() {
+    if (cryptoWsReconnectTimer) return;
+    if (document.visibilityState === 'hidden') return;
+    const delay = cryptoWsBackoffMs;
+    cryptoWsBackoffMs = Math.min(12000, cryptoWsBackoffMs * 2);
+    cryptoWsReconnectTimer = setTimeout(() => {
+      cryptoWsReconnectTimer = null;
+      connectCryptoTickerWebSocket();
+    }, delay);
+  }
+
+  function connectCryptoTickerWebSocket() {
+    if (typeof WebSocket === 'undefined') return;
+    if (cryptoTickerWs && (cryptoTickerWs.readyState === WebSocket.OPEN || cryptoTickerWs.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    try {
+      const ws = new WebSocket('wss://data-stream.binance.vision/stream?streams=btcusdt@miniTicker/ethusdt@miniTicker');
+      cryptoTickerWs = ws;
+
+      ws.onopen = () => {
+        cryptoWsBackoffMs = 1500;
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          const d = msg && msg.data;
+          if (!d || !d.s) return;
+          const sym = String(d.s).replace(/USDT$/, '').toUpperCase();
+          if (sym !== 'BTC' && sym !== 'ETH') return;
+          const price = parseFloat(d.c);
+          const open24h = parseFloat(d.o);
+          if (!Number.isFinite(price) || price <= 0) return;
+          const chg = (Number.isFinite(open24h) && open24h > 0)
+            ? ((price - open24h) / open24h) * 100
+            : (Number(state.quotes.crypto[sym]?.change24h) || 0);
+          lastCryptoWsTickMs = Date.now();
+          applyLiveTickerQuote('crypto', sym, {
+            name: sym === 'BTC' ? 'Bitcoin' : 'Ethereum',
+            priceUsd: Number(price.toFixed(2)),
+            prevClose: Number.isFinite(open24h) && open24h > 0 ? Number(open24h.toFixed(2)) : undefined,
+            change24h: Number(chg.toFixed(2)),
+            source: 'Binance Live WS',
+            updatedAtMs: lastCryptoWsTickMs
+          });
+        } catch (_) {}
+      };
+
+      ws.onerror = () => {
+        try { ws.close(); } catch (_) {}
+      };
+
+      ws.onclose = () => {
+        if (cryptoTickerWs === ws) cryptoTickerWs = null;
+        scheduleCryptoWsReconnect();
+      };
+    } catch (_) {
+      scheduleCryptoWsReconnect();
+    }
+  }
+
+  // Fast Real-Time Stocks / Index / ETF Snapshot (S&P 500, VOO, BNDW, GLD)
+  // Primary: CNBC Real-Time Quotes (1 request, ~250ms, CORS: *); Fallback: TradingView Scanner (CORS preflight-free)
+  let isFetchingTopStocks = false;
+  async function fetchTopTickerStocks() {
+    if (isFetchingTopStocks) return false;
+    isFetchingTopStocks = true;
+    const stockItems = TOP_TICKER_WATCHLIST.filter(item => item.type === 'stocks');
+    const cnbcToKey = Object.fromEntries(stockItems.map(item => [item.cnbc.toUpperCase(), item.key]));
+    const tvToKey = Object.fromEntries(stockItems.map(item => [item.tv.toUpperCase(), item.key]));
+    const resolvedKeys = new Set();
 
     try {
-      const cryptoPositions = state.positions.filter(p => p.category === 'crypto');
-      const neededSyms = [...new Set(cryptoPositions.map(p => (p.ticker || '').toUpperCase().trim()).filter(Boolean))];
-      const fetchedFromCmc = new Set();
-
-      if (neededSyms.length > 0) {
-        // 1. Fetch top 300 coins from CoinMarketCap data-api v3
-        const cmcListingUrl = 'https://api.coinmarketcap.com/data-api/v3/cryptocurrency/listing?start=1&limit=300&sortBy=market_cap&sortType=desc&convert=USD';
-        const listJson = await fetchCmcJsonWithFallback(cmcListingUrl);
-        const coinList = listJson?.data?.cryptoCurrencyList;
-        if (Array.isArray(coinList)) {
-          for (const c of coinList) {
-            const sym = String(c.symbol || '').toUpperCase();
-            if (!sym || fetchedFromCmc.has(sym)) continue;
-            const usdQ = Array.isArray(c.quotes) ? (c.quotes.find(q => q.name === 'USD') || c.quotes[0]) : null;
-            if (usdQ && typeof usdQ.price === 'number' && usdQ.price > 0) {
-              state.quotes.crypto[sym] = {
-                ...(state.quotes.crypto[sym] || {}),
-                name: c.name || state.quotes.crypto[sym]?.name || sym,
-                priceUsd: Number(usdQ.price),
-                change24h: Number((usdQ.percentChange24h || 0).toFixed(2)),
-                source: 'CoinMarketCap'
-              };
-              fetchedFromCmc.add(sym);
-              updatedAny = true;
+      // 1. Primary: CNBC real-time quote service (direct browser CORS: *, ~250ms for all 4 tickers)
+      try {
+        const symsParam = encodeURIComponent(stockItems.map(i => i.cnbc).join('|'));
+        const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${symsParam}&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json&events=1&_=${Date.now()}`;
+        const res = await fetchWithTimeout(url, { cache: 'no-store' }, 3800);
+        if (res.ok) {
+          const json = await res.json();
+          const list = json?.FormattedQuoteResult?.FormattedQuote;
+          const items = Array.isArray(list) ? list : (list ? [list] : []);
+          const nowMs = Date.now();
+          for (const q of items) {
+            const symKey = cnbcToKey[String(q.symbol || '').toUpperCase()];
+            if (!symKey) continue;
+            const parsed = extractCnbcQuoteData(q);
+            if (parsed) {
+              applyLiveTickerQuote('stocks', symKey, { ...parsed, updatedAtMs: nowMs });
+              resolvedKeys.add(symKey);
             }
           }
         }
+      } catch (_) {}
 
-        // 2. For any user coin not found in top 300 listing, query CoinMarketCap detail endpoint by ID
-        for (const sym of neededSyms) {
-          if (fetchedFromCmc.has(sym)) continue;
-          const cmcId = CMC_COIN_IDS[sym];
-          if (cmcId) {
-            const detJson = await fetchCmcJsonWithFallback(`https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail?id=${cmcId}`);
+      // 2. Fallback: TradingView Global Scanner (direct CORS, text/plain avoids preflight)
+      if (resolvedKeys.size < stockItems.length) {
+        try {
+          const missingTv = stockItems.filter(i => !resolvedKeys.has(i.key)).map(i => i.tv);
+          const tvRes = await fetchWithTimeout('https://scanner.tradingview.com/global/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+            body: JSON.stringify({
+              symbols: { tickers: missingTv },
+              columns: ['close', 'change', 'open']
+            })
+          }, 4000);
+          if (tvRes.ok) {
+            const tvJson = await tvRes.json();
+            const rows = Array.isArray(tvJson?.data) ? tvJson.data : [];
+            const nowMs = Date.now();
+            for (const row of rows) {
+              const symKey = tvToKey[String(row.s || '').toUpperCase()];
+              const d = Array.isArray(row.d) ? row.d : [];
+              const price = Number(d[0]);
+              const chg = Number(d[1]);
+              if (symKey && Number.isFinite(price) && price > 0) {
+                const finalChg = Number.isFinite(chg) ? chg : 0;
+                const prev = (1 + finalChg / 100) > 0 ? price / (1 + finalChg / 100) : price;
+                applyLiveTickerQuote('stocks', symKey, {
+                  priceUsd: Number(price.toFixed(2)),
+                  prevClose: Number(prev.toFixed(2)),
+                  change24h: Number(finalChg.toFixed(2)),
+                  source: 'TradingView Live',
+                  updatedAtMs: nowMs
+                });
+                resolvedKeys.add(symKey);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      return resolvedKeys.size > 0;
+    } finally {
+      isFetchingTopStocks = false;
+    }
+  }
+
+  // Parallel real intraday sparklines for all 6 top tickers (non-blocking)
+  let isFetchingTopSparklines = false;
+  async function fetchTopTickerSparklines() {
+    if (isFetchingTopSparklines) return;
+    isFetchingTopSparklines = true;
+    try {
+      const tasks = TOP_TICKER_WATCHLIST.map(async (item) => {
+        try {
+          if (item.type === 'crypto' && item.binance) {
+            const res = await fetchWithTimeout(
+              `https://data-api.binance.vision/api/v3/klines?symbol=${item.binance}&interval=1h&limit=24`,
+              { cache: 'no-store' },
+              4000
+            );
+            if (!res.ok) return;
+            const klines = await res.json();
+            if (!Array.isArray(klines) || klines.length < 2) return;
+            const pts = klines.map(k => parseFloat(k[4])).filter(v => Number.isFinite(v) && v > 0);
+            if (pts.length >= 2) {
+              const cur = state.quotes.crypto[item.key] || {};
+              if (cur.priceUsd > 0) pts[pts.length - 1] = cur.priceUsd;
+              state.quotes.crypto[item.key] = { ...cur, sparkline: pts };
+              patchMarketTickerCard(item.key, '');
+              schedulePersistLiveQuotesCache();
+            }
+          } else if (item.type === 'stocks' && item.cnbc) {
+            const res = await fetchWithTimeout(
+              `https://ts-api.cnbc.com/harmony/app/charts/1D.json?symbol=${encodeURIComponent(item.cnbc)}`,
+              { cache: 'no-store' },
+              4500
+            );
+            if (!res.ok) return;
+            const json = await res.json();
+            const bars = json?.barData?.priceBars;
+            if (!Array.isArray(bars) || bars.length < 2) return;
+            const lastDay = String(bars[bars.length - 1]?.tradeTime || '').slice(0, 8);
+            const dayBars = lastDay ? bars.filter(b => String(b.tradeTime || '').startsWith(lastDay)) : bars;
+            const selectedBars = dayBars.length >= 6 ? dayBars : bars.slice(-60);
+            const rawPts = selectedBars.map(b => parseQuoteNum(b.close)).filter(v => Number.isFinite(v) && v > 0);
+            const pts = downsamplePoints(rawPts, 28);
+            if (pts.length >= 2) {
+              const cur = state.quotes.stocks[item.key] || {};
+              if (cur.priceUsd > 0) pts[pts.length - 1] = cur.priceUsd;
+              state.quotes.stocks[item.key] = { ...cur, sparkline: pts };
+              patchMarketTickerCard(item.key, '');
+              schedulePersistLiveQuotesCache();
+            }
+          }
+        } catch (_) {}
+      });
+      await Promise.allSettled(tasks);
+    } finally {
+      isFetchingTopSparklines = false;
+    }
+  }
+
+  async function refreshTopTickerAllNow(includeSparklines = false) {
+    const tasks = [fetchTopTickerStocks(), fetchTopTickerCryptoRest()];
+    if (includeSparklines) tasks.push(fetchTopTickerSparklines());
+    connectCryptoTickerWebSocket();
+    await Promise.allSettled(tasks);
+  }
+
+  let liveTickerEngineStarted = false;
+  let topTickerPollIntervalId = null;
+  let topTickerSparklineIntervalId = null;
+
+  function startLiveMarketTickerEngine() {
+    if (liveTickerEngineStarted) return;
+    liveTickerEngineStarted = true;
+
+    // 1. Fire instant parallel requests at t = 0ms (never blocked by cloud sync, NBU, CMC, or Aave!)
+    fetchTopTickerCryptoRest();
+    fetchTopTickerStocks();
+    connectCryptoTickerWebSocket();
+    fetchTopTickerSparklines();
+
+    // 2. Auto-refresh top stocks/ETF/S&P 500 every 5 seconds while tab is visible
+    //    (and seamlessly fall back to Binance Vision REST if crypto WS is temporarily disconnected)
+    topTickerPollIntervalId = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      fetchTopTickerStocks();
+      const wsHealthy = cryptoTickerWs && cryptoTickerWs.readyState === WebSocket.OPEN && (Date.now() - lastCryptoWsTickMs < 10000);
+      if (!wsHealthy) {
+        fetchTopTickerCryptoRest();
+        connectCryptoTickerWebSocket();
+      }
+    }, 5000);
+
+    // 3. Periodically refresh intraday sparklines + broader portfolio quotes every 5 minutes
+    topTickerSparklineIntervalId = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      fetchTopTickerSparklines();
+      refreshBrowserQuotesQuietly();
+    }, 300000);
+
+    // 4. Instant refresh upon returning to the tab or regaining internet connectivity
+    window.addEventListener('online', () => {
+      refreshTopTickerAllNow(true);
+    });
+  }
+
+  // Parallelized direct browser fetch for NBU FX + All User Crypto + All User Stocks + Aave Live APY
+  async function refreshBrowserQuotesQuietly() {
+    let updatedAny = false;
+    let cryptoSourceLabel = 'Binance / CMC';
+
+    const nbuTask = (async () => {
+      try {
+        const nbuRes = await fetchWithTimeout('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json', {}, 4000);
+        if (nbuRes.ok) {
+          const nbu = await nbuRes.json();
+          if (Array.isArray(nbu)) {
+            const usd = nbu.find(r => r.cc === 'USD');
+            const eur = nbu.find(r => r.cc === 'EUR');
+            const gbp = nbu.find(r => r.cc === 'GBP');
+            const pln = nbu.find(r => r.cc === 'PLN');
+            if (usd && usd.rate) state.quotes.fx.USD_UAH = Number(usd.rate.toFixed(2));
+            if (eur && eur.rate) state.quotes.fx.EUR_UAH = Number(eur.rate.toFixed(2));
+            if (gbp && gbp.rate) state.quotes.fx.GBP_UAH = Number(gbp.rate.toFixed(2));
+            if (pln && pln.rate) state.quotes.fx.PLN_UAH = Number(pln.rate.toFixed(2));
+            updatedAny = true;
+          }
+        }
+      } catch (_) {}
+    })();
+
+    const cryptoTask = (async () => {
+      try {
+        const cryptoPositions = state.positions.filter(p => p.category === 'crypto');
+        const neededSyms = [...new Set(cryptoPositions.map(p => (p.ticker || '').toUpperCase().trim()).filter(Boolean))];
+        if (neededSyms.length === 0) return;
+
+        const resolved = new Set(['USDT', 'USDC']);
+        const queryPairs = neededSyms.filter(s => !resolved.has(s));
+
+        // 1. Ultra-fast single-request Binance Vision batch for user crypto tickers (~150ms, CORS: *)
+        if (queryPairs.length > 0) {
+          try {
+            const pairsJson = JSON.stringify(queryPairs.map(s => `${s}USDT`));
+            const bRes = await fetchWithTimeout(
+              `https://data-api.binance.vision/api/v3/ticker/24hr?symbols=${encodeURIComponent(pairsJson)}`,
+              { cache: 'no-store' },
+              3500
+            );
+            if (bRes.ok) {
+              const arr = await bRes.json();
+              if (Array.isArray(arr)) {
+                const nowMs = Date.now();
+                for (const item of arr) {
+                  const sym = String(item.symbol || '').replace(/USDT$/, '').toUpperCase();
+                  const price = parseFloat(item.lastPrice);
+                  const chg = parseFloat(item.priceChangePercent);
+                  if (sym && Number.isFinite(price) && price > 0) {
+                    const cur = state.quotes.crypto[sym];
+                    // Don't overwrite a fresher WebSocket tick
+                    if (cur && cur.isLive && cur.updatedAtMs && (nowMs - cur.updatedAtMs < 5000)) {
+                      resolved.add(sym);
+                      continue;
+                    }
+                    state.quotes.crypto[sym] = {
+                      ...(cur || { name: sym }),
+                      priceUsd: price,
+                      change24h: Number((Number.isFinite(chg) ? chg : 0).toFixed(2)),
+                      source: 'Binance Live',
+                      updatedAtMs: nowMs
+                    };
+                    resolved.add(sym);
+                    updatedAny = true;
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        // 2. Only if any user crypto ticker wasn't on Binance Vision, fetch CoinMarketCap listing/detail
+        const missing = neededSyms.filter(s => !resolved.has(s));
+        if (missing.length > 0) {
+          const cmcListingUrl = 'https://api.coinmarketcap.com/data-api/v3/cryptocurrency/listing?start=1&limit=300&sortBy=market_cap&sortType=desc&convert=USD';
+          const listJson = await fetchCmcJsonWithFallback(cmcListingUrl);
+          const coinList = listJson?.data?.cryptoCurrencyList;
+          if (Array.isArray(coinList)) {
+            const nowMs = Date.now();
+            for (const c of coinList) {
+              const sym = String(c.symbol || '').toUpperCase();
+              if (!sym || resolved.has(sym)) continue;
+              const usdQ = Array.isArray(c.quotes) ? (c.quotes.find(q => q.name === 'USD') || c.quotes[0]) : null;
+              if (usdQ && typeof usdQ.price === 'number' && usdQ.price > 0) {
+                state.quotes.crypto[sym] = {
+                  ...(state.quotes.crypto[sym] || {}),
+                  name: c.name || state.quotes.crypto[sym]?.name || sym,
+                  priceUsd: Number(usdQ.price),
+                  change24h: Number((usdQ.percentChange24h || 0).toFixed(2)),
+                  source: 'CoinMarketCap',
+                  updatedAtMs: nowMs
+                };
+                resolved.add(sym);
+                cryptoSourceLabel = 'Binance / CoinMarketCap';
+                updatedAny = true;
+              }
+            }
+          }
+
+          const stillMissing = neededSyms.filter(s => !resolved.has(s) && CMC_COIN_IDS[s]);
+          await Promise.allSettled(stillMissing.map(async (sym) => {
+            const detJson = await fetchCmcJsonWithFallback(`https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail?id=${CMC_COIN_IDS[sym]}`);
             const stats = detJson?.data?.statistics;
             if (stats && typeof stats.price === 'number' && stats.price > 0) {
               state.quotes.crypto[sym] = {
@@ -3909,112 +4596,71 @@ body {
                 name: detJson.data.name || state.quotes.crypto[sym]?.name || sym,
                 priceUsd: Number(stats.price),
                 change24h: Number((stats.priceChangePercentage24h || 0).toFixed(2)),
-                source: 'CoinMarketCap'
+                source: 'CoinMarketCap',
+                updatedAtMs: Date.now()
               };
-              fetchedFromCmc.add(sym);
+              updatedAny = true;
+            }
+          }));
+        }
+      } catch (_) {}
+    })();
+
+    const userStocksTask = (async () => {
+      try {
+        const stockPositions = state.positions.filter(p => p.category === 'stocks');
+        const topStockKeys = new Set(['SP500', 'VOO', 'BNDW', 'GLD']);
+        const extraTickers = [...new Set(
+          stockPositions
+            .map(p => (p.ticker || '').toUpperCase().trim())
+            .filter(s => s && !topStockKeys.has(s) && /^[A-Z0-9.\-]{1,10}$/.test(s))
+        )].slice(0, 20);
+        if (extraTickers.length === 0) return;
+
+        const symsParam = encodeURIComponent(extraTickers.join('|'));
+        const res = await fetchWithTimeout(
+          `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${symsParam}&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json&_=${Date.now()}`,
+          { cache: 'no-store' },
+          4000
+        );
+        if (res.ok) {
+          const json = await res.json();
+          const list = json?.FormattedQuoteResult?.FormattedQuote;
+          const items = Array.isArray(list) ? list : (list ? [list] : []);
+          const nowMs = Date.now();
+          for (const q of items) {
+            const sym = String(q.symbol || '').toUpperCase();
+            const parsed = extractCnbcQuoteData(q);
+            if (sym && parsed) {
+              state.quotes.stocks[sym] = {
+                ...(state.quotes.stocks[sym] || {}),
+                ...parsed,
+                updatedAtMs: nowMs
+              };
               updatedAny = true;
             }
           }
         }
+      } catch (_) {}
+    })();
 
-        // 3. Fallback to Binance only if a specific coin was still not resolved via CoinMarketCap
-        for (const sym of neededSyms) {
-          if (fetchedFromCmc.has(sym) || sym === 'USDT' || sym === 'USDC') continue;
-          // If already updated by backend/Apps Script from CoinMarketCap, keep it
-          if (state.quotes.crypto[sym]?.source === 'CoinMarketCap') continue;
-          const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}USDT`);
-          if (res.ok) {
-            const item = await res.json();
-            const price = parseFloat(item.lastPrice);
-            const change = parseFloat(item.priceChangePercent);
-            if (!isNaN(price) && price > 0) {
-              state.quotes.crypto[sym] = {
-                ...(state.quotes.crypto[sym] || { name: sym }),
-                priceUsd: price,
-                change24h: isNaN(change) ? 0 : change,
-                source: 'Binance'
-              };
-              if (fetchedFromCmc.size === 0) cryptoSourceLabel = 'CoinMarketCap / Binance';
-              updatedAny = true;
-            }
-          }
-        }
-      }
-    } catch (_) {}
+    const aaveTask = (async () => {
+      try {
+        const aaveChanged = await syncAavePositionsRates();
+        if (aaveChanged) updatedAny = true;
+      } catch (_) {}
+    })();
 
-    try {
-      // Fetch live market feed (S&P 500, VOO, BNDW, GLD, BTC, ETH, etc. with intraday sparklines) from CORS market channel
-      const marketFeed = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_market`);
-      if (marketFeed && typeof marketFeed === 'object') {
-        Object.keys(marketFeed).forEach(sym => {
-          const item = marketFeed[sym];
-          if (!item || typeof item.priceUsd !== 'number') return;
-          if (sym === 'BTC' || sym === 'ETH') {
-            state.quotes.crypto[sym] = {
-              ...(state.quotes.crypto[sym] || {}),
-              ...item
-            };
-          } else {
-            state.quotes.stocks[sym] = {
-              ...(state.quotes.stocks[sym] || {}),
-              ...item
-            };
-          }
-          updatedAny = true;
-        });
-      }
-    } catch (_) {}
-
-    try {
-      // Direct browser CoinGecko fetch for BTC & ETH live price + 24h sparkline (CORS: *)
-      const cgRes = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&sparkline=true');
-      if (cgRes.ok) {
-        const cgList = await cgRes.json();
-        if (Array.isArray(cgList)) {
-          for (const c of cgList) {
-            const sym = String(c.symbol || '').toUpperCase();
-            if (!sym || typeof c.current_price !== 'number') continue;
-            const chg = Number((c.price_change_percentage_24h || 0).toFixed(2));
-            const prev = (1 + chg / 100) > 0 ? Number((c.current_price / (1 + chg / 100)).toFixed(2)) : c.current_price;
-            const spark = Array.isArray(c.sparkline_in_7d?.price)
-              ? c.sparkline_in_7d.price.slice(-24).map(v => Number(Number(v).toFixed(2)))
-              : (state.quotes.crypto[sym]?.sparkline || []);
-            state.quotes.crypto[sym] = {
-              ...(state.quotes.crypto[sym] || {}),
-              name: c.name || sym,
-              priceUsd: Number(c.current_price),
-              prevClose: prev,
-              change24h: chg,
-              sparkline: spark,
-              source: 'CoinGecko Live'
-            };
-            updatedAny = true;
-          }
-        }
-      }
-    } catch (_) {}
-
-    try {
-      const aaveChanged = await syncAavePositionsRates();
-      if (aaveChanged) updatedAny = true;
-    } catch (_) {}
+    await Promise.allSettled([nbuTask, cryptoTask, userStocksTask, aaveTask]);
 
     if (updatedAny) {
       state.quotes.fx.source = isGoogleAppsScript()
-        ? `Google Cloud + Live (НБУ / ${cryptoSourceLabel} / Aave)`
-        : `Live (НБУ / ${cryptoSourceLabel} / Aave)`;
+        ? `Google Cloud + Live (НБУ / ${cryptoSourceLabel} / CNBC / Aave)`
+        : `Live (НБУ / ${cryptoSourceLabel} / CNBC / Aave)`;
+      schedulePersistLiveQuotesCache();
       renderAll();
     }
   }
-
-  const TOP_TICKER_WATCHLIST = [
-    { key: 'SP500', label: 'S&P 500', type: 'stocks', navCat: 'stocks' },
-    { key: 'VOO',   label: 'VOO (S&P 500 ETF)', type: 'stocks', navCat: 'stocks' },
-    { key: 'BTC',   label: 'Bitcoin (BTC)', type: 'crypto', navCat: 'crypto' },
-    { key: 'ETH',   label: 'Ethereum (ETH)', type: 'crypto', navCat: 'crypto' },
-    { key: 'BNDW',  label: 'BNDW (World Bond)', type: 'stocks', navCat: 'stocks' },
-    { key: 'GLD',   label: 'GLD (Золото)', type: 'stocks', navCat: 'stocks' }
-  ];
 
   function buildSparklineSvg(points, prevClose, isUp) {
     const w = 64;
@@ -4046,49 +4692,109 @@ body {
     `;
   }
 
+  function getTickerDisplayModel(item) {
+    const book = item.type === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
+    const q = (book && book[item.key]) || (DEFAULT_QUOTES[item.type] && DEFAULT_QUOTES[item.type][item.key]) || { priceUsd: 0, change24h: 0, sparkline: [] };
+    const price = Number(q.priceUsd) || 0;
+    const chg = Number(q.change24h) || 0;
+    const isUp = chg >= 0;
+    const chgColor = isUp ? 'var(--positive)' : 'var(--negative)';
+    const chgSign = isUp ? '+' : '';
+    const prevClose = Number(q.prevClose) || ((1 + chg / 100) > 0 ? price / (1 + chg / 100) : price);
+
+    let spark = Array.isArray(q.sparkline) && q.sparkline.length >= 2 ? q.sparkline : null;
+    if (!spark) {
+      spark = [];
+      for (let i = 0; i < 16; i++) {
+        const frac = i / 15;
+        const wave = Math.sin(i * 0.9) * Math.abs(price - prevClose) * 0.22;
+        spark.push(prevClose + (price - prevClose) * frac + (i === 15 ? 0 : wave));
+      }
+    }
+
+    const priceStr = '$' + new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(price);
+    const chgStr = `${chgSign}${chg.toFixed(2)}%`;
+    const isLive = Boolean(q.isLive);
+    const sourceText = q.source ? ` • ${q.source}` : '';
+    const title = `${item.label}: ${priceStr} (${chgStr} за 24г${sourceText}) — натисніть для переходу до категорії`;
+    const sparkSig = `${isUp ? '1' : '0'}|${prevClose.toFixed(2)}|${spark.length}|${spark[0]?.toFixed?.(2) || ''}|${spark[spark.length - 1]?.toFixed?.(2) || ''}`;
+
+    return { priceStr, chgStr, chgColor, isUp, prevClose, spark, isLive, title, sparkSig };
+  }
+
+  function patchMarketTickerCard(key, flashDir = '') {
+    const stripEl = document.getElementById('market-ticker-strip');
+    if (!stripEl) return;
+    const card = stripEl.querySelector(`[data-ticker-key="${key}"]`);
+    const item = TOP_TICKER_BY_KEY[key];
+    if (!card || !item) return;
+
+    const m = getTickerDisplayModel(item);
+    const priceEl = card.querySelector('.market-ticker-price');
+    const chgEl = card.querySelector('.market-ticker-chg');
+    const dotEl = card.querySelector('.market-ticker-live-dot');
+    const sparkEl = card.querySelector('.market-ticker-spark');
+
+    if (priceEl && priceEl.textContent !== m.priceStr) priceEl.textContent = m.priceStr;
+    if (chgEl) {
+      if (chgEl.textContent !== m.chgStr) chgEl.textContent = m.chgStr;
+      chgEl.style.color = m.chgColor;
+    }
+    if (dotEl) dotEl.classList.toggle('is-live', m.isLive);
+    if (card.title !== m.title) card.title = m.title;
+
+    if (sparkEl && sparkEl.dataset.sparkSig !== m.sparkSig) {
+      sparkEl.dataset.sparkSig = m.sparkSig;
+      sparkEl.innerHTML = buildSparklineSvg(m.spark, m.prevClose, m.isUp);
+    }
+
+    if (flashDir === 'up' || flashDir === 'down') {
+      const cls = flashDir === 'up' ? 'tick-up' : 'tick-down';
+      card.classList.remove('tick-up', 'tick-down');
+      // Force restart of subtle tick flash animation
+      void card.offsetWidth;
+      card.classList.add(cls);
+      if (card._flashTimer) clearTimeout(card._flashTimer);
+      card._flashTimer = setTimeout(() => {
+        card.classList.remove('tick-up', 'tick-down');
+        card._flashTimer = null;
+      }, 680);
+    }
+  }
+
   function renderMarketTickerStrip() {
     const stripEl = document.getElementById('market-ticker-strip');
     if (!stripEl) return;
 
+    // Surgical in-place update if cards are already mounted (zero flicker, preserves animations & hover)
+    if (stripEl.dataset.initialized === '1') {
+      TOP_TICKER_WATCHLIST.forEach(item => patchMarketTickerCard(item.key, ''));
+      return;
+    }
+
     stripEl.innerHTML = TOP_TICKER_WATCHLIST.map(item => {
-      const book = item.type === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
-      const q = (book && book[item.key]) || (DEFAULT_QUOTES[item.type] && DEFAULT_QUOTES[item.type][item.key]) || { priceUsd: 0, change24h: 0, sparkline: [] };
-      const price = Number(q.priceUsd) || 0;
-      const chg = Number(q.change24h) || 0;
-      const isUp = chg >= 0;
-      const chgColor = isUp ? 'var(--positive)' : 'var(--negative)';
-      const chgSign = isUp ? '+' : '';
-      const prevClose = Number(q.prevClose) || ((1 + chg / 100) > 0 ? price / (1 + chg / 100) : price);
-
-      // Generate synthetic sparkline if none present
-      let spark = Array.isArray(q.sparkline) && q.sparkline.length >= 2 ? q.sparkline : null;
-      if (!spark) {
-        spark = [];
-        for (let i = 0; i < 16; i++) {
-          const frac = i / 15;
-          const wave = Math.sin(i * 0.9) * Math.abs(price - prevClose) * 0.22;
-          spark.push(prevClose + (price - prevClose) * frac + (i === 15 ? 0 : wave));
-        }
-      }
-
-      const priceStr = '$' + new Intl.NumberFormat('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(price);
-
+      const m = getTickerDisplayModel(item);
       return `
-        <div class="market-ticker-card" data-ticker-jump="${item.navCat}" title="${escapeHtml(item.label)}: ${priceStr} (${chgSign}${chg.toFixed(2)}% за 24г) — натисніть для переходу до категорії">
+        <div class="market-ticker-card" data-ticker-key="${item.key}" data-ticker-jump="${item.navCat}" title="${escapeHtml(m.title)}">
           <div class="market-ticker-info">
-            <div class="market-ticker-label">${escapeHtml(item.label)}</div>
-            <div class="market-ticker-price">${priceStr}</div>
-            <div class="market-ticker-chg" style="color:${chgColor};">${chgSign}${chg.toFixed(2)}%</div>
+            <div class="market-ticker-head">
+              <span class="market-ticker-live-dot${m.isLive ? ' is-live' : ''}"></span>
+              <div class="market-ticker-label">${escapeHtml(item.label)}</div>
+            </div>
+            <div class="market-ticker-price">${m.priceStr}</div>
+            <div class="market-ticker-chg" style="color:${m.chgColor};">${m.chgStr}</div>
           </div>
-          <div class="market-ticker-spark">
-            ${buildSparklineSvg(spark, prevClose, isUp)}
+          <div class="market-ticker-spark" data-spark-sig="${escapeHtml(m.sparkSig)}">
+            ${buildSparklineSvg(m.spark, m.prevClose, m.isUp)}
           </div>
         </div>
       `;
     }).join('');
+
+    stripEl.dataset.initialized = '1';
 
     stripEl.querySelectorAll('[data-ticker-jump]').forEach(card => {
       card.addEventListener('click', () => {
@@ -9237,13 +9943,24 @@ body {
       });
     }
 
-    // Automatically check cloud for newer changes when switching back to browser tab on PC or laptop
-    window.addEventListener('focus', () => {
+    // Automatically check cloud & refresh live market tickers immediately when switching back to browser tab
+    let lastFocusTickerRefreshMs = 0;
+    const onTabActiveRefresh = () => {
       syncLatestFromCloudQuietly();
-    });
+      const now = Date.now();
+      if (now - lastFocusTickerRefreshMs > 2000) {
+        lastFocusTickerRefreshMs = now;
+        fetchTopTickerStocks();
+        connectCryptoTickerWebSocket();
+        if (now - lastCryptoWsTickMs > 5000) {
+          fetchTopTickerCryptoRest();
+        }
+      }
+    };
+    window.addEventListener('focus', onTabActiveRefresh);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
-        syncLatestFromCloudQuietly();
+        onTabActiveRefresh();
       }
     });
 
@@ -9692,9 +10409,9 @@ body {
 
   initEvents();
   renderAll();
+  startLiveMarketTickerEngine();
   loadPortfolioFromServer();
 })();
-
 </script>
 </body>
 </html>

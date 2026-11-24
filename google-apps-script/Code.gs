@@ -285,17 +285,17 @@ function gasRefreshQuotes(cryptoCsv, stocksCsv, cmcApiKey) {
       }
     });
 
-    // 4. Final fallback to Binance only for symbols still missing
+    // 4. Final fallback to Binance Vision (global, non-geo-blocked) for symbols still missing
     missingSyms = syms.filter(function(s) { return !quotes.crypto[s] && s !== 'USDT' && s !== 'USDC'; });
     missingSyms.forEach(function(sym) {
       try {
-        var res = UrlFetchApp.fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=' + encodeURIComponent(sym + 'USDT'), { muteHttpExceptions: true });
+        var res = UrlFetchApp.fetch('https://data-api.binance.vision/api/v3/ticker/24hr?symbol=' + encodeURIComponent(sym + 'USDT'), { muteHttpExceptions: true });
         if (res.getResponseCode() === 200) {
           var d = JSON.parse(res.getContentText());
           var p = parseFloat(d.lastPrice);
           var chg = parseFloat(d.priceChangePercent);
           if (!isNaN(p) && p > 0) {
-            quotes.crypto[sym] = { name: sym, priceUsd: p, change24h: isNaN(chg) ? 0 : chg, source: 'Binance' };
+            quotes.crypto[sym] = { name: sym, priceUsd: p, change24h: isNaN(chg) ? 0 : chg, source: 'Binance Live' };
           }
         }
       } catch (e) {}
@@ -303,19 +303,26 @@ function gasRefreshQuotes(cryptoCsv, stocksCsv, cmcApiKey) {
   } catch (e) {}
 
   try {
-    var stockSyms = String(stocksCsv || 'VOO,SPY,NVDA,VWCE,QQQ,AAPL,MSFT').split(',').map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean).slice(0, 12);
+    var topStocks = ['^GSPC', 'VOO', 'BNDW', 'GLD'];
+    var userStocks = String(stocksCsv || 'VOO,SPY,NVDA,VWCE,QQQ,AAPL,MSFT').split(',').map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
+    var stockSyms = topStocks.concat(userStocks).filter(function(v, idx, arr) { return arr.indexOf(v) === idx; }).slice(0, 14);
     stockSyms.forEach(function(sym) {
       try {
-        var yfRes = UrlFetchApp.fetch('https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&range=2d', { muteHttpExceptions: true });
+        var yfRes = UrlFetchApp.fetch('https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&range=2d', {
+          muteHttpExceptions: true,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
         if (yfRes.getResponseCode() === 200) {
           var yf = JSON.parse(yfRes.getContentText());
           var meta = yf && yf.chart && yf.chart.result && yf.chart.result[0] && yf.chart.result[0].meta;
           if (meta && meta.regularMarketPrice) {
             var prev = meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice;
             var chg = prev > 0 ? ((meta.regularMarketPrice - prev) / prev) * 100 : 0;
-            quotes.stocks[sym] = {
-              name: meta.shortName || meta.longName || sym,
+            var outKey = sym === '^GSPC' ? 'SP500' : sym;
+            quotes.stocks[outKey] = {
+              name: meta.shortName || meta.longName || outKey,
               priceUsd: Number(meta.regularMarketPrice),
+              prevClose: Number(prev),
               change24h: Number(chg.toFixed(2))
             };
           }

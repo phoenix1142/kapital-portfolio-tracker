@@ -57,7 +57,9 @@ const BASELINE_QUOTES = {
     PEPE: { priceUsd: 0.0000195, change24h: 8.20, name: 'Pepe' }
   },
   stocks: {
-    VOO: { priceUsd: 548.60, change24h: 0.62, name: 'Vanguard S&P 500 ETF' },
+    SP500: { priceUsd: 7176.41, change24h: 0.00, name: 'S&P 500' },
+    VOO: { priceUsd: 658.30, change24h: 0.00, name: 'Vanguard S&P 500 ETF' },
+    BNDW: { priceUsd: 66.91, change24h: 0.00, name: 'Vanguard Total World Bond ETF' },
     SPY: { priceUsd: 596.40, change24h: 0.61, name: 'SPDR S&P 500 ETF Trust' },
     CSP1: { priceUsd: 612.80, change24h: 0.58, name: 'iShares Core S&P 500 UCITS (Acc)' },
     VUAA: { priceUsd: 112.40, change24h: 0.60, name: 'Vanguard S&P 500 UCITS ETF (Acc)' },
@@ -67,7 +69,7 @@ const BASELINE_QUOTES = {
     VTI: { priceUsd: 296.80, change24h: 0.65, name: 'Vanguard Total Stock Market ETF' },
     SCHD: { priceUsd: 29.15, change24h: 0.35, name: 'Schwab US Dividend Equity ETF' },
     TLT: { priceUsd: 91.40, change24h: -0.28, name: 'iShares 20+ Year Treasury Bond ETF' },
-    GLD: { priceUsd: 242.70, change24h: 0.75, name: 'SPDR Gold Shares ETF' },
+    GLD: { priceUsd: 325.67, change24h: 0.00, name: 'SPDR Gold Shares ETF' },
     AAPL: { priceUsd: 228.50, change24h: 1.12, name: 'Apple Inc.' },
     MSFT: { priceUsd: 426.90, change24h: 0.84, name: 'Microsoft Corp.' },
     NVDA: { priceUsd: 144.80, change24h: 2.65, name: 'NVIDIA Corp.' },
@@ -298,7 +300,7 @@ function fetchJson(url, timeoutMs = 2800) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       headers: {
-        'User-Agent': 'KapitalPortfolioTracker/1.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
         'Accept': 'application/json'
       },
       timeout: timeoutMs
@@ -325,7 +327,14 @@ function fetchJson(url, timeoutMs = 2800) {
   });
 }
 
-// Live quote cache (refreshed up to every 60 seconds when possible)
+function parseNumServer(val) {
+  if (typeof val === 'number') return Number.isFinite(val) ? val : NaN;
+  if (val === null || val === undefined) return NaN;
+  const n = parseFloat(String(val).replace(/[,%+\s]/g, '').trim());
+  return Number.isFinite(n) ? n : NaN;
+}
+
+// Live quote cache (refreshed up to every 10 seconds in parallel)
 let liveQuoteCache = JSON.parse(JSON.stringify(BASELINE_QUOTES));
 let lastQuoteRefresh = 0;
 
@@ -345,114 +354,160 @@ async function refreshLiveQuotes(requestedCrypto = [], requestedStocks = []) {
     }
   }
 
-  if (now - lastQuoteRefresh < 45000) {
+  if (now - lastQuoteRefresh < 10000) {
     return liveQuoteCache;
   }
   lastQuoteRefresh = now;
 
-  let liveSourceHits = [];
+  const liveSourceHits = [];
 
-  // 1. Try NBU official FX rates
-  try {
-    const nbu = await fetchJson('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json', 2200);
-    if (Array.isArray(nbu)) {
-      const usd = nbu.find(r => r.cc === 'USD');
-      const eur = nbu.find(r => r.cc === 'EUR');
-      const gbp = nbu.find(r => r.cc === 'GBP');
-      const pln = nbu.find(r => r.cc === 'PLN');
-      if (usd && usd.rate) liveQuoteCache.fx.USD_UAH = Number(usd.rate.toFixed(2));
-      if (eur && eur.rate) liveQuoteCache.fx.EUR_UAH = Number(eur.rate.toFixed(2));
-      if (gbp && gbp.rate) liveQuoteCache.fx.GBP_UAH = Number(gbp.rate.toFixed(2));
-      if (pln && pln.rate) liveQuoteCache.fx.PLN_UAH = Number(pln.rate.toFixed(2));
-      if (liveQuoteCache.fx.USD_UAH && liveQuoteCache.fx.EUR_UAH) {
-        liveQuoteCache.fx.EUR_USD = Number((liveQuoteCache.fx.EUR_UAH / liveQuoteCache.fx.USD_UAH).toFixed(4));
-      }
-      liveSourceHits.push('НБУ');
-    }
-  } catch (_) {
-    // Fallback to baseline FX
-  }
-
-  // 2. Try CoinMarketCap API (Official Pro API if CMC_API_KEY is configured, otherwise CoinMarketCap Public Data API v3)
-  let cmcLoadedCount = 0;
-  try {
-    const cmcList = await fetchJson('https://api.coinmarketcap.com/data-api/v3/cryptocurrency/listing?start=1&limit=300&sortBy=market_cap&sortType=desc&convert=USD', 2800);
-    const coins = cmcList?.data?.cryptoCurrencyList;
-    if (Array.isArray(coins)) {
-      for (const c of coins) {
-        const ticker = String(c.symbol || '').toUpperCase();
-        const usdQuote = Array.isArray(c.quotes) ? (c.quotes.find(q => q.name === 'USD') || c.quotes[0]) : null;
-        if (ticker && usdQuote && typeof usdQuote.price === 'number' && usdQuote.price > 0) {
-          liveQuoteCache.crypto[ticker] = {
-            ...(liveQuoteCache.crypto[ticker] || {}),
-            name: c.name || liveQuoteCache.crypto[ticker]?.name || ticker,
-            priceUsd: Number(usdQuote.price),
-            change24h: Number((usdQuote.percentChange24h || 0).toFixed(2)),
-            source: 'CoinMarketCap'
-          };
-          cmcLoadedCount++;
+  // 1. NBU official FX rates
+  const nbuTask = (async () => {
+    try {
+      const nbu = await fetchJson('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json', 2500);
+      if (Array.isArray(nbu)) {
+        const usd = nbu.find(r => r.cc === 'USD');
+        const eur = nbu.find(r => r.cc === 'EUR');
+        const gbp = nbu.find(r => r.cc === 'GBP');
+        const pln = nbu.find(r => r.cc === 'PLN');
+        if (usd && usd.rate) liveQuoteCache.fx.USD_UAH = Number(usd.rate.toFixed(2));
+        if (eur && eur.rate) liveQuoteCache.fx.EUR_UAH = Number(eur.rate.toFixed(2));
+        if (gbp && gbp.rate) liveQuoteCache.fx.GBP_UAH = Number(gbp.rate.toFixed(2));
+        if (pln && pln.rate) liveQuoteCache.fx.PLN_UAH = Number(pln.rate.toFixed(2));
+        if (liveQuoteCache.fx.USD_UAH && liveQuoteCache.fx.EUR_UAH) {
+          liveQuoteCache.fx.EUR_USD = Number((liveQuoteCache.fx.EUR_UAH / liveQuoteCache.fx.USD_UAH).toFixed(4));
         }
+        liveSourceHits.push('НБУ');
       }
-      if (cmcLoadedCount > 0) {
-        liveSourceHits.push('CoinMarketCap');
-      }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  })();
 
-  // Fallback to Binance 24hr ticker only if CoinMarketCap was unreachable
-  if (cmcLoadedCount === 0) {
+  // 2. Crypto quotes: fast Binance Vision batch + CoinMarketCap fallback
+  const cryptoTask = (async () => {
+    let loaded = 0;
     try {
       const cryptoSymbols = Object.keys(liveQuoteCache.crypto).filter(s => s !== 'USDT' && s !== 'USDC');
       const pairs = cryptoSymbols.map(s => `"${s}USDT"`).join(',');
       if (pairs) {
-        const binanceData = await fetchJson(`https://api.binance.com/api/v3/ticker/24hr?symbols=[${encodeURIComponent(pairs)}]`, 2500);
+        const binanceData = await fetchJson(`https://data-api.binance.vision/api/v3/ticker/24hr?symbols=[${encodeURIComponent(pairs)}]`, 2500);
         if (Array.isArray(binanceData)) {
+          const ts = Date.now();
           for (const item of binanceData) {
             if (item.symbol && item.symbol.endsWith('USDT')) {
               const ticker = item.symbol.replace(/USDT$/, '');
               const price = parseFloat(item.lastPrice);
+              const openPrice = parseFloat(item.openPrice);
               const change = parseFloat(item.priceChangePercent);
               if (!isNaN(price) && price > 0) {
                 liveQuoteCache.crypto[ticker] = {
                   ...(liveQuoteCache.crypto[ticker] || { name: ticker }),
                   priceUsd: price,
-                  change24h: isNaN(change) ? 0 : change,
-                  source: 'Binance'
+                  prevClose: Number.isFinite(openPrice) && openPrice > 0 ? openPrice : undefined,
+                  change24h: isNaN(change) ? 0 : Number(change.toFixed(2)),
+                  source: 'Binance Live',
+                  updatedAtMs: ts
                 };
+                loaded++;
               }
             }
           }
-          liveSourceHits.push('Binance API');
+          if (loaded > 0) liveSourceHits.push('Binance');
         }
       }
-    } catch (_) {
-      // Fallback to baseline crypto quotes
-    }
-  }
+    } catch (_) {}
 
-  // 3. Try Yahoo Finance v8 chart / quote for stocks if reachable
-  try {
-    const stockSymbols = Object.keys(liveQuoteCache.stocks).slice(0, 15).join(',');
-    if (stockSymbols) {
-      const yf = await fetchJson(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(stockSymbols)}`, 2500);
-      const results = yf?.quoteResponse?.result;
-      if (Array.isArray(results)) {
-        for (const item of results) {
-          const sym = (item.symbol || '').toUpperCase();
-          if (sym && item.regularMarketPrice) {
-            liveQuoteCache.stocks[sym] = {
-              name: item.shortName || item.longName || liveQuoteCache.stocks[sym]?.name || sym,
-              priceUsd: Number(item.regularMarketPrice),
-              change24h: Number((item.regularMarketChangePercent || 0).toFixed(2))
-            };
+    if (loaded === 0) {
+      try {
+        const cmcList = await fetchJson('https://api.coinmarketcap.com/data-api/v3/cryptocurrency/listing?start=1&limit=300&sortBy=market_cap&sortType=desc&convert=USD', 2800);
+        const coins = cmcList?.data?.cryptoCurrencyList;
+        if (Array.isArray(coins)) {
+          const ts = Date.now();
+          for (const c of coins) {
+            const ticker = String(c.symbol || '').toUpperCase();
+            const usdQuote = Array.isArray(c.quotes) ? (c.quotes.find(q => q.name === 'USD') || c.quotes[0]) : null;
+            if (ticker && usdQuote && typeof usdQuote.price === 'number' && usdQuote.price > 0) {
+              liveQuoteCache.crypto[ticker] = {
+                ...(liveQuoteCache.crypto[ticker] || {}),
+                name: c.name || liveQuoteCache.crypto[ticker]?.name || ticker,
+                priceUsd: Number(usdQuote.price),
+                change24h: Number((usdQuote.percentChange24h || 0).toFixed(2)),
+                source: 'CoinMarketCap',
+                updatedAtMs: ts
+              };
+              loaded++;
+            }
           }
+          if (loaded > 0) liveSourceHits.push('CoinMarketCap');
         }
-        liveSourceHits.push('Yahoo Finance');
-      }
+      } catch (_) {}
     }
-  } catch (_) {
-    // Keep baseline stock quotes
-  }
+  })();
+
+  // 3. Stocks & Indices: CNBC real-time quotes (with Yahoo v8 spark fallback)
+  const stocksTask = (async () => {
+    let stockHits = 0;
+    try {
+      const topSyms = ['SP500', 'VOO', 'BNDW', 'GLD'];
+      const allSyms = [...new Set([...topSyms, ...Object.keys(liveQuoteCache.stocks)])].slice(0, 20);
+      const cnbcSymbols = allSyms.map(s => (s === 'SP500' ? '.SPX' : s));
+      const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${encodeURIComponent(cnbcSymbols.join('|'))}&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json&_=${Date.now()}`;
+      const cnbc = await fetchJson(url, 3000);
+      const list = cnbc?.FormattedQuoteResult?.FormattedQuote;
+      const items = Array.isArray(list) ? list : (list ? [list] : []);
+      const ts = Date.now();
+      for (const q of items) {
+        const rawSym = String(q.symbol || '').toUpperCase();
+        const key = rawSym === '.SPX' ? 'SP500' : rawSym;
+        const price = parseNumServer(q.last);
+        const prev = parseNumServer(q.previous_day_closing);
+        const chg = parseNumServer(q.change_pct);
+        if (key && Number.isFinite(price) && price > 0) {
+          liveQuoteCache.stocks[key] = {
+            ...(liveQuoteCache.stocks[key] || {}),
+            name: q.shortName || q.name || liveQuoteCache.stocks[key]?.name || key,
+            priceUsd: Number(price.toFixed(2)),
+            prevClose: Number.isFinite(prev) && prev > 0 ? Number(prev.toFixed(2)) : undefined,
+            change24h: Number.isFinite(chg) ? Number(chg.toFixed(2)) : 0,
+            source: 'CNBC Live',
+            updatedAtMs: ts
+          };
+          stockHits++;
+        }
+      }
+      if (stockHits > 0) liveSourceHits.push('CNBC');
+    } catch (_) {}
+
+    if (stockHits === 0) {
+      try {
+        const yf = await fetchJson('https://query1.finance.yahoo.com/v8/finance/spark?symbols=%5EGSPC,VOO,BNDW,GLD&range=1d&interval=15m', 2800);
+        if (yf && typeof yf === 'object') {
+          const ts = Date.now();
+          Object.keys(yf).forEach(rawSym => {
+            const entry = yf[rawSym];
+            const closes = (entry?.close || []).filter(v => typeof v === 'number' && v > 0);
+            if (closes.length === 0) return;
+            const key = rawSym === '^GSPC' ? 'SP500' : rawSym.toUpperCase();
+            const price = closes[closes.length - 1];
+            const prev = Number(entry.chartPreviousClose) || closes[0];
+            const chg = prev > 0 ? ((price - prev) / prev) * 100 : 0;
+            liveQuoteCache.stocks[key] = {
+              ...(liveQuoteCache.stocks[key] || { name: key }),
+              priceUsd: Number(price.toFixed(2)),
+              prevClose: Number(prev.toFixed(2)),
+              change24h: Number(chg.toFixed(2)),
+              sparkline: closes.slice(-28).map(v => Number(v.toFixed(2))),
+              source: 'Yahoo Finance',
+              updatedAtMs: ts
+            };
+            stockHits++;
+          });
+          if (stockHits > 0) liveSourceHits.push('Yahoo Finance');
+        }
+      } catch (_) {}
+    }
+  })();
+
+  await Promise.allSettled([nbuTask, cryptoTask, stocksTask]);
 
   liveQuoteCache.fx.updatedAt = new Date().toISOString();
   liveQuoteCache.fx.source = liveSourceHits.length > 0
