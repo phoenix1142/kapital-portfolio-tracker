@@ -44,6 +44,12 @@
       subtitle: 'Облік реальних гривневих вкладень у Криптовалюту, Фондовий ринок та інші категорії з можливістю змінювати суму',
       color: '#10b981',
       shortName: 'Влито в грн (₴)'
+    },
+    important_links: {
+      title: '🔗 Важливі посилання',
+      subtitle: 'Швидкий доступ до Google Docs, Google Sheets / Excel, брокерів, аналітики та важливих ресурсів',
+      color: '#38bdf8',
+      shortName: 'Важливі посилання'
     }
   };
 
@@ -142,7 +148,8 @@
       },
       depositTaxDefault: true,
       depositTaxRate: 23.0,
-      stockStrategy: { ...DEFAULT_STOCK_STRATEGY }
+      stockStrategy: { ...DEFAULT_STOCK_STRATEGY },
+      importantLinks: []
     },
     auth: {
       requireAuth: false
@@ -856,7 +863,8 @@
           settings: state.settings,
           positions: state.positions
         }),
-        saveRealInvestedUahToCloudSlot()
+        saveRealInvestedUahToCloudSlot(),
+        saveImportantLinksToCloudSlot()
       ]);
       state.cloudSynced = true;
       state.justSyncedFromBridge = 'imported_to_device';
@@ -880,13 +888,20 @@
       btnEl.textContent = '⏳ Завантаження з хмари...';
     }
     try {
-      const [data, dedicatedRealUahObj] = await Promise.all([
+      const [data, dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([
         directCloudSlotLoad(),
-        loadRealInvestedUahFromCloudSlot()
+        loadRealInvestedUahFromCloudSlot(),
+        loadImportantLinksFromCloudSlot()
       ]);
       if (data && Array.isArray(data.positions) && data.positions.length > 0) {
         state.positions = data.positions;
         if (data.settings) {
+          const resolvedLinks = resolveLatestImportantLinks(
+            state.settings?.importantLinks,
+            state.settings?.importantLinksUpdatedAt || '',
+            dedicatedLinksObj?.importantLinks || data.settings.importantLinks,
+            dedicatedLinksObj?.updatedAt || data.settings.importantLinksUpdatedAt || data.settings.updatedAt || ''
+          );
           state.settings = {
             ...state.settings,
             ...data.settings,
@@ -894,7 +909,9 @@
               ...(state.settings.realInvestedUah || {}),
               ...(data.settings.realInvestedUah || {}),
               ...(dedicatedRealUahObj?.realInvestedUah || {})
-            }
+            },
+            importantLinks: resolvedLinks.links,
+            importantLinksUpdatedAt: resolvedLinks.updatedAt
           };
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
@@ -1010,6 +1027,50 @@
     return null;
   }
 
+  // Dedicated cloud topic for Important Links (instant CORS-preflight-free cross-device sync)
+  async function saveImportantLinksToCloudSlot() {
+    const links = Array.isArray(state.settings?.importantLinks) ? state.settings.importantLinks : [];
+    const updatedAt = state.settings?.importantLinksUpdatedAt || state.settings?.updatedAt || new Date().toISOString();
+    const enc = encodeEncryptedCloudString({ importantLinks: links, updatedAt });
+    try {
+      await fetch(`${NTFY_VAULT_BASE_URL}_links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ ts: Date.now(), updatedAt, v: enc })
+      });
+    } catch (_) {}
+  }
+
+  async function loadImportantLinksFromCloudSlot() {
+    try {
+      const msg = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_links`);
+      if (msg && msg.v) {
+        const decoded = decodeEncryptedCloudString(msg.v);
+        if (decoded && Array.isArray(decoded.importantLinks)) {
+          return decoded;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function resolveLatestImportantLinks(localLinks, localTs, remoteLinks, remoteTs) {
+    const loc = Array.isArray(localLinks) ? localLinks : [];
+    const rem = Array.isArray(remoteLinks) ? remoteLinks : [];
+    const lTs = String(localTs || '');
+    const rTs = String(remoteTs || '');
+    if (rTs && (!lTs || rTs > lTs)) {
+      return { links: rem, updatedAt: rTs };
+    }
+    if (lTs && (!rTs || lTs > rTs)) {
+      return { links: loc, updatedAt: lTs };
+    }
+    if (rem.length > 0 && loc.length === 0) {
+      return { links: rem, updatedAt: rTs };
+    }
+    return { links: loc, updatedAt: lTs || rTs };
+  }
+
   async function loadPortfolioFromServer() {
     // 1. Check if we just returned from 1-click Google Drive Bridge with #cloud_data=...
     if (typeof window !== 'undefined' && window.location && window.location.hash && window.location.hash.includes('cloud_data=')) {
@@ -1086,6 +1147,7 @@
     try {
       let data;
       const dedicatedRealUahPromise = !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null);
+      const dedicatedLinksPromise = !isGoogleAppsScript() ? loadImportantLinksFromCloudSlot() : Promise.resolve(null);
       if (isGoogleAppsScript()) {
         data = await gasCall('gasGetPortfolio');
         state.cloudSynced = true;
@@ -1108,7 +1170,7 @@
           }
         }
       }
-      const dedicatedRealUahObj = await dedicatedRealUahPromise;
+      const [dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([dedicatedRealUahPromise, dedicatedLinksPromise]);
 
       const remotePositions = Array.isArray(data?.positions) ? data.positions : [];
       const remoteHasRealUserPositions = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions) && !data?.isDemoSeed;
@@ -1134,23 +1196,44 @@
         ? { ...remoteRealMap, ...localRealMap }
         : { ...localRealMap, ...remoteRealMap };
 
-      // If this device (e.g. Desktop PC) already has realInvestedUah entered locally, but the cloud didn't have it yet, push it to cloud immediately!
-      const shouldPushLocalRealUahToCloud = localRealKeys.length > 0 && (
+      const localLinks = Array.isArray(localSettings?.importantLinks)
+        ? localSettings.importantLinks
+        : (Array.isArray(state.settings?.importantLinks) ? state.settings.importantLinks : []);
+      const localLinksTs = localSettings?.importantLinksUpdatedAt || state.settings?.importantLinksUpdatedAt || '';
+      const remoteLinksCandidate = dedicatedLinksObj?.importantLinks
+        || (Array.isArray(data?.settings?.importantLinks) ? data.settings.importantLinks : []);
+      const remoteLinksTs = dedicatedLinksObj?.updatedAt || data?.settings?.importantLinksUpdatedAt || '';
+      const resolvedLinks = resolveLatestImportantLinks(localLinks, localLinksTs, remoteLinksCandidate, remoteLinksTs);
+
+      // If this device (e.g. Desktop PC) already has realInvestedUah or links entered locally, push to cloud if cloud lags behind
+      const shouldPushLocalExtrasToCloud = (localRealKeys.length > 0 && (
         remoteRealKeys.length === 0 ||
         JSON.stringify(mergedRealInvestedUah) !== JSON.stringify(remoteRealMap)
-      );
+      )) || (localLinks.length > 0 && JSON.stringify(resolvedLinks.links) !== JSON.stringify(remoteLinksCandidate));
 
       // Protect real local user positions from EVER being overwritten by remote demo/empty data!
       if (localHasRealUserPositions && (!remoteHasRealUserPositions || (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt))) {
         if (localSettings) {
-          state.settings = { ...state.settings, ...localSettings, realInvestedUah: mergedRealInvestedUah };
+          state.settings = {
+            ...state.settings,
+            ...localSettings,
+            realInvestedUah: mergedRealInvestedUah,
+            importantLinks: resolvedLinks.links,
+            importantLinksUpdatedAt: resolvedLinks.updatedAt
+          };
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
         state.positions = localPositions;
         persistPortfolio();
       } else {
         if (data && data.settings) {
-          state.settings = { ...state.settings, ...data.settings, realInvestedUah: mergedRealInvestedUah };
+          state.settings = {
+            ...state.settings,
+            ...data.settings,
+            realInvestedUah: mergedRealInvestedUah,
+            importantLinks: resolvedLinks.links,
+            importantLinksUpdatedAt: resolvedLinks.updatedAt
+          };
           if (!data.settings.defaultUsdMigrated) {
             state.settings.primaryCurrency = 'USD';
             state.settings.defaultUsdMigrated = true;
@@ -1160,7 +1243,7 @@
         if (remotePositions.length > 0) {
           state.positions = remotePositions;
         }
-        if (shouldPushLocalRealUahToCloud) {
+        if (shouldPushLocalExtrasToCloud) {
           persistPortfolio();
         }
       }
@@ -1213,11 +1296,12 @@
     if (realUahSaveTimer || strategySaveTimer) return;
     isPullingCloudQuietly = true;
     try {
-      const [data, dedicatedRealUahObj] = await Promise.all([
+      const [data, dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([
         isGoogleAppsScript() ? gasCall('gasGetPortfolio') : directCloudSlotLoad(),
-        !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null)
+        !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null),
+        !isGoogleAppsScript() ? loadImportantLinksFromCloudSlot() : Promise.resolve(null)
       ]);
-      if (!data && !dedicatedRealUahObj) return;
+      if (!data && !dedicatedRealUahObj && !dedicatedLinksObj) return;
 
       let changed = false;
 
@@ -1235,6 +1319,20 @@
         }
       }
 
+      if (dedicatedLinksObj && Array.isArray(dedicatedLinksObj.importantLinks)) {
+        const resolvedLinks = resolveLatestImportantLinks(
+          state.settings?.importantLinks,
+          state.settings?.importantLinksUpdatedAt || '',
+          dedicatedLinksObj.importantLinks,
+          dedicatedLinksObj.updatedAt || ''
+        );
+        if (JSON.stringify(resolvedLinks.links) !== JSON.stringify(state.settings?.importantLinks || [])) {
+          state.settings.importantLinks = resolvedLinks.links;
+          if (resolvedLinks.updatedAt) state.settings.importantLinksUpdatedAt = resolvedLinks.updatedAt;
+          changed = true;
+        }
+      }
+
       if (data && !data.isDemoSeed) {
         const remoteUpdatedAt = data.settings?.updatedAt || '';
         const localUpdatedAt = state.settings?.updatedAt || '';
@@ -1246,6 +1344,12 @@
 
         if ((remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) || (Object.keys(remoteRealMap).length > 0 && Object.keys(localRealMap).length === 0)) {
           if (data.settings) {
+            const resolvedLinks = resolveLatestImportantLinks(
+              state.settings?.importantLinks,
+              state.settings?.importantLinksUpdatedAt || '',
+              dedicatedLinksObj?.importantLinks || data.settings.importantLinks,
+              dedicatedLinksObj?.updatedAt || data.settings.importantLinksUpdatedAt || ''
+            );
             state.settings = {
               ...state.settings,
               ...data.settings,
@@ -1253,7 +1357,9 @@
                 ...localRealMap,
                 ...remoteRealMap,
                 ...(dedicatedRealUahObj?.realInvestedUah || {})
-              }
+              },
+              importantLinks: resolvedLinks.links,
+              importantLinksUpdatedAt: resolvedLinks.updatedAt
             };
             state.primaryCurrency = state.settings.primaryCurrency || 'USD';
           }
@@ -1286,6 +1392,9 @@
     }));
     if (!isGoogleAppsScript() && state.settings?.realInvestedUah && Object.keys(state.settings.realInvestedUah).length > 0) {
       saveRealInvestedUahToCloudSlot();
+    }
+    if (!isGoogleAppsScript() && state.settings?.importantLinksUpdatedAt) {
+      saveImportantLinksToCloudSlot();
     }
     try {
       if (isGoogleAppsScript()) {
@@ -2508,6 +2617,10 @@
     if (navInvestedBtn) navInvestedBtn.classList.toggle('active', state.activeCategory === 'invested_uah');
     const mobInvestedBtn = document.getElementById('mob-cat-invested_uah');
     if (mobInvestedBtn) mobInvestedBtn.classList.toggle('active', state.activeCategory === 'invested_uah');
+    const navLinksBtn = document.getElementById('nav-cat-important_links');
+    if (navLinksBtn) navLinksBtn.classList.toggle('active', state.activeCategory === 'important_links');
+    const mobLinksBtn = document.getElementById('mob-cat-important_links');
+    if (mobLinksBtn) mobLinksBtn.classList.toggle('active', state.activeCategory === 'important_links');
 
     // Update page heading & Cloud Sync Status indicator
     const meta = CATEGORY_META[state.activeCategory] || CATEGORY_META.all;
@@ -2656,9 +2769,17 @@
     }
 
     const isInvestedUahView = state.activeCategory === 'invested_uah';
+    const isImportantLinksView = state.activeCategory === 'important_links';
+    const isDedicatedUtilityView = isInvestedUahView || isImportantLinksView;
+
+    // Hide Wealth Hero strip on the Important Links page so the links workspace sits cleanly at the top
+    const wealthHeroEl = document.querySelector('.wealth-hero');
+    if (wealthHeroEl) {
+      wealthHeroEl.style.display = isImportantLinksView ? 'none' : '';
+    }
 
     // Filter positions for active category
-    const scopedPositions = (state.activeCategory === 'all' || isInvestedUahView)
+    const scopedPositions = (state.activeCategory === 'all' || isDedicatedUtilityView)
       ? evaluated
       : evaluated.filter(p => p.category === state.activeCategory);
 
@@ -2685,7 +2806,7 @@
 
     // Render Hero Strip (Always shows both UAH & USD side-by-side!)
     document.getElementById('hero-scope-label').textContent =
-      (state.activeCategory === 'all' || isInvestedUahView)
+      (state.activeCategory === 'all' || isDedicatedUtilityView)
         ? 'Сукупний капітал (Усі інвестиції та готівка)'
         : `Капітал категорії: ${meta.shortName}`;
 
@@ -2747,10 +2868,21 @@
       }
     }
 
-    // Render Circular Donut Allocation Window (hide on dedicated 'invested_uah' view so that tab is clean)
+    // Show Important Links Manager ONLY when 'important_links' tab is selected in sidebar
+    const importantLinksSection = document.getElementById('important-links-section');
+    if (importantLinksSection) {
+      if (isImportantLinksView) {
+        importantLinksSection.style.display = 'block';
+        renderImportantLinksSection();
+      } else {
+        importantLinksSection.style.display = 'none';
+      }
+    }
+
+    // Render Circular Donut Allocation Window (hide on dedicated utility tabs so they stay clean)
     const circularSection = document.getElementById('circular-allocation-section');
     if (circularSection) {
-      if (isInvestedUahView) {
+      if (isDedicatedUtilityView) {
         circularSection.style.display = 'none';
       } else {
         circularSection.style.display = 'block';
@@ -2796,12 +2928,12 @@
       }
     }
 
-    // Render Positions Table (hide when viewing the dedicated 'invested_uah' tab)
+    // Render Positions Table (hide when viewing dedicated utility tabs)
     const posTableSection = document.getElementById('positions-table-section');
     if (posTableSection) {
-      posTableSection.style.display = isInvestedUahView ? 'none' : 'block';
+      posTableSection.style.display = isDedicatedUtilityView ? 'none' : 'block';
     }
-    if (!isInvestedUahView) {
+    if (!isDedicatedUtilityView) {
       renderPositionsTable(scopedPositions);
     }
 
@@ -2809,11 +2941,588 @@
     ensurePurchaseHistorySeeded();
     const historySectionEl = document.getElementById('purchase-history-section');
     if (historySectionEl) {
-      historySectionEl.style.display = isInvestedUahView ? 'none' : 'block';
+      historySectionEl.style.display = isDedicatedUtilityView ? 'none' : 'block';
     }
-    if (!isInvestedUahView) {
+    if (!isDedicatedUtilityView) {
       renderPurchaseHistorySection(evaluated);
     }
+  }
+
+  // Important Links Page State & Helpers
+  let linksFilterType = 'all'; // 'all' | 'pinned' | 'doc' | 'sheet' | 'drive' | 'site'
+  let linksSearchQuery = '';
+  let linksFormOpen = false;
+  let linksEditingId = null;
+  let linksDeleteConfirmId = null;
+  let linksDeleteConfirmTimer = null;
+
+  const LINK_TYPES_META = {
+    doc:   { key: 'doc',   label: 'Google Doc / Документ', shortTag: 'Doc',      filterLabel: 'Документи',  cssClass: 'link-type-doc',   tagClass: 'link-type-tag-doc' },
+    sheet: { key: 'sheet', label: 'Google Sheets / Excel', shortTag: 'Таблиця',  filterLabel: 'Таблиці',    cssClass: 'link-type-sheet', tagClass: 'link-type-tag-sheet' },
+    drive: { key: 'drive', label: 'Google Drive / PDF',    shortTag: 'Drive',    filterLabel: 'Drive / PDF', cssClass: 'link-type-drive', tagClass: 'link-type-tag-drive' },
+    site:  { key: 'site',  label: 'Веб-сайт / Сервіс',     shortTag: 'Сайт',     filterLabel: 'Сайти',      cssClass: 'link-type-site',  tagClass: 'link-type-tag-site' }
+  };
+
+  function normalizeSafeLinkUrl(raw) {
+    let str = String(raw || '').trim();
+    if (!str) return '';
+    if (/^(javascript|data|vbscript):/i.test(str)) return '';
+    if (!/^https?:\/\//i.test(str)) {
+      str = 'https://' + str;
+    }
+    try {
+      const parsed = new URL(str);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      if (!parsed.hostname || (!parsed.hostname.includes('.') && parsed.hostname !== 'localhost')) return '';
+      return parsed.href;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function detectLinkType(urlStr) {
+    const low = String(urlStr || '').toLowerCase();
+    if (
+      low.includes('docs.google.com/spreadsheets') ||
+      low.includes('sheets.google.com') ||
+      low.includes('excel.office.com') ||
+      low.includes('1drv.ms/x/') ||
+      low.includes('airtable.com') ||
+      /\.(xlsx|xls|csv|ods)(\?|#|$)/i.test(low)
+    ) {
+      return 'sheet';
+    }
+    if (
+      low.includes('docs.google.com/document') ||
+      low.includes('word.office.com') ||
+      low.includes('1drv.ms/w/') ||
+      low.includes('notion.so') ||
+      low.includes('notion.site') ||
+      low.includes('coda.io') ||
+      /\.(docx|doc|txt|md)(\?|#|$)/i.test(low)
+    ) {
+      return 'doc';
+    }
+    if (
+      low.includes('drive.google.com') ||
+      low.includes('docs.google.com/presentation') ||
+      low.includes('docs.google.com/forms') ||
+      low.includes('dropbox.com') ||
+      low.includes('onedrive.live.com') ||
+      low.includes('1drv.ms/') ||
+      /\.pdf(\?|#|$)/i.test(low)
+    ) {
+      return 'drive';
+    }
+    return 'site';
+  }
+
+  function extractCleanHost(urlStr) {
+    try {
+      const u = new URL(urlStr);
+      return u.hostname.replace(/^www\./i, '');
+    } catch (_) {
+      return String(urlStr || '').slice(0, 40);
+    }
+  }
+
+  function suggestTitleFromUrl(urlStr, type) {
+    const low = String(urlStr || '').toLowerCase();
+    if (low.includes('docs.google.com/spreadsheets')) return 'Google Таблиця';
+    if (low.includes('docs.google.com/document')) return 'Google Документ';
+    if (low.includes('docs.google.com/presentation')) return 'Google Презентація';
+    if (low.includes('drive.google.com')) return 'Google Диск';
+    const host = extractCleanHost(urlStr);
+    if (host) return host;
+    return LINK_TYPES_META[type]?.label || 'Важливе посилання';
+  }
+
+  function buildLinkIconBadgeHtml(link) {
+    const t = LINK_TYPES_META[link.type] ? link.type : detectLinkType(link.url);
+    const meta = LINK_TYPES_META[t];
+    if (t === 'doc') {
+      return `
+        <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="8" y1="13" x2="16" y2="13"/>
+            <line x1="8" y1="17" x2="13" y2="17"/>
+          </svg>
+        </div>
+      `;
+    }
+    if (t === 'sheet') {
+      return `
+        <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="3" y1="15" x2="21" y2="15"/>
+            <line x1="9" y1="3" x2="9" y2="21"/>
+          </svg>
+        </div>
+      `;
+    }
+    if (t === 'drive') {
+      return `
+        <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+      `;
+    }
+    const host = extractCleanHost(link.url);
+    const faviconUrl = host ? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}` : '';
+    const globeSvg = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:${faviconUrl ? 'none' : 'block'};">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    `;
+    return `
+      <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+        ${faviconUrl ? `<img src="${escapeHtml(faviconUrl)}" alt="" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';" />` : ''}
+        ${globeSvg}
+      </div>
+    `;
+  }
+
+  function getImportantLinksList() {
+    if (!Array.isArray(state.settings.importantLinks)) {
+      state.settings.importantLinks = [];
+    }
+    return state.settings.importantLinks;
+  }
+
+  function saveImportantLinksState(nextLinks) {
+    state.settings.importantLinks = nextLinks;
+    state.settings.importantLinksUpdatedAt = new Date().toISOString();
+    persistPortfolio();
+  }
+
+  function buildLinksCardsGridHtml(allLinks) {
+    const q = linksSearchQuery.trim().toLowerCase();
+    const filtered = allLinks
+      .filter(link => {
+        if (linksFilterType === 'pinned' && !link.pinned) return false;
+        if (linksFilterType !== 'all' && linksFilterType !== 'pinned' && link.type !== linksFilterType) return false;
+        if (q) {
+          const hay = `${link.title || ''} ${link.url || ''} ${link.note || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (Boolean(b.pinned) !== Boolean(a.pinned)) return b.pinned ? 1 : -1;
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+      });
+
+    if (allLinks.length === 0) {
+      return `
+        <div class="links-empty-state">
+          <div class="links-empty-icon">🔗</div>
+          <div class="links-empty-title">Поки що немає збережених посилань</div>
+          <div class="links-empty-sub">Додайте посилання на Google Docs, таблиці Google Sheets / Excel, кабінети брокерів або корисні сервіси — вони автоматично синхронізуються між пристроями.</div>
+          <button type="button" class="btn btn-primary" id="btn-links-empty-add" style="font-size:12.5px; padding:7px 14px;">+ Додати перше посилання</button>
+        </div>
+      `;
+    }
+
+    if (filtered.length === 0) {
+      return `
+        <div class="links-empty-state" style="padding:20px 14px;">
+          <div class="links-empty-title">Нічого не знайдено</div>
+          <div class="links-empty-sub" style="margin-bottom:0;">Спробуйте змінити фільтр або пошуковий запит.</div>
+        </div>
+      `;
+    }
+
+    const copySvgIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+    return `
+      <div class="links-grid">
+        ${filtered.map(link => {
+          const tKey = LINK_TYPES_META[link.type] ? link.type : detectLinkType(link.url);
+          const tMeta = LINK_TYPES_META[tKey];
+          const host = extractCleanHost(link.url);
+          const isDelConfirm = linksDeleteConfirmId === link.id;
+          return `
+            <div class="link-card${link.pinned ? ' is-pinned' : ''}" data-link-id="${escapeHtml(link.id)}">
+              <a class="link-icon-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="Відкрити: ${escapeHtml(link.url)}">
+                ${buildLinkIconBadgeHtml(link)}
+              </a>
+              <div class="link-card-content">
+                <a class="link-card-main" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="Відкрити: ${escapeHtml(link.url)}">
+                  <div class="link-card-title-row">
+                    <span class="link-card-title">${escapeHtml(link.title)}</span>
+                    <span class="link-type-tag ${tMeta.tagClass}">${tMeta.shortTag}</span>
+                  </div>
+                  ${link.note ? `<div class="link-card-note">${escapeHtml(link.note)}</div>` : ''}
+                </a>
+                <div class="link-card-footer">
+                  <a class="link-card-meta" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(host)} ↗</a>
+                  <div class="link-card-actions">
+                    <button type="button" class="link-action-btn${link.pinned ? ' is-pinned-active' : ''}" data-link-action="pin" data-id="${escapeHtml(link.id)}" title="${link.pinned ? 'Відкріпити' : 'Закріпити вгорі'}">${link.pinned ? '★' : '☆'}</button>
+                    <button type="button" class="link-action-btn" data-link-action="copy" data-id="${escapeHtml(link.id)}" title="Копіювати посилання">${copySvgIcon}</button>
+                    <button type="button" class="link-action-btn" data-link-action="edit" data-id="${escapeHtml(link.id)}" title="Редагувати">✎</button>
+                    <button type="button" class="link-action-btn is-danger" data-link-action="delete" data-id="${escapeHtml(link.id)}" title="${isDelConfirm ? 'Натисніть ще раз для видалення' : 'Видалити'}">${isDelConfirm ? '✓?' : '✕'}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function wireLinksGridActions(sectionEl) {
+    const emptyAddBtn = sectionEl.querySelector('#btn-links-empty-add');
+    if (emptyAddBtn) {
+      emptyAddBtn.addEventListener('click', () => {
+        linksFormOpen = true;
+        linksEditingId = null;
+        renderImportantLinksSection(true);
+        sectionEl.querySelector('#link-input-url')?.focus();
+      });
+    }
+
+    sectionEl.querySelectorAll('[data-link-action]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = btn.getAttribute('data-link-action');
+        const id = btn.getAttribute('data-id');
+        const allLinks = getImportantLinksList();
+        const target = allLinks.find(l => l.id === id);
+        if (!target) return;
+
+        if (action === 'pin') {
+          const next = allLinks.map(l => l.id === id ? { ...l, pinned: !l.pinned, updatedAt: new Date().toISOString() } : l);
+          saveImportantLinksState(next);
+          renderImportantLinksSection(true);
+        } else if (action === 'copy') {
+          try {
+            await navigator.clipboard.writeText(target.url);
+            const origHtml = btn.innerHTML;
+            btn.textContent = '✓';
+            btn.classList.add('is-copied');
+            setTimeout(() => {
+              btn.innerHTML = origHtml;
+              btn.classList.remove('is-copied');
+            }, 1400);
+          } catch (_) {
+            window.prompt('Скопіюйте посилання:', target.url);
+          }
+        } else if (action === 'edit') {
+          linksEditingId = id;
+          linksFormOpen = true;
+          linksDeleteConfirmId = null;
+          renderImportantLinksSection(true);
+          const titleInput = sectionEl.querySelector('#link-input-title');
+          if (titleInput) {
+            titleInput.focus();
+            titleInput.select();
+          }
+        } else if (action === 'delete') {
+          if (linksDeleteConfirmId === id) {
+            if (linksDeleteConfirmTimer) clearTimeout(linksDeleteConfirmTimer);
+            linksDeleteConfirmId = null;
+            if (linksEditingId === id) {
+              linksEditingId = null;
+              linksFormOpen = false;
+            }
+            const next = allLinks.filter(l => l.id !== id);
+            saveImportantLinksState(next);
+            renderImportantLinksSection(true);
+          } else {
+            linksDeleteConfirmId = id;
+            if (linksDeleteConfirmTimer) clearTimeout(linksDeleteConfirmTimer);
+            linksDeleteConfirmTimer = setTimeout(() => {
+              linksDeleteConfirmId = null;
+              const gridWrap = sectionEl.querySelector('#links-grid-container');
+              if (gridWrap) {
+                gridWrap.innerHTML = buildLinksCardsGridHtml(getImportantLinksList());
+                wireLinksGridActions(sectionEl);
+              }
+            }, 3000);
+            const gridWrap = sectionEl.querySelector('#links-grid-container');
+            if (gridWrap) {
+              gridWrap.innerHTML = buildLinksCardsGridHtml(getImportantLinksList());
+              wireLinksGridActions(sectionEl);
+            }
+          }
+        }
+      });
+    });
+  }
+
+  function renderImportantLinksSection(forceRebuild = false) {
+    const section = document.getElementById('important-links-section');
+    if (!section) return;
+
+    // Never disrupt user typing in search or inline form during background live ticker/cloud refreshes
+    if (!forceRebuild && section.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) {
+      return;
+    }
+
+    const allLinks = getImportantLinksList();
+    const counts = {
+      all: allLinks.length,
+      pinned: allLinks.filter(l => l.pinned).length,
+      doc: allLinks.filter(l => l.type === 'doc').length,
+      sheet: allLinks.filter(l => l.type === 'sheet').length,
+      drive: allLinks.filter(l => l.type === 'drive').length,
+      site: allLinks.filter(l => l.type === 'site').length
+    };
+
+    const editingItem = linksEditingId ? allLinks.find(l => l.id === linksEditingId) : null;
+    if (linksEditingId && !editingItem) {
+      linksEditingId = null;
+    }
+
+    const filterPills = [
+      { key: 'all', label: 'Усі', count: counts.all },
+      ...(counts.pinned > 0 ? [{ key: 'pinned', label: '⭐ Закріплені', count: counts.pinned }] : []),
+      { key: 'sheet', label: '📊 Таблиці / Excel', count: counts.sheet },
+      { key: 'doc', label: '📄 Документи', count: counts.doc },
+      { key: 'drive', label: '📁 Drive / PDF', count: counts.drive },
+      { key: 'site', label: '🌐 Сайти', count: counts.site }
+    ];
+
+    section.innerHTML = `
+      <div class="links-header-bar">
+        <div>
+          <div class="panel-title">🔗 Важливі посилання</div>
+          <div class="panel-subtitle">Google Docs, Google Sheets / Excel, кабінети брокерів та корисні сайти в одному компактному місці</div>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-toggle-add-link" style="font-size:12.5px; padding:7px 13px;">
+          ${linksFormOpen && !editingItem ? '✕ Закрити форму' : '+ Додати посилання'}
+        </button>
+      </div>
+
+      ${linksFormOpen ? `
+        <form class="links-inline-form" id="form-important-link" novalidate>
+          <div class="links-inline-form-title">
+            <span>${editingItem ? '✎ Редагувати посилання' : '➕ Нове посилання'}</span>
+            <span style="font-size:11px; font-weight:500; color:var(--text-muted);">Тип (Google Doc / Excel / Сайт) визначається автоматично</span>
+          </div>
+          <div class="links-form-row">
+            <div>
+              <input
+                type="url"
+                id="link-input-url"
+                class="form-input"
+                placeholder="Вставте URL (https://docs.google.com/... або сайт)"
+                value="${escapeHtml(editingItem?.url || '')}"
+                required
+              />
+            </div>
+            <div>
+              <input
+                type="text"
+                id="link-input-title"
+                class="form-input"
+                placeholder="Назва (напр. Бюджет 2026, Стратегія)"
+                value="${escapeHtml(editingItem?.title || '')}"
+                maxlength="90"
+              />
+            </div>
+            <div>
+              <select id="link-input-type" class="form-select" aria-label="Тип посилання">
+                <option value="auto" ${!editingItem ? 'selected' : ''}>✨ Авто</option>
+                <option value="sheet" ${editingItem?.type === 'sheet' ? 'selected' : ''}>📊 Таблиця / Excel</option>
+                <option value="doc" ${editingItem?.type === 'doc' ? 'selected' : ''}>📄 Google Doc / Док</option>
+                <option value="drive" ${editingItem?.type === 'drive' ? 'selected' : ''}>📁 Drive / PDF</option>
+                <option value="site" ${editingItem?.type === 'site' ? 'selected' : ''}>🌐 Веб-сайт</option>
+              </select>
+            </div>
+          </div>
+          <div class="links-form-row-bottom">
+            <div class="links-form-note-wrap">
+              <input
+                type="text"
+                id="link-input-note"
+                class="form-input"
+                placeholder="Коротка нотатка (необов'язково, напр. оновлюю 1-го числа)"
+                value="${escapeHtml(editingItem?.note || '')}"
+                maxlength="120"
+              />
+            </div>
+            <div class="links-form-actions">
+              <label class="links-pin-toggle">
+                <input type="checkbox" id="link-input-pinned" ${editingItem?.pinned ? 'checked' : ''} />
+                <span>⭐ Закріпити</span>
+              </label>
+              <button type="button" class="btn btn-secondary" id="btn-cancel-link-form" style="font-size:12px; padding:6px 12px;">Скасувати</button>
+              <button type="submit" class="btn btn-primary" style="font-size:12px; padding:6px 14px;">${editingItem ? 'Зберегти зміни' : 'Додати'}</button>
+            </div>
+          </div>
+          <div class="links-form-error" id="link-form-error"></div>
+        </form>
+      ` : ''}
+
+      <div class="links-toolbar">
+        <div class="links-filter-pills" role="tablist" aria-label="Фільтр посилань">
+          ${filterPills.map(p => `
+            <button type="button" class="links-filter-pill${linksFilterType === p.key ? ' active' : ''}" data-link-filter="${p.key}">
+              <span>${p.label}</span>
+              ${p.count > 0 ? `<span class="links-filter-count">${p.count}</span>` : ''}
+            </button>
+          `).join('')}
+        </div>
+        <div class="links-toolbar-right">
+          <input
+            type="search"
+            id="important-links-search"
+            class="form-input links-search-input"
+            placeholder="Пошук посилань..."
+            value="${escapeHtml(linksSearchQuery)}"
+          />
+        </div>
+      </div>
+
+      <div id="links-grid-container">
+        ${buildLinksCardsGridHtml(allLinks)}
+      </div>
+    `;
+
+    // Wire toggle add button
+    section.querySelector('#btn-toggle-add-link')?.addEventListener('click', () => {
+      if (linksFormOpen && !linksEditingId) {
+        linksFormOpen = false;
+      } else {
+        linksEditingId = null;
+        linksFormOpen = true;
+      }
+      renderImportantLinksSection(true);
+      if (linksFormOpen) {
+        section.querySelector('#link-input-url')?.focus();
+      }
+    });
+
+    // Wire filter pills
+    section.querySelectorAll('[data-link-filter]').forEach(pill => {
+      pill.addEventListener('click', () => {
+        linksFilterType = pill.getAttribute('data-link-filter') || 'all';
+        renderImportantLinksSection(true);
+      });
+    });
+
+    // Wire live search (updates only grid container so input never loses focus!)
+    const searchInput = section.querySelector('#important-links-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        linksSearchQuery = e.target.value || '';
+        const gridWrap = section.querySelector('#links-grid-container');
+        if (gridWrap) {
+          gridWrap.innerHTML = buildLinksCardsGridHtml(getImportantLinksList());
+          wireLinksGridActions(section);
+        }
+      });
+    }
+
+    // Wire inline form
+    const formEl = section.querySelector('#form-important-link');
+    if (formEl) {
+      const urlInput = section.querySelector('#link-input-url');
+      const titleInput = section.querySelector('#link-input-title');
+      const typeSelect = section.querySelector('#link-input-type');
+      const noteInput = section.querySelector('#link-input-note');
+      const pinnedInput = section.querySelector('#link-input-pinned');
+      const errEl = section.querySelector('#link-form-error');
+      let userChoseType = Boolean(editingItem);
+
+      typeSelect?.addEventListener('change', () => {
+        userChoseType = typeSelect.value !== 'auto';
+      });
+
+      urlInput?.addEventListener('input', () => {
+        if (errEl) errEl.style.display = 'none';
+        const val = urlInput.value.trim();
+        if (!val) return;
+        const detected = detectLinkType(val);
+        if (!userChoseType && typeSelect) {
+          typeSelect.value = detected;
+        }
+        if (titleInput && !titleInput.value.trim()) {
+          const norm = normalizeSafeLinkUrl(val);
+          if (norm) {
+            titleInput.placeholder = `Напр.: ${suggestTitleFromUrl(norm, detected)}`;
+          }
+        }
+      });
+
+      formEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          linksFormOpen = false;
+          linksEditingId = null;
+          renderImportantLinksSection(true);
+        }
+      });
+
+      section.querySelector('#btn-cancel-link-form')?.addEventListener('click', () => {
+        linksFormOpen = false;
+        linksEditingId = null;
+        renderImportantLinksSection(true);
+      });
+
+      formEl.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const normalizedUrl = normalizeSafeLinkUrl(urlInput?.value || '');
+        if (!normalizedUrl) {
+          if (errEl) {
+            errEl.textContent = 'Введіть коректне посилання (наприклад, https://docs.google.com/... або https://example.com).';
+            errEl.style.display = 'block';
+          }
+          urlInput?.focus();
+          return;
+        }
+        const selectedType = (typeSelect && typeSelect.value !== 'auto')
+          ? typeSelect.value
+          : detectLinkType(normalizedUrl);
+        const titleVal = (titleInput?.value || '').trim() || suggestTitleFromUrl(normalizedUrl, selectedType);
+        const noteVal = (noteInput?.value || '').trim();
+        const pinnedVal = Boolean(pinnedInput?.checked);
+        const nowIso = new Date().toISOString();
+        const curList = getImportantLinksList();
+
+        let nextList;
+        if (editingItem) {
+          nextList = curList.map(l => l.id === editingItem.id ? {
+            ...l,
+            title: titleVal,
+            url: normalizedUrl,
+            type: selectedType,
+            note: noteVal,
+            pinned: pinnedVal,
+            updatedAt: nowIso
+          } : l);
+        } else {
+          const newItem = {
+            id: 'lnk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            title: titleVal,
+            url: normalizedUrl,
+            type: selectedType,
+            note: noteVal,
+            pinned: pinnedVal,
+            createdAt: nowIso,
+            updatedAt: nowIso
+          };
+          nextList = [newItem, ...curList];
+        }
+
+        saveImportantLinksState(nextList);
+        linksFormOpen = false;
+        linksEditingId = null;
+        renderImportantLinksSection(true);
+      });
+    }
+
+    wireLinksGridActions(section);
   }
 
   let selectedDynamicsPointIdx = -1;
@@ -6505,7 +7214,7 @@
     historyCategoryFilter = cat;
     historyAssetFilter = 'all';
     renderAll();
-    if (cat === 'invested_uah') {
+    if (cat === 'invested_uah' || cat === 'important_links') {
       syncLatestFromCloudQuietly();
     }
   }
@@ -7604,7 +8313,7 @@
     const jumpHistoryBtn = document.getElementById('nav-jump-history');
     if (jumpHistoryBtn) {
       jumpHistoryBtn.addEventListener('click', () => {
-        if (state.activeCategory === 'invested_uah') {
+        if (state.activeCategory === 'invested_uah' || state.activeCategory === 'important_links') {
           setActiveCategory('all');
         }
         const histSection = document.getElementById('purchase-history-section');

@@ -1923,6 +1923,13 @@ body {
   }
   .mobile-nav {
     display: flex;
+    overflow-x: auto;
+    gap: 4px;
+    padding: 8px 6px;
+  }
+  .mobile-nav-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .topbar {
     padding: 12px 16px;
@@ -1932,6 +1939,400 @@ body {
   }
   .form-grid,
   .strategy-classes-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Important Links Dedicated Page */
+.links-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.links-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.links-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.links-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.links-filter-pill:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.links-filter-pill.active {
+  background-color: var(--accent-primary-soft);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.links-filter-count {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  opacity: 0.8;
+}
+
+.links-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.links-search-input {
+  width: 210px;
+  padding: 6px 11px;
+  font-size: 12.5px;
+}
+
+.links-inline-form {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 13px 14px;
+  margin-bottom: 16px;
+}
+
+.links-inline-form-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.links-form-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1.1fr 0.75fr;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.links-form-row-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.links-form-note-wrap {
+  flex: 1 1 220px;
+}
+
+.links-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.links-pin-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 6px;
+}
+
+.links-form-error {
+  font-size: 11.5px;
+  color: var(--negative);
+  margin-top: 6px;
+  display: none;
+}
+
+.links-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+
+.link-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  transition: border-color var(--transition-fast), transform var(--transition-fast), background-color var(--transition-fast);
+  min-width: 0;
+  position: relative;
+}
+
+.link-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  background-color: var(--bg-subtle);
+}
+
+.link-card.is-pinned {
+  border-color: rgba(245, 158, 11, 0.36);
+}
+
+.link-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.link-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.link-icon-link {
+  display: flex;
+  flex-shrink: 0;
+  text-decoration: none;
+  margin-top: 1px;
+}
+
+.link-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.link-icon-badge img {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.link-type-doc {
+  background-color: rgba(59, 130, 246, 0.14);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.link-type-sheet {
+  background-color: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.link-type-drive {
+  background-color: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.link-type-site {
+  background-color: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.22);
+}
+
+.link-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.link-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-card:hover .link-card-title {
+  color: var(--accent-primary);
+}
+
+.link-type-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.link-type-tag-doc {
+  background-color: rgba(59, 130, 246, 0.14);
+  color: #60a5fa;
+}
+
+.link-type-tag-sheet {
+  background-color: rgba(16, 185, 129, 0.14);
+  color: #10b981;
+}
+
+.link-type-tag-drive {
+  background-color: rgba(245, 158, 11, 0.14);
+  color: #f59e0b;
+}
+
+.link-type-tag-site {
+  background-color: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+}
+
+.link-card-note {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.link-card-meta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+
+.link-card-meta:hover {
+  color: var(--text-secondary);
+}
+
+.link-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.link-action-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+}
+
+.link-action-btn:hover {
+  background-color: var(--bg-canvas);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.link-action-btn.is-pinned-active {
+  color: #f59e0b;
+}
+
+.link-action-btn.is-copied {
+  color: var(--positive);
+}
+
+.link-action-btn.is-danger:hover {
+  color: var(--negative);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.links-empty-state {
+  text-align: center;
+  padding: 28px 16px;
+  border: 1px dashed var(--border-default);
+  border-radius: 12px;
+  color: var(--text-secondary);
+}
+
+.links-empty-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.links-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.links-empty-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  max-width: 420px;
+  margin: 0 auto 12px;
+}
+
+@media (max-width: 780px) {
+  .links-form-row {
+    grid-template-columns: 1fr;
+  }
+  .links-search-input {
+    width: 100%;
+  }
+  .links-toolbar-right {
+    width: 100%;
+  }
+  .links-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -2009,6 +2410,14 @@ body {
             <span class="nav-btn-left">
               <span style="font-size:13px;">🇺🇦</span>
               <span>Влито в грн (₴)</span>
+            </span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-btn" data-category="important_links" id="nav-cat-important_links">
+            <span class="nav-btn-left">
+              <span style="font-size:13px;">🔗</span>
+              <span>Важливі посилання</span>
             </span>
           </button>
         </li>
@@ -2132,6 +2541,9 @@ body {
         <!-- Real Invested UAH Capital Tracker (Shown ONLY when 'invested_uah' tab is selected in sidebar) -->
         <section class="panel-card" id="real-uah-invested-section" style="display:none; margin-bottom:20px;" aria-label="Скільки реально влито гривень (₴) у кожну категорію"></section>
 
+        <!-- Important Links Manager (Shown ONLY when 'important_links' tab is selected in sidebar) -->
+        <section class="panel-card" id="important-links-section" style="display:none; margin-bottom:20px;" aria-label="Важливі посилання"></section>
+
         <!-- Category Value Dynamics & Performance Chart (Shown on 'crypto' and 'stocks' views) -->
         <section class="panel-card" id="category-dynamics-section" style="display:none; margin-bottom:20px;" aria-label="Динаміка вартості активів категорії"></section>
 
@@ -2178,6 +2590,7 @@ body {
       <button type="button" class="mobile-nav-btn" data-category="deposits" id="mob-cat-deposits">Депозит</button>
       <button type="button" class="mobile-nav-btn" data-category="cash" id="mob-cat-cash">Готівка</button>
       <button type="button" class="mobile-nav-btn" data-category="invested_uah" id="mob-cat-invested_uah">Влито ₴</button>
+      <button type="button" class="mobile-nav-btn" data-category="important_links" id="mob-cat-important_links">Посилання</button>
     </nav>
   </div>
 
@@ -2373,6 +2786,12 @@ body {
       subtitle: 'Облік реальних гривневих вкладень у Криптовалюту, Фондовий ринок та інші категорії з можливістю змінювати суму',
       color: '#10b981',
       shortName: 'Влито в грн (₴)'
+    },
+    important_links: {
+      title: '🔗 Важливі посилання',
+      subtitle: 'Швидкий доступ до Google Docs, Google Sheets / Excel, брокерів, аналітики та важливих ресурсів',
+      color: '#38bdf8',
+      shortName: 'Важливі посилання'
     }
   };
 
@@ -2471,7 +2890,8 @@ body {
       },
       depositTaxDefault: true,
       depositTaxRate: 23.0,
-      stockStrategy: { ...DEFAULT_STOCK_STRATEGY }
+      stockStrategy: { ...DEFAULT_STOCK_STRATEGY },
+      importantLinks: []
     },
     auth: {
       requireAuth: false
@@ -3185,7 +3605,8 @@ body {
           settings: state.settings,
           positions: state.positions
         }),
-        saveRealInvestedUahToCloudSlot()
+        saveRealInvestedUahToCloudSlot(),
+        saveImportantLinksToCloudSlot()
       ]);
       state.cloudSynced = true;
       state.justSyncedFromBridge = 'imported_to_device';
@@ -3209,13 +3630,20 @@ body {
       btnEl.textContent = '⏳ Завантаження з хмари...';
     }
     try {
-      const [data, dedicatedRealUahObj] = await Promise.all([
+      const [data, dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([
         directCloudSlotLoad(),
-        loadRealInvestedUahFromCloudSlot()
+        loadRealInvestedUahFromCloudSlot(),
+        loadImportantLinksFromCloudSlot()
       ]);
       if (data && Array.isArray(data.positions) && data.positions.length > 0) {
         state.positions = data.positions;
         if (data.settings) {
+          const resolvedLinks = resolveLatestImportantLinks(
+            state.settings?.importantLinks,
+            state.settings?.importantLinksUpdatedAt || '',
+            dedicatedLinksObj?.importantLinks || data.settings.importantLinks,
+            dedicatedLinksObj?.updatedAt || data.settings.importantLinksUpdatedAt || data.settings.updatedAt || ''
+          );
           state.settings = {
             ...state.settings,
             ...data.settings,
@@ -3223,7 +3651,9 @@ body {
               ...(state.settings.realInvestedUah || {}),
               ...(data.settings.realInvestedUah || {}),
               ...(dedicatedRealUahObj?.realInvestedUah || {})
-            }
+            },
+            importantLinks: resolvedLinks.links,
+            importantLinksUpdatedAt: resolvedLinks.updatedAt
           };
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
@@ -3339,6 +3769,50 @@ body {
     return null;
   }
 
+  // Dedicated cloud topic for Important Links (instant CORS-preflight-free cross-device sync)
+  async function saveImportantLinksToCloudSlot() {
+    const links = Array.isArray(state.settings?.importantLinks) ? state.settings.importantLinks : [];
+    const updatedAt = state.settings?.importantLinksUpdatedAt || state.settings?.updatedAt || new Date().toISOString();
+    const enc = encodeEncryptedCloudString({ importantLinks: links, updatedAt });
+    try {
+      await fetch(`${NTFY_VAULT_BASE_URL}_links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ ts: Date.now(), updatedAt, v: enc })
+      });
+    } catch (_) {}
+  }
+
+  async function loadImportantLinksFromCloudSlot() {
+    try {
+      const msg = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_links`);
+      if (msg && msg.v) {
+        const decoded = decodeEncryptedCloudString(msg.v);
+        if (decoded && Array.isArray(decoded.importantLinks)) {
+          return decoded;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function resolveLatestImportantLinks(localLinks, localTs, remoteLinks, remoteTs) {
+    const loc = Array.isArray(localLinks) ? localLinks : [];
+    const rem = Array.isArray(remoteLinks) ? remoteLinks : [];
+    const lTs = String(localTs || '');
+    const rTs = String(remoteTs || '');
+    if (rTs && (!lTs || rTs > lTs)) {
+      return { links: rem, updatedAt: rTs };
+    }
+    if (lTs && (!rTs || lTs > rTs)) {
+      return { links: loc, updatedAt: lTs };
+    }
+    if (rem.length > 0 && loc.length === 0) {
+      return { links: rem, updatedAt: rTs };
+    }
+    return { links: loc, updatedAt: lTs || rTs };
+  }
+
   async function loadPortfolioFromServer() {
     // 1. Check if we just returned from 1-click Google Drive Bridge with #cloud_data=...
     if (typeof window !== 'undefined' && window.location && window.location.hash && window.location.hash.includes('cloud_data=')) {
@@ -3415,6 +3889,7 @@ body {
     try {
       let data;
       const dedicatedRealUahPromise = !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null);
+      const dedicatedLinksPromise = !isGoogleAppsScript() ? loadImportantLinksFromCloudSlot() : Promise.resolve(null);
       if (isGoogleAppsScript()) {
         data = await gasCall('gasGetPortfolio');
         state.cloudSynced = true;
@@ -3437,7 +3912,7 @@ body {
           }
         }
       }
-      const dedicatedRealUahObj = await dedicatedRealUahPromise;
+      const [dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([dedicatedRealUahPromise, dedicatedLinksPromise]);
 
       const remotePositions = Array.isArray(data?.positions) ? data.positions : [];
       const remoteHasRealUserPositions = remotePositions.length > 0 && !isDemoPortfolioData(remotePositions) && !data?.isDemoSeed;
@@ -3463,23 +3938,44 @@ body {
         ? { ...remoteRealMap, ...localRealMap }
         : { ...localRealMap, ...remoteRealMap };
 
-      // If this device (e.g. Desktop PC) already has realInvestedUah entered locally, but the cloud didn't have it yet, push it to cloud immediately!
-      const shouldPushLocalRealUahToCloud = localRealKeys.length > 0 && (
+      const localLinks = Array.isArray(localSettings?.importantLinks)
+        ? localSettings.importantLinks
+        : (Array.isArray(state.settings?.importantLinks) ? state.settings.importantLinks : []);
+      const localLinksTs = localSettings?.importantLinksUpdatedAt || state.settings?.importantLinksUpdatedAt || '';
+      const remoteLinksCandidate = dedicatedLinksObj?.importantLinks
+        || (Array.isArray(data?.settings?.importantLinks) ? data.settings.importantLinks : []);
+      const remoteLinksTs = dedicatedLinksObj?.updatedAt || data?.settings?.importantLinksUpdatedAt || '';
+      const resolvedLinks = resolveLatestImportantLinks(localLinks, localLinksTs, remoteLinksCandidate, remoteLinksTs);
+
+      // If this device (e.g. Desktop PC) already has realInvestedUah or links entered locally, push to cloud if cloud lags behind
+      const shouldPushLocalExtrasToCloud = (localRealKeys.length > 0 && (
         remoteRealKeys.length === 0 ||
         JSON.stringify(mergedRealInvestedUah) !== JSON.stringify(remoteRealMap)
-      );
+      )) || (localLinks.length > 0 && JSON.stringify(resolvedLinks.links) !== JSON.stringify(remoteLinksCandidate));
 
       // Protect real local user positions from EVER being overwritten by remote demo/empty data!
       if (localHasRealUserPositions && (!remoteHasRealUserPositions || (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt))) {
         if (localSettings) {
-          state.settings = { ...state.settings, ...localSettings, realInvestedUah: mergedRealInvestedUah };
+          state.settings = {
+            ...state.settings,
+            ...localSettings,
+            realInvestedUah: mergedRealInvestedUah,
+            importantLinks: resolvedLinks.links,
+            importantLinksUpdatedAt: resolvedLinks.updatedAt
+          };
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
         }
         state.positions = localPositions;
         persistPortfolio();
       } else {
         if (data && data.settings) {
-          state.settings = { ...state.settings, ...data.settings, realInvestedUah: mergedRealInvestedUah };
+          state.settings = {
+            ...state.settings,
+            ...data.settings,
+            realInvestedUah: mergedRealInvestedUah,
+            importantLinks: resolvedLinks.links,
+            importantLinksUpdatedAt: resolvedLinks.updatedAt
+          };
           if (!data.settings.defaultUsdMigrated) {
             state.settings.primaryCurrency = 'USD';
             state.settings.defaultUsdMigrated = true;
@@ -3489,7 +3985,7 @@ body {
         if (remotePositions.length > 0) {
           state.positions = remotePositions;
         }
-        if (shouldPushLocalRealUahToCloud) {
+        if (shouldPushLocalExtrasToCloud) {
           persistPortfolio();
         }
       }
@@ -3542,11 +4038,12 @@ body {
     if (realUahSaveTimer || strategySaveTimer) return;
     isPullingCloudQuietly = true;
     try {
-      const [data, dedicatedRealUahObj] = await Promise.all([
+      const [data, dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([
         isGoogleAppsScript() ? gasCall('gasGetPortfolio') : directCloudSlotLoad(),
-        !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null)
+        !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null),
+        !isGoogleAppsScript() ? loadImportantLinksFromCloudSlot() : Promise.resolve(null)
       ]);
-      if (!data && !dedicatedRealUahObj) return;
+      if (!data && !dedicatedRealUahObj && !dedicatedLinksObj) return;
 
       let changed = false;
 
@@ -3564,6 +4061,20 @@ body {
         }
       }
 
+      if (dedicatedLinksObj && Array.isArray(dedicatedLinksObj.importantLinks)) {
+        const resolvedLinks = resolveLatestImportantLinks(
+          state.settings?.importantLinks,
+          state.settings?.importantLinksUpdatedAt || '',
+          dedicatedLinksObj.importantLinks,
+          dedicatedLinksObj.updatedAt || ''
+        );
+        if (JSON.stringify(resolvedLinks.links) !== JSON.stringify(state.settings?.importantLinks || [])) {
+          state.settings.importantLinks = resolvedLinks.links;
+          if (resolvedLinks.updatedAt) state.settings.importantLinksUpdatedAt = resolvedLinks.updatedAt;
+          changed = true;
+        }
+      }
+
       if (data && !data.isDemoSeed) {
         const remoteUpdatedAt = data.settings?.updatedAt || '';
         const localUpdatedAt = state.settings?.updatedAt || '';
@@ -3575,6 +4086,12 @@ body {
 
         if ((remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) || (Object.keys(remoteRealMap).length > 0 && Object.keys(localRealMap).length === 0)) {
           if (data.settings) {
+            const resolvedLinks = resolveLatestImportantLinks(
+              state.settings?.importantLinks,
+              state.settings?.importantLinksUpdatedAt || '',
+              dedicatedLinksObj?.importantLinks || data.settings.importantLinks,
+              dedicatedLinksObj?.updatedAt || data.settings.importantLinksUpdatedAt || ''
+            );
             state.settings = {
               ...state.settings,
               ...data.settings,
@@ -3582,7 +4099,9 @@ body {
                 ...localRealMap,
                 ...remoteRealMap,
                 ...(dedicatedRealUahObj?.realInvestedUah || {})
-              }
+              },
+              importantLinks: resolvedLinks.links,
+              importantLinksUpdatedAt: resolvedLinks.updatedAt
             };
             state.primaryCurrency = state.settings.primaryCurrency || 'USD';
           }
@@ -3615,6 +4134,9 @@ body {
     }));
     if (!isGoogleAppsScript() && state.settings?.realInvestedUah && Object.keys(state.settings.realInvestedUah).length > 0) {
       saveRealInvestedUahToCloudSlot();
+    }
+    if (!isGoogleAppsScript() && state.settings?.importantLinksUpdatedAt) {
+      saveImportantLinksToCloudSlot();
     }
     try {
       if (isGoogleAppsScript()) {
@@ -4837,6 +5359,10 @@ body {
     if (navInvestedBtn) navInvestedBtn.classList.toggle('active', state.activeCategory === 'invested_uah');
     const mobInvestedBtn = document.getElementById('mob-cat-invested_uah');
     if (mobInvestedBtn) mobInvestedBtn.classList.toggle('active', state.activeCategory === 'invested_uah');
+    const navLinksBtn = document.getElementById('nav-cat-important_links');
+    if (navLinksBtn) navLinksBtn.classList.toggle('active', state.activeCategory === 'important_links');
+    const mobLinksBtn = document.getElementById('mob-cat-important_links');
+    if (mobLinksBtn) mobLinksBtn.classList.toggle('active', state.activeCategory === 'important_links');
 
     // Update page heading & Cloud Sync Status indicator
     const meta = CATEGORY_META[state.activeCategory] || CATEGORY_META.all;
@@ -4985,9 +5511,17 @@ body {
     }
 
     const isInvestedUahView = state.activeCategory === 'invested_uah';
+    const isImportantLinksView = state.activeCategory === 'important_links';
+    const isDedicatedUtilityView = isInvestedUahView || isImportantLinksView;
+
+    // Hide Wealth Hero strip on the Important Links page so the links workspace sits cleanly at the top
+    const wealthHeroEl = document.querySelector('.wealth-hero');
+    if (wealthHeroEl) {
+      wealthHeroEl.style.display = isImportantLinksView ? 'none' : '';
+    }
 
     // Filter positions for active category
-    const scopedPositions = (state.activeCategory === 'all' || isInvestedUahView)
+    const scopedPositions = (state.activeCategory === 'all' || isDedicatedUtilityView)
       ? evaluated
       : evaluated.filter(p => p.category === state.activeCategory);
 
@@ -5014,7 +5548,7 @@ body {
 
     // Render Hero Strip (Always shows both UAH & USD side-by-side!)
     document.getElementById('hero-scope-label').textContent =
-      (state.activeCategory === 'all' || isInvestedUahView)
+      (state.activeCategory === 'all' || isDedicatedUtilityView)
         ? 'Сукупний капітал (Усі інвестиції та готівка)'
         : `Капітал категорії: ${meta.shortName}`;
 
@@ -5076,10 +5610,21 @@ body {
       }
     }
 
-    // Render Circular Donut Allocation Window (hide on dedicated 'invested_uah' view so that tab is clean)
+    // Show Important Links Manager ONLY when 'important_links' tab is selected in sidebar
+    const importantLinksSection = document.getElementById('important-links-section');
+    if (importantLinksSection) {
+      if (isImportantLinksView) {
+        importantLinksSection.style.display = 'block';
+        renderImportantLinksSection();
+      } else {
+        importantLinksSection.style.display = 'none';
+      }
+    }
+
+    // Render Circular Donut Allocation Window (hide on dedicated utility tabs so they stay clean)
     const circularSection = document.getElementById('circular-allocation-section');
     if (circularSection) {
-      if (isInvestedUahView) {
+      if (isDedicatedUtilityView) {
         circularSection.style.display = 'none';
       } else {
         circularSection.style.display = 'block';
@@ -5125,12 +5670,12 @@ body {
       }
     }
 
-    // Render Positions Table (hide when viewing the dedicated 'invested_uah' tab)
+    // Render Positions Table (hide when viewing dedicated utility tabs)
     const posTableSection = document.getElementById('positions-table-section');
     if (posTableSection) {
-      posTableSection.style.display = isInvestedUahView ? 'none' : 'block';
+      posTableSection.style.display = isDedicatedUtilityView ? 'none' : 'block';
     }
-    if (!isInvestedUahView) {
+    if (!isDedicatedUtilityView) {
       renderPositionsTable(scopedPositions);
     }
 
@@ -5138,11 +5683,588 @@ body {
     ensurePurchaseHistorySeeded();
     const historySectionEl = document.getElementById('purchase-history-section');
     if (historySectionEl) {
-      historySectionEl.style.display = isInvestedUahView ? 'none' : 'block';
+      historySectionEl.style.display = isDedicatedUtilityView ? 'none' : 'block';
     }
-    if (!isInvestedUahView) {
+    if (!isDedicatedUtilityView) {
       renderPurchaseHistorySection(evaluated);
     }
+  }
+
+  // Important Links Page State & Helpers
+  let linksFilterType = 'all'; // 'all' | 'pinned' | 'doc' | 'sheet' | 'drive' | 'site'
+  let linksSearchQuery = '';
+  let linksFormOpen = false;
+  let linksEditingId = null;
+  let linksDeleteConfirmId = null;
+  let linksDeleteConfirmTimer = null;
+
+  const LINK_TYPES_META = {
+    doc:   { key: 'doc',   label: 'Google Doc / Документ', shortTag: 'Doc',      filterLabel: 'Документи',  cssClass: 'link-type-doc',   tagClass: 'link-type-tag-doc' },
+    sheet: { key: 'sheet', label: 'Google Sheets / Excel', shortTag: 'Таблиця',  filterLabel: 'Таблиці',    cssClass: 'link-type-sheet', tagClass: 'link-type-tag-sheet' },
+    drive: { key: 'drive', label: 'Google Drive / PDF',    shortTag: 'Drive',    filterLabel: 'Drive / PDF', cssClass: 'link-type-drive', tagClass: 'link-type-tag-drive' },
+    site:  { key: 'site',  label: 'Веб-сайт / Сервіс',     shortTag: 'Сайт',     filterLabel: 'Сайти',      cssClass: 'link-type-site',  tagClass: 'link-type-tag-site' }
+  };
+
+  function normalizeSafeLinkUrl(raw) {
+    let str = String(raw || '').trim();
+    if (!str) return '';
+    if (/^(javascript|data|vbscript):/i.test(str)) return '';
+    if (!/^https?:\/\//i.test(str)) {
+      str = 'https://' + str;
+    }
+    try {
+      const parsed = new URL(str);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      if (!parsed.hostname || (!parsed.hostname.includes('.') && parsed.hostname !== 'localhost')) return '';
+      return parsed.href;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function detectLinkType(urlStr) {
+    const low = String(urlStr || '').toLowerCase();
+    if (
+      low.includes('docs.google.com/spreadsheets') ||
+      low.includes('sheets.google.com') ||
+      low.includes('excel.office.com') ||
+      low.includes('1drv.ms/x/') ||
+      low.includes('airtable.com') ||
+      /\.(xlsx|xls|csv|ods)(\?|#|$)/i.test(low)
+    ) {
+      return 'sheet';
+    }
+    if (
+      low.includes('docs.google.com/document') ||
+      low.includes('word.office.com') ||
+      low.includes('1drv.ms/w/') ||
+      low.includes('notion.so') ||
+      low.includes('notion.site') ||
+      low.includes('coda.io') ||
+      /\.(docx|doc|txt|md)(\?|#|$)/i.test(low)
+    ) {
+      return 'doc';
+    }
+    if (
+      low.includes('drive.google.com') ||
+      low.includes('docs.google.com/presentation') ||
+      low.includes('docs.google.com/forms') ||
+      low.includes('dropbox.com') ||
+      low.includes('onedrive.live.com') ||
+      low.includes('1drv.ms/') ||
+      /\.pdf(\?|#|$)/i.test(low)
+    ) {
+      return 'drive';
+    }
+    return 'site';
+  }
+
+  function extractCleanHost(urlStr) {
+    try {
+      const u = new URL(urlStr);
+      return u.hostname.replace(/^www\./i, '');
+    } catch (_) {
+      return String(urlStr || '').slice(0, 40);
+    }
+  }
+
+  function suggestTitleFromUrl(urlStr, type) {
+    const low = String(urlStr || '').toLowerCase();
+    if (low.includes('docs.google.com/spreadsheets')) return 'Google Таблиця';
+    if (low.includes('docs.google.com/document')) return 'Google Документ';
+    if (low.includes('docs.google.com/presentation')) return 'Google Презентація';
+    if (low.includes('drive.google.com')) return 'Google Диск';
+    const host = extractCleanHost(urlStr);
+    if (host) return host;
+    return LINK_TYPES_META[type]?.label || 'Важливе посилання';
+  }
+
+  function buildLinkIconBadgeHtml(link) {
+    const t = LINK_TYPES_META[link.type] ? link.type : detectLinkType(link.url);
+    const meta = LINK_TYPES_META[t];
+    if (t === 'doc') {
+      return `
+        <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="8" y1="13" x2="16" y2="13"/>
+            <line x1="8" y1="17" x2="13" y2="17"/>
+          </svg>
+        </div>
+      `;
+    }
+    if (t === 'sheet') {
+      return `
+        <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="3" y1="15" x2="21" y2="15"/>
+            <line x1="9" y1="3" x2="9" y2="21"/>
+          </svg>
+        </div>
+      `;
+    }
+    if (t === 'drive') {
+      return `
+        <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+      `;
+    }
+    const host = extractCleanHost(link.url);
+    const faviconUrl = host ? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}` : '';
+    const globeSvg = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:${faviconUrl ? 'none' : 'block'};">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    `;
+    return `
+      <div class="link-icon-badge ${meta.cssClass}" aria-hidden="true">
+        ${faviconUrl ? `<img src="${escapeHtml(faviconUrl)}" alt="" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';" />` : ''}
+        ${globeSvg}
+      </div>
+    `;
+  }
+
+  function getImportantLinksList() {
+    if (!Array.isArray(state.settings.importantLinks)) {
+      state.settings.importantLinks = [];
+    }
+    return state.settings.importantLinks;
+  }
+
+  function saveImportantLinksState(nextLinks) {
+    state.settings.importantLinks = nextLinks;
+    state.settings.importantLinksUpdatedAt = new Date().toISOString();
+    persistPortfolio();
+  }
+
+  function buildLinksCardsGridHtml(allLinks) {
+    const q = linksSearchQuery.trim().toLowerCase();
+    const filtered = allLinks
+      .filter(link => {
+        if (linksFilterType === 'pinned' && !link.pinned) return false;
+        if (linksFilterType !== 'all' && linksFilterType !== 'pinned' && link.type !== linksFilterType) return false;
+        if (q) {
+          const hay = `${link.title || ''} ${link.url || ''} ${link.note || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (Boolean(b.pinned) !== Boolean(a.pinned)) return b.pinned ? 1 : -1;
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+      });
+
+    if (allLinks.length === 0) {
+      return `
+        <div class="links-empty-state">
+          <div class="links-empty-icon">🔗</div>
+          <div class="links-empty-title">Поки що немає збережених посилань</div>
+          <div class="links-empty-sub">Додайте посилання на Google Docs, таблиці Google Sheets / Excel, кабінети брокерів або корисні сервіси — вони автоматично синхронізуються між пристроями.</div>
+          <button type="button" class="btn btn-primary" id="btn-links-empty-add" style="font-size:12.5px; padding:7px 14px;">+ Додати перше посилання</button>
+        </div>
+      `;
+    }
+
+    if (filtered.length === 0) {
+      return `
+        <div class="links-empty-state" style="padding:20px 14px;">
+          <div class="links-empty-title">Нічого не знайдено</div>
+          <div class="links-empty-sub" style="margin-bottom:0;">Спробуйте змінити фільтр або пошуковий запит.</div>
+        </div>
+      `;
+    }
+
+    const copySvgIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+    return `
+      <div class="links-grid">
+        ${filtered.map(link => {
+          const tKey = LINK_TYPES_META[link.type] ? link.type : detectLinkType(link.url);
+          const tMeta = LINK_TYPES_META[tKey];
+          const host = extractCleanHost(link.url);
+          const isDelConfirm = linksDeleteConfirmId === link.id;
+          return `
+            <div class="link-card${link.pinned ? ' is-pinned' : ''}" data-link-id="${escapeHtml(link.id)}">
+              <a class="link-icon-link" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="Відкрити: ${escapeHtml(link.url)}">
+                ${buildLinkIconBadgeHtml(link)}
+              </a>
+              <div class="link-card-content">
+                <a class="link-card-main" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="Відкрити: ${escapeHtml(link.url)}">
+                  <div class="link-card-title-row">
+                    <span class="link-card-title">${escapeHtml(link.title)}</span>
+                    <span class="link-type-tag ${tMeta.tagClass}">${tMeta.shortTag}</span>
+                  </div>
+                  ${link.note ? `<div class="link-card-note">${escapeHtml(link.note)}</div>` : ''}
+                </a>
+                <div class="link-card-footer">
+                  <a class="link-card-meta" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(host)} ↗</a>
+                  <div class="link-card-actions">
+                    <button type="button" class="link-action-btn${link.pinned ? ' is-pinned-active' : ''}" data-link-action="pin" data-id="${escapeHtml(link.id)}" title="${link.pinned ? 'Відкріпити' : 'Закріпити вгорі'}">${link.pinned ? '★' : '☆'}</button>
+                    <button type="button" class="link-action-btn" data-link-action="copy" data-id="${escapeHtml(link.id)}" title="Копіювати посилання">${copySvgIcon}</button>
+                    <button type="button" class="link-action-btn" data-link-action="edit" data-id="${escapeHtml(link.id)}" title="Редагувати">✎</button>
+                    <button type="button" class="link-action-btn is-danger" data-link-action="delete" data-id="${escapeHtml(link.id)}" title="${isDelConfirm ? 'Натисніть ще раз для видалення' : 'Видалити'}">${isDelConfirm ? '✓?' : '✕'}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function wireLinksGridActions(sectionEl) {
+    const emptyAddBtn = sectionEl.querySelector('#btn-links-empty-add');
+    if (emptyAddBtn) {
+      emptyAddBtn.addEventListener('click', () => {
+        linksFormOpen = true;
+        linksEditingId = null;
+        renderImportantLinksSection(true);
+        sectionEl.querySelector('#link-input-url')?.focus();
+      });
+    }
+
+    sectionEl.querySelectorAll('[data-link-action]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = btn.getAttribute('data-link-action');
+        const id = btn.getAttribute('data-id');
+        const allLinks = getImportantLinksList();
+        const target = allLinks.find(l => l.id === id);
+        if (!target) return;
+
+        if (action === 'pin') {
+          const next = allLinks.map(l => l.id === id ? { ...l, pinned: !l.pinned, updatedAt: new Date().toISOString() } : l);
+          saveImportantLinksState(next);
+          renderImportantLinksSection(true);
+        } else if (action === 'copy') {
+          try {
+            await navigator.clipboard.writeText(target.url);
+            const origHtml = btn.innerHTML;
+            btn.textContent = '✓';
+            btn.classList.add('is-copied');
+            setTimeout(() => {
+              btn.innerHTML = origHtml;
+              btn.classList.remove('is-copied');
+            }, 1400);
+          } catch (_) {
+            window.prompt('Скопіюйте посилання:', target.url);
+          }
+        } else if (action === 'edit') {
+          linksEditingId = id;
+          linksFormOpen = true;
+          linksDeleteConfirmId = null;
+          renderImportantLinksSection(true);
+          const titleInput = sectionEl.querySelector('#link-input-title');
+          if (titleInput) {
+            titleInput.focus();
+            titleInput.select();
+          }
+        } else if (action === 'delete') {
+          if (linksDeleteConfirmId === id) {
+            if (linksDeleteConfirmTimer) clearTimeout(linksDeleteConfirmTimer);
+            linksDeleteConfirmId = null;
+            if (linksEditingId === id) {
+              linksEditingId = null;
+              linksFormOpen = false;
+            }
+            const next = allLinks.filter(l => l.id !== id);
+            saveImportantLinksState(next);
+            renderImportantLinksSection(true);
+          } else {
+            linksDeleteConfirmId = id;
+            if (linksDeleteConfirmTimer) clearTimeout(linksDeleteConfirmTimer);
+            linksDeleteConfirmTimer = setTimeout(() => {
+              linksDeleteConfirmId = null;
+              const gridWrap = sectionEl.querySelector('#links-grid-container');
+              if (gridWrap) {
+                gridWrap.innerHTML = buildLinksCardsGridHtml(getImportantLinksList());
+                wireLinksGridActions(sectionEl);
+              }
+            }, 3000);
+            const gridWrap = sectionEl.querySelector('#links-grid-container');
+            if (gridWrap) {
+              gridWrap.innerHTML = buildLinksCardsGridHtml(getImportantLinksList());
+              wireLinksGridActions(sectionEl);
+            }
+          }
+        }
+      });
+    });
+  }
+
+  function renderImportantLinksSection(forceRebuild = false) {
+    const section = document.getElementById('important-links-section');
+    if (!section) return;
+
+    // Never disrupt user typing in search or inline form during background live ticker/cloud refreshes
+    if (!forceRebuild && section.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) {
+      return;
+    }
+
+    const allLinks = getImportantLinksList();
+    const counts = {
+      all: allLinks.length,
+      pinned: allLinks.filter(l => l.pinned).length,
+      doc: allLinks.filter(l => l.type === 'doc').length,
+      sheet: allLinks.filter(l => l.type === 'sheet').length,
+      drive: allLinks.filter(l => l.type === 'drive').length,
+      site: allLinks.filter(l => l.type === 'site').length
+    };
+
+    const editingItem = linksEditingId ? allLinks.find(l => l.id === linksEditingId) : null;
+    if (linksEditingId && !editingItem) {
+      linksEditingId = null;
+    }
+
+    const filterPills = [
+      { key: 'all', label: 'Усі', count: counts.all },
+      ...(counts.pinned > 0 ? [{ key: 'pinned', label: '⭐ Закріплені', count: counts.pinned }] : []),
+      { key: 'sheet', label: '📊 Таблиці / Excel', count: counts.sheet },
+      { key: 'doc', label: '📄 Документи', count: counts.doc },
+      { key: 'drive', label: '📁 Drive / PDF', count: counts.drive },
+      { key: 'site', label: '🌐 Сайти', count: counts.site }
+    ];
+
+    section.innerHTML = `
+      <div class="links-header-bar">
+        <div>
+          <div class="panel-title">🔗 Важливі посилання</div>
+          <div class="panel-subtitle">Google Docs, Google Sheets / Excel, кабінети брокерів та корисні сайти в одному компактному місці</div>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-toggle-add-link" style="font-size:12.5px; padding:7px 13px;">
+          ${linksFormOpen && !editingItem ? '✕ Закрити форму' : '+ Додати посилання'}
+        </button>
+      </div>
+
+      ${linksFormOpen ? `
+        <form class="links-inline-form" id="form-important-link" novalidate>
+          <div class="links-inline-form-title">
+            <span>${editingItem ? '✎ Редагувати посилання' : '➕ Нове посилання'}</span>
+            <span style="font-size:11px; font-weight:500; color:var(--text-muted);">Тип (Google Doc / Excel / Сайт) визначається автоматично</span>
+          </div>
+          <div class="links-form-row">
+            <div>
+              <input
+                type="url"
+                id="link-input-url"
+                class="form-input"
+                placeholder="Вставте URL (https://docs.google.com/... або сайт)"
+                value="${escapeHtml(editingItem?.url || '')}"
+                required
+              />
+            </div>
+            <div>
+              <input
+                type="text"
+                id="link-input-title"
+                class="form-input"
+                placeholder="Назва (напр. Бюджет 2026, Стратегія)"
+                value="${escapeHtml(editingItem?.title || '')}"
+                maxlength="90"
+              />
+            </div>
+            <div>
+              <select id="link-input-type" class="form-select" aria-label="Тип посилання">
+                <option value="auto" ${!editingItem ? 'selected' : ''}>✨ Авто</option>
+                <option value="sheet" ${editingItem?.type === 'sheet' ? 'selected' : ''}>📊 Таблиця / Excel</option>
+                <option value="doc" ${editingItem?.type === 'doc' ? 'selected' : ''}>📄 Google Doc / Док</option>
+                <option value="drive" ${editingItem?.type === 'drive' ? 'selected' : ''}>📁 Drive / PDF</option>
+                <option value="site" ${editingItem?.type === 'site' ? 'selected' : ''}>🌐 Веб-сайт</option>
+              </select>
+            </div>
+          </div>
+          <div class="links-form-row-bottom">
+            <div class="links-form-note-wrap">
+              <input
+                type="text"
+                id="link-input-note"
+                class="form-input"
+                placeholder="Коротка нотатка (необов'язково, напр. оновлюю 1-го числа)"
+                value="${escapeHtml(editingItem?.note || '')}"
+                maxlength="120"
+              />
+            </div>
+            <div class="links-form-actions">
+              <label class="links-pin-toggle">
+                <input type="checkbox" id="link-input-pinned" ${editingItem?.pinned ? 'checked' : ''} />
+                <span>⭐ Закріпити</span>
+              </label>
+              <button type="button" class="btn btn-secondary" id="btn-cancel-link-form" style="font-size:12px; padding:6px 12px;">Скасувати</button>
+              <button type="submit" class="btn btn-primary" style="font-size:12px; padding:6px 14px;">${editingItem ? 'Зберегти зміни' : 'Додати'}</button>
+            </div>
+          </div>
+          <div class="links-form-error" id="link-form-error"></div>
+        </form>
+      ` : ''}
+
+      <div class="links-toolbar">
+        <div class="links-filter-pills" role="tablist" aria-label="Фільтр посилань">
+          ${filterPills.map(p => `
+            <button type="button" class="links-filter-pill${linksFilterType === p.key ? ' active' : ''}" data-link-filter="${p.key}">
+              <span>${p.label}</span>
+              ${p.count > 0 ? `<span class="links-filter-count">${p.count}</span>` : ''}
+            </button>
+          `).join('')}
+        </div>
+        <div class="links-toolbar-right">
+          <input
+            type="search"
+            id="important-links-search"
+            class="form-input links-search-input"
+            placeholder="Пошук посилань..."
+            value="${escapeHtml(linksSearchQuery)}"
+          />
+        </div>
+      </div>
+
+      <div id="links-grid-container">
+        ${buildLinksCardsGridHtml(allLinks)}
+      </div>
+    `;
+
+    // Wire toggle add button
+    section.querySelector('#btn-toggle-add-link')?.addEventListener('click', () => {
+      if (linksFormOpen && !linksEditingId) {
+        linksFormOpen = false;
+      } else {
+        linksEditingId = null;
+        linksFormOpen = true;
+      }
+      renderImportantLinksSection(true);
+      if (linksFormOpen) {
+        section.querySelector('#link-input-url')?.focus();
+      }
+    });
+
+    // Wire filter pills
+    section.querySelectorAll('[data-link-filter]').forEach(pill => {
+      pill.addEventListener('click', () => {
+        linksFilterType = pill.getAttribute('data-link-filter') || 'all';
+        renderImportantLinksSection(true);
+      });
+    });
+
+    // Wire live search (updates only grid container so input never loses focus!)
+    const searchInput = section.querySelector('#important-links-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        linksSearchQuery = e.target.value || '';
+        const gridWrap = section.querySelector('#links-grid-container');
+        if (gridWrap) {
+          gridWrap.innerHTML = buildLinksCardsGridHtml(getImportantLinksList());
+          wireLinksGridActions(section);
+        }
+      });
+    }
+
+    // Wire inline form
+    const formEl = section.querySelector('#form-important-link');
+    if (formEl) {
+      const urlInput = section.querySelector('#link-input-url');
+      const titleInput = section.querySelector('#link-input-title');
+      const typeSelect = section.querySelector('#link-input-type');
+      const noteInput = section.querySelector('#link-input-note');
+      const pinnedInput = section.querySelector('#link-input-pinned');
+      const errEl = section.querySelector('#link-form-error');
+      let userChoseType = Boolean(editingItem);
+
+      typeSelect?.addEventListener('change', () => {
+        userChoseType = typeSelect.value !== 'auto';
+      });
+
+      urlInput?.addEventListener('input', () => {
+        if (errEl) errEl.style.display = 'none';
+        const val = urlInput.value.trim();
+        if (!val) return;
+        const detected = detectLinkType(val);
+        if (!userChoseType && typeSelect) {
+          typeSelect.value = detected;
+        }
+        if (titleInput && !titleInput.value.trim()) {
+          const norm = normalizeSafeLinkUrl(val);
+          if (norm) {
+            titleInput.placeholder = `Напр.: ${suggestTitleFromUrl(norm, detected)}`;
+          }
+        }
+      });
+
+      formEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          linksFormOpen = false;
+          linksEditingId = null;
+          renderImportantLinksSection(true);
+        }
+      });
+
+      section.querySelector('#btn-cancel-link-form')?.addEventListener('click', () => {
+        linksFormOpen = false;
+        linksEditingId = null;
+        renderImportantLinksSection(true);
+      });
+
+      formEl.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const normalizedUrl = normalizeSafeLinkUrl(urlInput?.value || '');
+        if (!normalizedUrl) {
+          if (errEl) {
+            errEl.textContent = 'Введіть коректне посилання (наприклад, https://docs.google.com/... або https://example.com).';
+            errEl.style.display = 'block';
+          }
+          urlInput?.focus();
+          return;
+        }
+        const selectedType = (typeSelect && typeSelect.value !== 'auto')
+          ? typeSelect.value
+          : detectLinkType(normalizedUrl);
+        const titleVal = (titleInput?.value || '').trim() || suggestTitleFromUrl(normalizedUrl, selectedType);
+        const noteVal = (noteInput?.value || '').trim();
+        const pinnedVal = Boolean(pinnedInput?.checked);
+        const nowIso = new Date().toISOString();
+        const curList = getImportantLinksList();
+
+        let nextList;
+        if (editingItem) {
+          nextList = curList.map(l => l.id === editingItem.id ? {
+            ...l,
+            title: titleVal,
+            url: normalizedUrl,
+            type: selectedType,
+            note: noteVal,
+            pinned: pinnedVal,
+            updatedAt: nowIso
+          } : l);
+        } else {
+          const newItem = {
+            id: 'lnk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            title: titleVal,
+            url: normalizedUrl,
+            type: selectedType,
+            note: noteVal,
+            pinned: pinnedVal,
+            createdAt: nowIso,
+            updatedAt: nowIso
+          };
+          nextList = [newItem, ...curList];
+        }
+
+        saveImportantLinksState(nextList);
+        linksFormOpen = false;
+        linksEditingId = null;
+        renderImportantLinksSection(true);
+      });
+    }
+
+    wireLinksGridActions(section);
   }
 
   let selectedDynamicsPointIdx = -1;
@@ -8834,7 +9956,7 @@ body {
     historyCategoryFilter = cat;
     historyAssetFilter = 'all';
     renderAll();
-    if (cat === 'invested_uah') {
+    if (cat === 'invested_uah' || cat === 'important_links') {
       syncLatestFromCloudQuietly();
     }
   }
@@ -9933,7 +11055,7 @@ body {
     const jumpHistoryBtn = document.getElementById('nav-jump-history');
     if (jumpHistoryBtn) {
       jumpHistoryBtn.addEventListener('click', () => {
-        if (state.activeCategory === 'invested_uah') {
+        if (state.activeCategory === 'invested_uah' || state.activeCategory === 'important_links') {
           setActiveCategory('all');
         }
         const histSection = document.getElementById('purchase-history-section');
