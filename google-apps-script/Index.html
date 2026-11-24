@@ -1237,7 +1237,7 @@ body {
 /* Stock Market Strategy & Rebalancing Calculator */
 .strategy-top-grid {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: 18px;
   margin-bottom: 18px;
 }
@@ -1247,6 +1247,9 @@ body {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: 16px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .strategy-box-title {
@@ -1257,6 +1260,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1268,7 +1272,7 @@ body {
 
 .strategy-classes-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1280,6 +1284,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .strategy-class-header {
@@ -1678,9 +1683,10 @@ body {
 
 /* Category Value Dynamics & Historical Trajectory Chart (Crypto & Stocks) */
 .dynamics-range-switcher {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
+  max-width: 100%;
   background: var(--bg-surface);
   border: 1.5px solid var(--accent-primary);
   border-radius: 10px;
@@ -1695,7 +1701,7 @@ body {
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 700;
-  padding: 6px 12px;
+  padding: 6px 10px;
   border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1719,21 +1725,24 @@ body {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 10px;
   margin-bottom: 8px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .dynamics-extremes-strip {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   font-size: 11.5px;
   font-family: var(--font-mono);
+  max-width: 100%;
 }
 
 .dynamics-extreme-pill {
@@ -1749,7 +1758,7 @@ body {
 
 .dynamics-summary-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -1759,6 +1768,7 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: 9px;
   padding: 10px 13px;
+  min-width: 0;
 }
 
 .dynamics-stat-label {
@@ -1783,13 +1793,14 @@ body {
 
 .dynamics-layout-grid {
   display: grid;
-  grid-template-columns: 1.65fr 1fr;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
   gap: 14px;
+  max-width: 100%;
 }
 
 @media (max-width: 980px) {
   .dynamics-layout-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1801,19 +1812,26 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .dynamics-svg-wrap {
   position: relative;
   width: 100%;
+  max-width: 100%;
   height: 265px;
   margin: 6px 0 6px;
+  overflow: hidden;
 }
 
 .dynamics-svg-wrap svg {
   width: 100%;
   height: 100%;
-  overflow: visible;
+  max-width: 100%;
+  display: block;
+  overflow: hidden;
 }
 
 .dynamics-point-dot {
@@ -1833,6 +1851,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .dynamics-asset-row {
@@ -1987,7 +2007,7 @@ body {
 /* Responsive Breakpoints */
 @media (max-width: 1024px) {
   .wealth-hero {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
   .wealth-primary-block {
@@ -1998,20 +2018,31 @@ body {
   }
   .overview-grid,
   .strategy-top-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 780px) {
   html, body {
+    max-width: 100%;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
     overscroll-behavior-y: contain;
+    touch-action: pan-y;
     -webkit-tap-highlight-color: transparent;
   }
   .mobile-only-btn {
     display: inline-flex;
   }
   .app-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 100%;
+    overflow-x: clip;
+  }
+  .main-area {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
   }
   .sidebar {
     display: none;
@@ -2021,6 +2052,8 @@ body {
     overflow-x: auto;
     gap: 4px;
     padding: 7px 8px calc(7px + env(safe-area-inset-bottom, 0px));
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
   }
   .mobile-nav-btn {
     flex-shrink: 0;
@@ -2029,6 +2062,9 @@ body {
   .topbar {
     padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
     gap: 10px;
+    max-width: 100%;
+    overflow-x: clip;
+    touch-action: pan-y;
   }
   .topbar-title-group h1 {
     font-size: 16px;
@@ -2045,12 +2081,45 @@ body {
     padding: 5px 8px;
     font-size: 11.5px;
   }
+  .market-ticker-strip {
+    max-width: 100%;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+  }
   .page-content {
     padding: 14px 12px calc(86px + env(safe-area-inset-bottom, 0px));
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+    touch-action: pan-y;
+  }
+  .panel-card,
+  .wealth-hero {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+  .panel-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  #input-search-positions,
+  #history-asset-filter,
+  #history-sort-mode {
+    max-width: 100%;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .table-container {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
   }
   .form-grid,
   .strategy-classes-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
