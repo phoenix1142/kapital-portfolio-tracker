@@ -2,9 +2,17 @@
 <html lang="uk" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)</title>
   <meta name="description" content="Персональний трекер інвестицій Мані-кеш: Криптовалюта, Фондовий ринок, ОВДП, Депозити та Готівка. Автоматичні котирування та облік у гривні (₴) і доларах ($)." />
+  <meta name="theme-color" content="#0f131a" id="meta-theme-color" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Мані-кеш" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
   <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -448,6 +456,18 @@ body {
   .market-ticker-strip {
     display: flex;
     padding: 8px 14px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .market-ticker-strip::-webkit-scrollbar {
+    display: none;
+  }
+  .market-ticker-card {
+    min-width: 176px;
+    flex-shrink: 0;
+  }
+  .market-ticker-spark {
+    width: 56px;
   }
 }
 
@@ -1861,18 +1881,79 @@ body {
   border-radius: 999px;
 }
 
-/* Mobile Bottom Nav */
+/* Mobile Bottom Nav & PWA Native App Polish */
+.mobile-only-btn {
+  display: none;
+}
+
+.pwa-install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 13px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(56, 189, 248, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.34);
+  flex-wrap: wrap;
+}
+
+.pwa-install-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.pwa-install-app-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.pwa-install-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.pwa-install-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.pwa-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .mobile-nav {
   display: none;
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--border-default);
-  padding: 6px 8px;
-  z-index: 40;
-  justify-content: space-around;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  justify-content: flex-start;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .mobile-nav-btn {
@@ -1880,15 +1961,22 @@ body {
   border: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
-  padding: 6px 8px;
-  border-radius: 8px;
+  padding: 5px 10px;
+  border-radius: 10px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
+  min-width: 56px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mob-nav-ic {
+  font-size: 15px;
+  line-height: 1.1;
 }
 
 .mobile-nav-btn.active {
@@ -1915,6 +2003,13 @@ body {
 }
 
 @media (max-width: 780px) {
+  html, body {
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-only-btn {
+    display: inline-flex;
+  }
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -1925,17 +2020,33 @@ body {
     display: flex;
     overflow-x: auto;
     gap: 4px;
-    padding: 8px 6px;
+    padding: 7px 8px calc(7px + env(safe-area-inset-bottom, 0px));
   }
   .mobile-nav-btn {
     flex-shrink: 0;
     white-space: nowrap;
   }
   .topbar {
-    padding: 12px 16px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+    gap: 10px;
+  }
+  .topbar-title-group h1 {
+    font-size: 16px;
+  }
+  .topbar-controls {
+    width: 100%;
+    gap: 6px;
+  }
+  .topbar-controls .btn {
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+  .topbar-controls .seg-btn {
+    padding: 5px 8px;
+    font-size: 11.5px;
   }
   .page-content {
-    padding: 16px;
+    padding: 14px 12px calc(86px + env(safe-area-inset-bottom, 0px));
   }
   .form-grid,
   .strategy-classes-grid {
@@ -2447,6 +2558,10 @@ body {
           </div>
         </div>
 
+        <button type="button" class="btn btn-secondary" id="btn-install-pwa-sidebar" style="width:100%; display:none; margin-bottom:6px;">
+          📲 Встановити як додаток
+        </button>
+
         <button type="button" class="btn btn-secondary" id="btn-open-settings" style="width:100%;">
           ⚙ Налаштування та Пароль
         </button>
@@ -2471,6 +2586,10 @@ body {
             <button type="button" class="seg-btn" data-currency="UAH" id="btn-curr-uah">₴ UAH + $ USD</button>
           </div>
 
+          <button type="button" class="btn btn-secondary mobile-only-btn" id="btn-mobile-theme-toggle" title="Змінити тему" aria-label="Перемкнути тему">
+            ◐
+          </button>
+
           <button type="button" class="btn btn-secondary" id="btn-topbar-cloud" title="Налаштування хмарної синхронізації з Google Диском та параметрів портфеля">
             <span id="topbar-cloud-label">☁️ Google Диск</span>
           </button>
@@ -2489,6 +2608,9 @@ body {
       <section class="market-ticker-strip" id="market-ticker-strip" aria-label="Швидка панель котирувань ринку"></section>
 
       <div class="page-content">
+        <!-- Mobile PWA Install Prompt Banner (hidden once installed or dismissed) -->
+        <div class="pwa-install-banner" id="pwa-install-banner" style="display:none;" role="region" aria-label="Встановити як додаток"></div>
+
         <!-- Hero Dual-Currency Summary Strip -->
         <section class="wealth-hero" aria-label="Підсумок капіталу">
           <div class="wealth-primary-block">
@@ -2583,14 +2705,14 @@ body {
 
     <!-- Mobile Bottom Bar -->
     <nav class="mobile-nav" aria-label="Мобільна навігація">
-      <button type="button" class="mobile-nav-btn active" data-category="all" id="mob-cat-all">Всі</button>
-      <button type="button" class="mobile-nav-btn" data-category="crypto" id="mob-cat-crypto">Крипта</button>
-      <button type="button" class="mobile-nav-btn" data-category="stocks" id="mob-cat-stocks">Акції</button>
-      <button type="button" class="mobile-nav-btn" data-category="ovdp" id="mob-cat-ovdp">ОВДП</button>
-      <button type="button" class="mobile-nav-btn" data-category="deposits" id="mob-cat-deposits">Депозит</button>
-      <button type="button" class="mobile-nav-btn" data-category="cash" id="mob-cat-cash">Готівка</button>
-      <button type="button" class="mobile-nav-btn" data-category="invested_uah" id="mob-cat-invested_uah">Влито ₴</button>
-      <button type="button" class="mobile-nav-btn" data-category="important_links" id="mob-cat-important_links">Посилання</button>
+      <button type="button" class="mobile-nav-btn active" data-category="all" id="mob-cat-all"><span class="mob-nav-ic">📊</span><span>Всі</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="crypto" id="mob-cat-crypto"><span class="mob-nav-ic">₿</span><span>Крипта</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="stocks" id="mob-cat-stocks"><span class="mob-nav-ic">📈</span><span>Акції</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="ovdp" id="mob-cat-ovdp"><span class="mob-nav-ic">🛡️</span><span>ОВДП</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="deposits" id="mob-cat-deposits"><span class="mob-nav-ic">🏦</span><span>Депозит</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="cash" id="mob-cat-cash"><span class="mob-nav-ic">💵</span><span>Готівка</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="invested_uah" id="mob-cat-invested_uah"><span class="mob-nav-ic">🇺🇦</span><span>Влито ₴</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="important_links" id="mob-cat-important_links"><span class="mob-nav-ic">🔗</span><span>Посилання</span></button>
     </nav>
   </div>
 
@@ -11031,18 +11153,25 @@ body {
 
   // Wire up Event Listeners
   function initEvents() {
-    // Theme toggle
-    document.getElementById('btn-theme-toggle').addEventListener('click', () => {
-      const html = document.documentElement;
-      const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-      html.setAttribute('data-theme', next);
+    // Theme toggle (syncs PWA status bar theme-color on iOS & Android too)
+    const applyTheme = (theme) => {
+      const next = theme === 'light' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      const metaTheme = document.getElementById('meta-theme-color');
+      if (metaTheme) {
+        metaTheme.setAttribute('content', next === 'light' ? '#f4f6f9' : '#0f131a');
+      }
+    };
+    const toggleTheme = () => {
+      const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      applyTheme(next);
       safeSetItem('kapital_theme', next);
-    });
+    };
+    document.getElementById('btn-theme-toggle')?.addEventListener('click', toggleTheme);
+    document.getElementById('btn-mobile-theme-toggle')?.addEventListener('click', toggleTheme);
 
     const savedTheme = safeGetItem('kapital_theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    }
+    applyTheme(savedTheme || 'dark');
 
     // Category navigation
     document.querySelectorAll('[data-category]').forEach(btn => {
@@ -11529,8 +11658,122 @@ body {
     state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
   }
 
+  // PWA Support: Service Worker registration, Android 1-click install, iOS Safari guide & app shortcuts
+  function initPwaSupport() {
+    if (isGoogleAppsScript()) return;
+
+    // 1. Register Service Worker for standalone PWA installability & offline app shell
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+
+    // 2. Support PWA launcher shortcuts (e.g. #cat=crypto, #cat=stocks, #cat=important_links)
+    const applyShortcutHash = () => {
+      const m = String(window.location.hash || '').match(/cat=([a-z_]+)/i);
+      if (m && m[1] && CATEGORY_META[m[1]]) {
+        state.activeCategory = m[1];
+        renderAll();
+      }
+    };
+    applyShortcutHash();
+    window.addEventListener('hashchange', applyShortcutHash);
+
+    // 3. Detect if already running as installed standalone app
+    const isStandalone = Boolean(
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true
+    );
+    if (isStandalone) return;
+
+    const DISMISS_KEY = 'kapital_pwa_banner_dismissed_at';
+    const dismissedAt = Number(safeGetItem(DISMISS_KEY) || 0);
+    const isRecentlyDismissed = dismissedAt > 0 && (Date.now() - dismissedAt) < 30 * 24 * 3600 * 1000;
+
+    const bannerEl = document.getElementById('pwa-install-banner');
+    const sidebarInstallBtn = document.getElementById('btn-install-pwa-sidebar');
+    let deferredInstallPrompt = null;
+
+    const dismissBanner = () => {
+      if (bannerEl) bannerEl.style.display = 'none';
+      safeSetItem(DISMISS_KEY, String(Date.now()));
+    };
+
+    const triggerNativeInstall = async () => {
+      if (!deferredInstallPrompt) return;
+      try {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          if (bannerEl) bannerEl.style.display = 'none';
+          if (sidebarInstallBtn) sidebarInstallBtn.style.display = 'none';
+        }
+      } catch (_) {}
+      deferredInstallPrompt = null;
+    };
+
+    // Android Chrome / Desktop Chromium native install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+
+      if (sidebarInstallBtn) {
+        sidebarInstallBtn.style.display = 'inline-flex';
+        sidebarInstallBtn.onclick = triggerNativeInstall;
+      }
+
+      if (bannerEl && !isRecentlyDismissed) {
+        bannerEl.innerHTML = `
+          <div class="pwa-install-left">
+            <img src="icons/icon-192.png" alt="Мані-кеш" class="pwa-install-app-icon" />
+            <div>
+              <div class="pwa-install-title">Встановити «Мані-кеш» як додаток</div>
+              <div class="pwa-install-sub">Миттєвий запуск з екрана телефона на весь екран без панелі браузера</div>
+            </div>
+          </div>
+          <div class="pwa-install-actions">
+            <button type="button" class="btn btn-primary" id="btn-pwa-banner-install" style="font-size:12px; padding:6px 12px;">📲 Встановити</button>
+            <button type="button" class="btn btn-ghost" id="btn-pwa-banner-close" aria-label="Сховати" style="padding:4px 8px;">✕</button>
+          </div>
+        `;
+        bannerEl.style.display = 'flex';
+        bannerEl.querySelector('#btn-pwa-banner-install')?.addEventListener('click', triggerNativeInstall);
+        bannerEl.querySelector('#btn-pwa-banner-close')?.addEventListener('click', dismissBanner);
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      if (bannerEl) bannerEl.style.display = 'none';
+      if (sidebarInstallBtn) sidebarInstallBtn.style.display = 'none';
+    });
+
+    // iOS Safari install helper banner (only on iPhone/iPad Safari when not installed)
+    const ua = navigator.userAgent || '';
+    const isIos = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
+    if (isIos && isSafari && bannerEl && !isRecentlyDismissed) {
+      bannerEl.innerHTML = `
+        <div class="pwa-install-left">
+          <img src="icons/icon-192.png" alt="Мані-кеш" class="pwa-install-app-icon" />
+          <div>
+            <div class="pwa-install-title">Додати «Мані-кеш» на екран iPhone</div>
+            <div class="pwa-install-sub">Натисніть <strong>«Поділитися» (⬆️)</strong> внизу Safari → <strong>«На екран «Додому»»</strong> → <strong>«Додати»</strong></div>
+          </div>
+        </div>
+        <div class="pwa-install-actions">
+          <button type="button" class="btn btn-ghost" id="btn-pwa-banner-close" aria-label="Сховати" style="padding:4px 8px;">✕</button>
+        </div>
+      `;
+      bannerEl.style.display = 'flex';
+      bannerEl.querySelector('#btn-pwa-banner-close')?.addEventListener('click', dismissBanner);
+    }
+  }
+
   initEvents();
   renderAll();
+  initPwaSupport();
   startLiveMarketTickerEngine();
   loadPortfolioFromServer();
 })();

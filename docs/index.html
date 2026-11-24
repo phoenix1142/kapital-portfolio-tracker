@@ -2,10 +2,18 @@
 <html lang="uk" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Мані-кеш — Персональний трекер інвестиційного портфеля (UAH / USD)</title>
   <meta name="description" content="Персональний трекер інвестицій Мані-кеш: Криптовалюта, Фондовий ринок, ОВДП, Депозити та Готівка. Автоматичні котирування та облік у гривні (₴) і доларах ($)." />
-  <link rel="stylesheet" href="index.css?v=36" />
+  <meta name="theme-color" content="#0f131a" id="meta-theme-color" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Мані-кеш" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="index.css?v=37" />
 </head>
 <body>
   <div class="app-shell" id="app-shell">
@@ -116,6 +124,10 @@
           </div>
         </div>
 
+        <button type="button" class="btn btn-secondary" id="btn-install-pwa-sidebar" style="width:100%; display:none; margin-bottom:6px;">
+          📲 Встановити як додаток
+        </button>
+
         <button type="button" class="btn btn-secondary" id="btn-open-settings" style="width:100%;">
           ⚙ Налаштування та Пароль
         </button>
@@ -140,6 +152,10 @@
             <button type="button" class="seg-btn" data-currency="UAH" id="btn-curr-uah">₴ UAH + $ USD</button>
           </div>
 
+          <button type="button" class="btn btn-secondary mobile-only-btn" id="btn-mobile-theme-toggle" title="Змінити тему" aria-label="Перемкнути тему">
+            ◐
+          </button>
+
           <button type="button" class="btn btn-secondary" id="btn-topbar-cloud" title="Налаштування хмарної синхронізації з Google Диском та параметрів портфеля">
             <span id="topbar-cloud-label">☁️ Google Диск</span>
           </button>
@@ -158,6 +174,9 @@
       <section class="market-ticker-strip" id="market-ticker-strip" aria-label="Швидка панель котирувань ринку"></section>
 
       <div class="page-content">
+        <!-- Mobile PWA Install Prompt Banner (hidden once installed or dismissed) -->
+        <div class="pwa-install-banner" id="pwa-install-banner" style="display:none;" role="region" aria-label="Встановити як додаток"></div>
+
         <!-- Hero Dual-Currency Summary Strip -->
         <section class="wealth-hero" aria-label="Підсумок капіталу">
           <div class="wealth-primary-block">
@@ -252,14 +271,14 @@
 
     <!-- Mobile Bottom Bar -->
     <nav class="mobile-nav" aria-label="Мобільна навігація">
-      <button type="button" class="mobile-nav-btn active" data-category="all" id="mob-cat-all">Всі</button>
-      <button type="button" class="mobile-nav-btn" data-category="crypto" id="mob-cat-crypto">Крипта</button>
-      <button type="button" class="mobile-nav-btn" data-category="stocks" id="mob-cat-stocks">Акції</button>
-      <button type="button" class="mobile-nav-btn" data-category="ovdp" id="mob-cat-ovdp">ОВДП</button>
-      <button type="button" class="mobile-nav-btn" data-category="deposits" id="mob-cat-deposits">Депозит</button>
-      <button type="button" class="mobile-nav-btn" data-category="cash" id="mob-cat-cash">Готівка</button>
-      <button type="button" class="mobile-nav-btn" data-category="invested_uah" id="mob-cat-invested_uah">Влито ₴</button>
-      <button type="button" class="mobile-nav-btn" data-category="important_links" id="mob-cat-important_links">Посилання</button>
+      <button type="button" class="mobile-nav-btn active" data-category="all" id="mob-cat-all"><span class="mob-nav-ic">📊</span><span>Всі</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="crypto" id="mob-cat-crypto"><span class="mob-nav-ic">₿</span><span>Крипта</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="stocks" id="mob-cat-stocks"><span class="mob-nav-ic">📈</span><span>Акції</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="ovdp" id="mob-cat-ovdp"><span class="mob-nav-ic">🛡️</span><span>ОВДП</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="deposits" id="mob-cat-deposits"><span class="mob-nav-ic">🏦</span><span>Депозит</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="cash" id="mob-cat-cash"><span class="mob-nav-ic">💵</span><span>Готівка</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="invested_uah" id="mob-cat-invested_uah"><span class="mob-nav-ic">🇺🇦</span><span>Влито ₴</span></button>
+      <button type="button" class="mobile-nav-btn" data-category="important_links" id="mob-cat-important_links"><span class="mob-nav-ic">🔗</span><span>Посилання</span></button>
     </nav>
   </div>
 
@@ -408,6 +427,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=36"></script>
+  <script src="app.js?v=37"></script>
 </body>
 </html>

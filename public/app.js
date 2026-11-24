@@ -8289,18 +8289,25 @@
 
   // Wire up Event Listeners
   function initEvents() {
-    // Theme toggle
-    document.getElementById('btn-theme-toggle').addEventListener('click', () => {
-      const html = document.documentElement;
-      const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-      html.setAttribute('data-theme', next);
+    // Theme toggle (syncs PWA status bar theme-color on iOS & Android too)
+    const applyTheme = (theme) => {
+      const next = theme === 'light' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      const metaTheme = document.getElementById('meta-theme-color');
+      if (metaTheme) {
+        metaTheme.setAttribute('content', next === 'light' ? '#f4f6f9' : '#0f131a');
+      }
+    };
+    const toggleTheme = () => {
+      const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      applyTheme(next);
       safeSetItem('kapital_theme', next);
-    });
+    };
+    document.getElementById('btn-theme-toggle')?.addEventListener('click', toggleTheme);
+    document.getElementById('btn-mobile-theme-toggle')?.addEventListener('click', toggleTheme);
 
     const savedTheme = safeGetItem('kapital_theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    }
+    applyTheme(savedTheme || 'dark');
 
     // Category navigation
     document.querySelectorAll('[data-category]').forEach(btn => {
@@ -8787,8 +8794,122 @@
     state.positions = JSON.parse(JSON.stringify(DEFAULT_DEMO_POSITIONS));
   }
 
+  // PWA Support: Service Worker registration, Android 1-click install, iOS Safari guide & app shortcuts
+  function initPwaSupport() {
+    if (isGoogleAppsScript()) return;
+
+    // 1. Register Service Worker for standalone PWA installability & offline app shell
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+
+    // 2. Support PWA launcher shortcuts (e.g. #cat=crypto, #cat=stocks, #cat=important_links)
+    const applyShortcutHash = () => {
+      const m = String(window.location.hash || '').match(/cat=([a-z_]+)/i);
+      if (m && m[1] && CATEGORY_META[m[1]]) {
+        state.activeCategory = m[1];
+        renderAll();
+      }
+    };
+    applyShortcutHash();
+    window.addEventListener('hashchange', applyShortcutHash);
+
+    // 3. Detect if already running as installed standalone app
+    const isStandalone = Boolean(
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true
+    );
+    if (isStandalone) return;
+
+    const DISMISS_KEY = 'kapital_pwa_banner_dismissed_at';
+    const dismissedAt = Number(safeGetItem(DISMISS_KEY) || 0);
+    const isRecentlyDismissed = dismissedAt > 0 && (Date.now() - dismissedAt) < 30 * 24 * 3600 * 1000;
+
+    const bannerEl = document.getElementById('pwa-install-banner');
+    const sidebarInstallBtn = document.getElementById('btn-install-pwa-sidebar');
+    let deferredInstallPrompt = null;
+
+    const dismissBanner = () => {
+      if (bannerEl) bannerEl.style.display = 'none';
+      safeSetItem(DISMISS_KEY, String(Date.now()));
+    };
+
+    const triggerNativeInstall = async () => {
+      if (!deferredInstallPrompt) return;
+      try {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          if (bannerEl) bannerEl.style.display = 'none';
+          if (sidebarInstallBtn) sidebarInstallBtn.style.display = 'none';
+        }
+      } catch (_) {}
+      deferredInstallPrompt = null;
+    };
+
+    // Android Chrome / Desktop Chromium native install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+
+      if (sidebarInstallBtn) {
+        sidebarInstallBtn.style.display = 'inline-flex';
+        sidebarInstallBtn.onclick = triggerNativeInstall;
+      }
+
+      if (bannerEl && !isRecentlyDismissed) {
+        bannerEl.innerHTML = `
+          <div class="pwa-install-left">
+            <img src="icons/icon-192.png" alt="Мані-кеш" class="pwa-install-app-icon" />
+            <div>
+              <div class="pwa-install-title">Встановити «Мані-кеш» як додаток</div>
+              <div class="pwa-install-sub">Миттєвий запуск з екрана телефона на весь екран без панелі браузера</div>
+            </div>
+          </div>
+          <div class="pwa-install-actions">
+            <button type="button" class="btn btn-primary" id="btn-pwa-banner-install" style="font-size:12px; padding:6px 12px;">📲 Встановити</button>
+            <button type="button" class="btn btn-ghost" id="btn-pwa-banner-close" aria-label="Сховати" style="padding:4px 8px;">✕</button>
+          </div>
+        `;
+        bannerEl.style.display = 'flex';
+        bannerEl.querySelector('#btn-pwa-banner-install')?.addEventListener('click', triggerNativeInstall);
+        bannerEl.querySelector('#btn-pwa-banner-close')?.addEventListener('click', dismissBanner);
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      if (bannerEl) bannerEl.style.display = 'none';
+      if (sidebarInstallBtn) sidebarInstallBtn.style.display = 'none';
+    });
+
+    // iOS Safari install helper banner (only on iPhone/iPad Safari when not installed)
+    const ua = navigator.userAgent || '';
+    const isIos = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS/i.test(ua);
+    if (isIos && isSafari && bannerEl && !isRecentlyDismissed) {
+      bannerEl.innerHTML = `
+        <div class="pwa-install-left">
+          <img src="icons/icon-192.png" alt="Мані-кеш" class="pwa-install-app-icon" />
+          <div>
+            <div class="pwa-install-title">Додати «Мані-кеш» на екран iPhone</div>
+            <div class="pwa-install-sub">Натисніть <strong>«Поділитися» (⬆️)</strong> внизу Safari → <strong>«На екран «Додому»»</strong> → <strong>«Додати»</strong></div>
+          </div>
+        </div>
+        <div class="pwa-install-actions">
+          <button type="button" class="btn btn-ghost" id="btn-pwa-banner-close" aria-label="Сховати" style="padding:4px 8px;">✕</button>
+        </div>
+      `;
+      bannerEl.style.display = 'flex';
+      bannerEl.querySelector('#btn-pwa-banner-close')?.addEventListener('click', dismissBanner);
+    }
+  }
+
   initEvents();
   renderAll();
+  initPwaSupport();
   startLiveMarketTickerEngine();
   loadPortfolioFromServer();
 })();
