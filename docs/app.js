@@ -8236,6 +8236,9 @@
     if (cmcKeyInput) cmcKeyInput.value = state.settings.cmcApiKey || '';
     document.getElementById('set-require-auth').checked = Boolean(state.auth?.requireAuth);
     document.getElementById('set-new-password').value = '';
+    if (typeof refreshBiometricSettingsUi === 'function') {
+      refreshBiometricSettingsUi();
+    }
     document.getElementById('modal-settings').classList.add('open');
   }
 
@@ -8907,8 +8910,485 @@
     }
   }
 
+  // Biometric (Face ID / Touch ID via WebAuthn) & PIN App Lock Controller (per-device)
+  const BIOMETRIC_LOCK_KEY = 'kapital_biometric_lock_v1';
+  let appHiddenAtMs = 0;
+
+  function readBiometricLockConfig() {
+    try {
+      const raw = safeGetItem(BIOMETRIC_LOCK_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeBiometricLockConfig(cfg) {
+    if (!cfg) {
+      try {
+        if (window.localStorage) window.localStorage.removeItem(BIOMETRIC_LOCK_KEY);
+      } catch (_) {}
+      return;
+    }
+    safeSetItem(BIOMETRIC_LOCK_KEY, JSON.stringify(cfg));
+  }
+
+  function uint8ToBase64Url(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function base64UrlToUint8(b64url) {
+    const b64 = String(b64url || '').replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+    const bin = atob(b64 + pad);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function hashPinCode(pin) {
+    const salted = `${String(pin).trim()}_manikesh_pin_v1`;
+    if (window.crypto && window.crypto.subtle) {
+      const data = new TextEncoder().encode(salted);
+      const digest = await window.crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    // Fallback hash if crypto.subtle is unavailable
+    let h = 2166136261;
+    for (let i = 0; i < salted.length; i++) {
+      h ^= salted.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return 'fb_' + (h >>> 0).toString(16);
+  }
+
+  function getRandomBytes(len) {
+    const arr = new Uint8Array(len);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(arr);
+    } else {
+      for (let i = 0; i < len; i++) arr[i] = Math.floor(Math.random() * 256);
+    }
+    return arr;
+  }
+
+  function isBiometricWebAuthnAvailable() {
+    return Boolean(
+      typeof window !== 'undefined' &&
+      window.isSecureContext &&
+      window.PublicKeyCredential &&
+      navigator.credentials &&
+      typeof navigator.credentials.create === 'function' &&
+      typeof navigator.credentials.get === 'function'
+    );
+  }
+
+  async function enrollBiometricKey() {
+    const rpId = window.location.hostname || 'localhost';
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge: getRandomBytes(32),
+        rp: {
+          name: 'Мані-кеш',
+          id: rpId
+        },
+        user: {
+          id: getRandomBytes(16),
+          name: 'owner@manikesh.app',
+          displayName: 'Власник Мані-кеш'
+        },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },
+          { type: 'public-key', alg: -257 }
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          residentKey: 'preferred',
+          userVerification: 'required'
+        },
+        timeout: 60000,
+        attestation: 'none'
+      }
+    });
+    if (!cred || !cred.rawId) {
+      throw new Error('NO_CREDENTIAL');
+    }
+    return uint8ToBase64Url(new Uint8Array(cred.rawId));
+  }
+
+  async function verifyBiometricKey(credentialId) {
+    const rpId = window.location.hostname || 'localhost';
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge: getRandomBytes(32),
+        rpId: rpId,
+        allowCredentials: [{
+          id: base64UrlToUint8(credentialId),
+          type: 'public-key',
+          transports: ['internal']
+        }],
+        userVerification: 'required',
+        timeout: 60000
+      }
+    });
+    return Boolean(assertion && assertion.id);
+  }
+
+  function updateTopbarLockButtonVisibility() {
+    const cfg = readBiometricLockConfig();
+    const lockBtn = document.getElementById('btn-topbar-lock');
+    if (lockBtn) {
+      lockBtn.style.display = cfg && cfg.enabled ? 'inline-flex' : 'none';
+    }
+  }
+
+  function configureLockScreenUi() {
+    const cfg = readBiometricLockConfig();
+    const faceBtn = document.getElementById('btn-unlock-faceid');
+    const faceLabel = document.getElementById('btn-unlock-faceid-label');
+    const pinToggle = document.getElementById('btn-show-pin-pad');
+    const pinForm = document.getElementById('form-unlock-pin');
+    const pinInput = document.getElementById('input-unlock-pin');
+    const subEl = document.getElementById('biometric-lock-sub');
+    const errEl = document.getElementById('biometric-lock-error');
+
+    if (errEl) errEl.textContent = '';
+    if (pinInput) pinInput.value = '';
+
+    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent || '');
+    if (faceLabel) {
+      faceLabel.textContent = isIos ? 'Розблокувати через Face ID' : 'Розблокувати біометрією';
+    }
+
+    if (cfg && cfg.hasBiometric && cfg.credentialId) {
+      if (faceBtn) faceBtn.style.display = 'inline-flex';
+      if (pinToggle) pinToggle.style.display = cfg.pinHash ? 'inline-flex' : 'none';
+      if (pinForm) pinForm.style.display = 'none';
+      if (subEl) subEl.textContent = isIos ? 'Портфель захищено Face ID' : 'Портфель захищено біометрією';
+    } else {
+      if (faceBtn) faceBtn.style.display = 'none';
+      if (pinToggle) pinToggle.style.display = 'none';
+      if (pinForm) pinForm.style.display = 'block';
+      if (subEl) subEl.textContent = 'Введіть PIN-код для доступу до портфеля';
+    }
+  }
+
+  function lockAppNow() {
+    const cfg = readBiometricLockConfig();
+    if (!cfg || !cfg.enabled) return;
+    closeSettingsModal();
+    configureLockScreenUi();
+    document.documentElement.classList.add('app-locked');
+  }
+
+  function unlockAppNow() {
+    document.documentElement.classList.remove('app-locked');
+    const pinInput = document.getElementById('input-unlock-pin');
+    const errEl = document.getElementById('biometric-lock-error');
+    if (pinInput) pinInput.value = '';
+    if (errEl) errEl.textContent = '';
+    appHiddenAtMs = 0;
+  }
+
+  function refreshBiometricSettingsUi() {
+    const cfg = readBiometricLockConfig();
+    const pill = document.getElementById('biometric-status-pill');
+    const autoLockSel = document.getElementById('set-biometric-autolock');
+    const pinInput = document.getElementById('set-biometric-pin');
+    const enableFaceBtn = document.getElementById('btn-enable-faceid');
+    const lockNowBtn = document.getElementById('btn-lock-now-test');
+    const disableBtn = document.getElementById('btn-disable-biometric');
+    const hintEl = document.getElementById('biometric-settings-hint');
+
+    if (pinInput) pinInput.value = '';
+    if (autoLockSel && cfg && typeof cfg.autoLockSec === 'number') {
+      autoLockSel.value = String(cfg.autoLockSec);
+    }
+
+    const isEnabled = Boolean(cfg && cfg.enabled);
+    if (pill) {
+      if (isEnabled && cfg.hasBiometric) {
+        pill.textContent = '🟢 Face ID активний';
+        pill.classList.add('is-active');
+      } else if (isEnabled) {
+        pill.textContent = '🟢 PIN активний';
+        pill.classList.add('is-active');
+      } else {
+        pill.textContent = 'Вимкнено';
+        pill.classList.remove('is-active');
+      }
+    }
+
+    if (lockNowBtn) lockNowBtn.style.display = isEnabled ? 'inline-flex' : 'none';
+    if (disableBtn) disableBtn.style.display = isEnabled ? 'inline-flex' : 'none';
+    if (enableFaceBtn) {
+      enableFaceBtn.textContent = (isEnabled && cfg.hasBiometric)
+        ? '🔄 Перепідключити Face ID'
+        : '🔐 Підключити Face ID / Touch ID';
+    }
+
+    if (hintEl) {
+      if (!isBiometricWebAuthnAvailable()) {
+        hintEl.style.color = 'var(--text-muted)';
+        hintEl.textContent = 'На цьому браузері біометрія WebAuthn недоступна — можна увімкнути захист PIN-кодом.';
+      } else if (isEnabled) {
+        hintEl.style.color = 'var(--positive)';
+        hintEl.textContent = cfg.hasBiometric
+          ? '✅ Вхід по Face ID / Touch ID увімкнено для цього пристрою.'
+          : '✅ Вхід за PIN-кодом увімкнено для цього пристрою.';
+      } else {
+        hintEl.style.color = 'var(--text-muted)';
+        hintEl.textContent = '';
+      }
+    }
+
+    updateTopbarLockButtonVisibility();
+  }
+
+  function initBiometricLock() {
+    updateTopbarLockButtonVisibility();
+
+    const cfg = readBiometricLockConfig();
+    if (cfg && cfg.enabled) {
+      configureLockScreenUi();
+      document.documentElement.classList.add('app-locked');
+    } else {
+      document.documentElement.classList.remove('app-locked');
+    }
+
+    // Lock screen: Face ID / Touch ID button
+    const unlockFaceBtn = document.getElementById('btn-unlock-faceid');
+    const pinToggleBtn = document.getElementById('btn-show-pin-pad');
+    const pinForm = document.getElementById('form-unlock-pin');
+    const pinInput = document.getElementById('input-unlock-pin');
+    const errEl = document.getElementById('biometric-lock-error');
+
+    if (unlockFaceBtn) {
+      unlockFaceBtn.addEventListener('click', async () => {
+        const cur = readBiometricLockConfig();
+        if (!cur || !cur.credentialId) {
+          if (pinForm) pinForm.style.display = 'block';
+          return;
+        }
+        if (errEl) errEl.textContent = '';
+        unlockFaceBtn.disabled = true;
+        try {
+          const ok = await verifyBiometricKey(cur.credentialId);
+          if (ok) {
+            unlockAppNow();
+          } else if (errEl) {
+            errEl.textContent = 'Не вдалося підтвердити біометрію. Спробуйте ще раз або введіть PIN.';
+          }
+        } catch (err) {
+          if (errEl) {
+            errEl.textContent = 'Перевірку скасовано. Натисніть ще раз або увійдіть за PIN-кодом.';
+          }
+        } finally {
+          unlockFaceBtn.disabled = false;
+        }
+      });
+    }
+
+    if (pinToggleBtn) {
+      pinToggleBtn.addEventListener('click', () => {
+        if (!pinForm) return;
+        const willOpen = pinForm.style.display === 'none';
+        pinForm.style.display = willOpen ? 'block' : 'none';
+        if (willOpen && pinInput) {
+          pinInput.focus();
+        }
+      });
+    }
+
+    if (pinForm) {
+      pinForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const cur = readBiometricLockConfig();
+        const entered = String(pinInput?.value || '').trim();
+        if (!cur || !cur.pinHash) {
+          unlockAppNow();
+          return;
+        }
+        if (!entered) {
+          if (errEl) errEl.textContent = 'Введіть PIN-код';
+          return;
+        }
+        const enteredHash = await hashPinCode(entered);
+        if (enteredHash === cur.pinHash) {
+          unlockAppNow();
+        } else {
+          if (errEl) errEl.textContent = 'Невірний PIN-код. Спробуйте ще раз.';
+          if (pinInput) {
+            pinInput.value = '';
+            pinInput.focus();
+          }
+        }
+      });
+    }
+
+    // Manual quick lock button in topbar
+    document.getElementById('btn-topbar-lock')?.addEventListener('click', lockAppNow);
+
+    // Settings modal: Enable Face ID / Touch ID
+    const setPinInput = document.getElementById('set-biometric-pin');
+    const setAutoLockSel = document.getElementById('set-biometric-autolock');
+    const hintEl = document.getElementById('biometric-settings-hint');
+
+    setAutoLockSel?.addEventListener('change', () => {
+      const cur = readBiometricLockConfig();
+      if (cur && cur.enabled) {
+        cur.autoLockSec = Number(setAutoLockSel.value);
+        writeBiometricLockConfig(cur);
+      }
+    });
+
+    document.getElementById('btn-enable-faceid')?.addEventListener('click', async () => {
+      if (!isBiometricWebAuthnAvailable()) {
+        if (hintEl) {
+          hintEl.style.color = 'var(--negative)';
+          hintEl.textContent = 'Цей браузер не підтримує Face ID / WebAuthn. Використайте Safari на iPhone або кнопку «Тільки PIN-код».';
+        }
+        return;
+      }
+
+      const cur = readBiometricLockConfig();
+      const rawPin = String(setPinInput?.value || '').replace(/\D/g, '');
+      let pinHash = cur?.pinHash || '';
+      if (rawPin.length > 0) {
+        if (rawPin.length < 4 || rawPin.length > 6) {
+          if (hintEl) {
+            hintEl.style.color = 'var(--negative)';
+            hintEl.textContent = 'Резервний PIN-код має містити від 4 до 6 цифр.';
+          }
+          setPinInput?.focus();
+          return;
+        }
+        pinHash = await hashPinCode(rawPin);
+      } else if (!pinHash) {
+        if (hintEl) {
+          hintEl.style.color = 'var(--negative)';
+          hintEl.textContent = 'Спочатку введіть резервний PIN-код (4–6 цифр) на випадок, якщо Face ID не спрацює.';
+        }
+        setPinInput?.focus();
+        return;
+      }
+
+      if (hintEl) {
+        hintEl.style.color = 'var(--text-secondary)';
+        hintEl.textContent = 'Підтвердіть Face ID / Touch ID у системному вікні...';
+      }
+
+      try {
+        const credentialId = await enrollBiometricKey();
+        const autoLockSec = setAutoLockSel ? Number(setAutoLockSel.value) : 60;
+        writeBiometricLockConfig({
+          enabled: true,
+          hasBiometric: true,
+          credentialId,
+          pinHash,
+          autoLockSec,
+          updatedAt: new Date().toISOString()
+        });
+        refreshBiometricSettingsUi();
+      } catch (err) {
+        if (hintEl) {
+          hintEl.style.color = 'var(--negative)';
+          hintEl.textContent = 'Не вдалося підключити Face ID (скасовано або не підтримується на цьому пристрої). Можете увімкнути «Тільки PIN-код».';
+        }
+      }
+    });
+
+    // Settings modal: Enable PIN-only lock
+    document.getElementById('btn-enable-pin-only')?.addEventListener('click', async () => {
+      const cur = readBiometricLockConfig();
+      const rawPin = String(setPinInput?.value || '').replace(/\D/g, '');
+      if (rawPin.length < 4 || rawPin.length > 6) {
+        if (hintEl) {
+          hintEl.style.color = 'var(--negative)';
+          hintEl.textContent = 'Введіть PIN-код із 4–6 цифр.';
+        }
+        setPinInput?.focus();
+        return;
+      }
+      const pinHash = await hashPinCode(rawPin);
+      const autoLockSec = setAutoLockSel ? Number(setAutoLockSel.value) : 60;
+      writeBiometricLockConfig({
+        enabled: true,
+        hasBiometric: false,
+        credentialId: cur?.credentialId || '',
+        pinHash,
+        autoLockSec,
+        updatedAt: new Date().toISOString()
+      });
+      refreshBiometricSettingsUi();
+    });
+
+    // Settings modal: Lock immediately (for testing / manual lock)
+    document.getElementById('btn-lock-now-test')?.addEventListener('click', () => {
+      lockAppNow();
+    });
+
+    // Settings modal: Disable lock (verifies Face ID or PIN first)
+    document.getElementById('btn-disable-biometric')?.addEventListener('click', async () => {
+      const cur = readBiometricLockConfig();
+      if (!cur || !cur.enabled) return;
+
+      let verified = false;
+      if (cur.hasBiometric && cur.credentialId && isBiometricWebAuthnAvailable()) {
+        try {
+          verified = await verifyBiometricKey(cur.credentialId);
+        } catch (_) {}
+      }
+      if (!verified && cur.pinHash) {
+        const entered = window.prompt('Введіть поточний PIN-код, щоб вимкнути блокування:');
+        if (entered !== null) {
+          const h = await hashPinCode(entered.trim());
+          verified = (h === cur.pinHash);
+        }
+      }
+      if (verified) {
+        writeBiometricLockConfig(null);
+        unlockAppNow();
+        refreshBiometricSettingsUi();
+        if (hintEl) {
+          hintEl.style.color = 'var(--text-secondary)';
+          hintEl.textContent = 'Захист екрана на цьому пристрої вимкнено.';
+        }
+      } else if (hintEl) {
+        hintEl.style.color = 'var(--negative)';
+        hintEl.textContent = 'Підтвердження не пройдено — захист залишився активним.';
+      }
+    });
+
+    // Auto-lock when app is minimized / backgrounded and reopened
+    document.addEventListener('visibilitychange', () => {
+      const cur = readBiometricLockConfig();
+      if (!cur || !cur.enabled) return;
+      if (document.visibilityState === 'hidden') {
+        appHiddenAtMs = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        if (typeof cur.autoLockSec === 'number' && cur.autoLockSec >= 0 && appHiddenAtMs > 0) {
+          const elapsedMs = Date.now() - appHiddenAtMs;
+          if (elapsedMs >= cur.autoLockSec * 1000) {
+            lockAppNow();
+          }
+        }
+        appHiddenAtMs = 0;
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      appHiddenAtMs = Date.now();
+    });
+  }
+
   initEvents();
   renderAll();
+  initBiometricLock();
   initPwaSupport();
   startLiveMarketTickerEngine();
   loadPortfolioFromServer();

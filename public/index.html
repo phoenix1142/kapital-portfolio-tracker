@@ -13,9 +13,60 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=38" />
+  <link rel="stylesheet" href="index.css?v=39" />
+  <script>
+    try {
+      var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
+      if (_lk && _lk.enabled) {
+        document.documentElement.classList.add('app-locked');
+      }
+    } catch (_) {}
+  </script>
 </head>
 <body>
+  <!-- Full-Screen Biometric (Face ID / Touch ID) & PIN Lock Overlay -->
+  <div class="biometric-lock-screen" id="biometric-lock-screen" role="dialog" aria-modal="true" aria-labelledby="biometric-lock-title">
+    <div class="biometric-lock-card">
+      <img src="icons/icon-192.png" alt="Мані-кеш" class="biometric-lock-icon" onerror="this.style.display='none';" />
+      <h2 class="biometric-lock-title" id="biometric-lock-title">Мані-кеш</h2>
+      <p class="biometric-lock-sub" id="biometric-lock-sub">Портфель захищено біометрією</p>
+
+      <button type="button" class="btn btn-primary biometric-unlock-btn" id="btn-unlock-faceid">
+        <svg class="faceid-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 8V6a2 2 0 0 1 2-2h2"/>
+          <path d="M16 4h2a2 2 0 0 1 2 2v2"/>
+          <path d="M20 16v2a2 2 0 0 1-2 2h-2"/>
+          <path d="M8 20H6a2 2 0 0 1-2-2v-2"/>
+          <path d="M9 9.5v1.2"/>
+          <path d="M15 9.5v1.2"/>
+          <path d="M12 9.5v3.2a1 1 0 0 1-1 1h-.4"/>
+          <path d="M9.2 15.8c.8.8 1.8 1.2 2.8 1.2s2-.4 2.8-1.2"/>
+        </svg>
+        <span id="btn-unlock-faceid-label">Розблокувати через Face ID</span>
+      </button>
+
+      <button type="button" class="btn btn-ghost biometric-pin-toggle" id="btn-show-pin-pad">
+        Увійти за PIN-кодом
+      </button>
+
+      <form class="biometric-pin-form" id="form-unlock-pin" style="display:none;" autocomplete="off">
+        <input
+          type="password"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="6"
+          class="form-input biometric-pin-input"
+          id="input-unlock-pin"
+          placeholder="Введіть PIN-код"
+          aria-label="PIN-код"
+        />
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:8px;">Розблокувати</button>
+      </form>
+
+      <div class="biometric-lock-error" id="biometric-lock-error"></div>
+    </div>
+  </div>
+
   <div class="app-shell" id="app-shell">
     <!-- Sidebar Navigation -->
     <aside class="sidebar" aria-label="Категорії портфеля">
@@ -154,6 +205,10 @@
 
           <button type="button" class="btn btn-secondary mobile-only-btn" id="btn-mobile-theme-toggle" title="Змінити тему" aria-label="Перемкнути тему">
             ◐
+          </button>
+
+          <button type="button" class="btn btn-secondary" id="btn-topbar-lock" style="display:none;" title="Заблокувати екран (Face ID / PIN)" aria-label="Заблокувати екран">
+            🔒
           </button>
 
           <button type="button" class="btn btn-secondary" id="btn-topbar-cloud" title="Налаштування хмарної синхронізації з Google Диском та параметрів портфеля">
@@ -374,10 +429,59 @@
             </div>
           </div>
 
+          <div class="form-group full-width biometric-settings-box" id="biometric-settings-box">
+            <div class="biometric-settings-head">
+              <span class="form-label" style="margin:0;">🔐 Вхід по Face ID / Touch ID та PIN (для цього пристрою)</span>
+              <span class="biometric-status-pill" id="biometric-status-pill">Вимкнено</span>
+            </div>
+            <div style="font-size:11.5px; color:var(--text-muted); margin-top:4px; line-height:1.45;">
+              Захищає екран портфеля на цьому телефоні або ПК. Задайте резервний PIN (4–6 цифр) та підключіть <strong>Face ID / Touch ID</strong>.
+            </div>
+            <div class="biometric-settings-grid">
+              <div>
+                <label class="form-label" for="set-biometric-pin" style="font-size:11.5px;">Резервний PIN-код (4–6 цифр)</label>
+                <input
+                  type="password"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  maxlength="6"
+                  class="form-input mono"
+                  id="set-biometric-pin"
+                  placeholder="Напр.: 1234"
+                  autocomplete="new-password"
+                />
+              </div>
+              <div>
+                <label class="form-label" for="set-biometric-autolock" style="font-size:11.5px;">Автоблокування після згортання</label>
+                <select class="form-select" id="set-biometric-autolock">
+                  <option value="0">Одразу при виході</option>
+                  <option value="60" selected>Через 1 хвилину</option>
+                  <option value="300">Через 5 хвилин</option>
+                  <option value="-1">Тільки при запуску</option>
+                </select>
+              </div>
+            </div>
+            <div class="biometric-settings-actions">
+              <button type="button" class="btn btn-primary" id="btn-enable-faceid" style="font-size:12px; padding:6px 12px;">
+                🔐 Підключити Face ID / Touch ID
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-enable-pin-only" style="font-size:12px; padding:6px 12px;">
+                🔢 Тільки PIN-код
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-lock-now-test" style="font-size:12px; padding:6px 12px; display:none;">
+                🔒 Заблокувати зараз
+              </button>
+              <button type="button" class="btn btn-danger" id="btn-disable-biometric" style="font-size:12px; padding:6px 12px; display:none;">
+                Вимкнути захист
+              </button>
+            </div>
+            <div id="biometric-settings-hint" style="font-size:11.5px; color:var(--text-muted); margin-top:6px;"></div>
+          </div>
+
           <div class="form-group full-width" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-subtle);">
             <label class="form-label">
               <input type="checkbox" id="set-require-auth" />
-              Запитувати пароль при відкритті сайту в інтернеті
+              Запитувати пароль при відкритті сайту в інтернеті (локальний сервер)
             </label>
           </div>
 
@@ -427,6 +531,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=38"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>

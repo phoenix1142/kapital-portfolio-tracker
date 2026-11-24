@@ -2501,3 +2501,158 @@ body {
   }
 }
 
+/* Full-Screen Face ID / Touch ID & PIN Lock Screen */
+.biometric-lock-screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: radial-gradient(circle at 50% 25%, rgba(16, 185, 129, 0.14), transparent 55%), var(--bg-canvas);
+  align-items: center;
+  justify-content: center;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  touch-action: manipulation;
+}
+
+html.app-locked {
+  overflow: hidden !important;
+}
+
+html.app-locked .app-shell {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+html.app-locked .biometric-lock-screen {
+  display: flex !important;
+}
+
+.biometric-lock-card {
+  width: 100%;
+  max-width: 340px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 20px;
+  padding: 28px 22px 24px;
+  text-align: center;
+  box-shadow: var(--shadow-modal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.biometric-lock-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 10px 26px rgba(16, 185, 129, 0.25);
+}
+
+.biometric-lock-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.biometric-lock-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 22px;
+}
+
+.biometric-unlock-btn {
+  width: 100%;
+  padding: 13px 16px;
+  font-size: 14.5px;
+  font-weight: 700;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.biometric-pin-toggle {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.biometric-pin-form {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.biometric-pin-input {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  letter-spacing: 0.35em;
+  padding: 10px 12px;
+}
+
+.biometric-lock-error {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--negative);
+  min-height: 16px;
+}
+
+/* Biometric Lock Settings Box inside Settings Modal */
+.biometric-settings-box {
+  margin-top: 8px;
+  padding: 12px 13px;
+  border-radius: 11px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+}
+
+.biometric-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.biometric-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background-color: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.biometric-status-pill.is-active {
+  background-color: var(--positive-bg);
+  color: var(--positive);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.biometric-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.biometric-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+@media (max-width: 780px) {
+  .biometric-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
