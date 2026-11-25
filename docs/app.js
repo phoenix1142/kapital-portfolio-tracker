@@ -244,6 +244,7 @@
     const now = new Date();
     const start = startDateStr ? new Date(startDateStr) : new Date(now.getFullYear(), 0, 1);
     const end = endDateStr ? new Date(endDateStr) : new Date(now.getFullYear() + 1, 0, 1);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
 
     const msPerDay = 1000 * 60 * 60 * 24;
     const totalDays = Math.max(1, Math.round((end - start) / msPerDay));
@@ -251,17 +252,25 @@
     const elapsedDays = Math.max(0, Math.min(totalDays, elapsedDaysRaw));
     const progressPct = Math.min(100, Math.max(0, (elapsedDays / totalDays) * 100));
 
+    // Exact overlap between [start, end] and [Jan 1 of current year, today]
+    const ytdFromMs = Math.max(start.getTime(), yearStart.getTime());
+    const ytdToMs = Math.min(end.getTime(), now.getTime());
+    const ytdDays = Math.max(0, Math.round((ytdToMs - ytdFromMs) / msPerDay));
+
     const netRatePct = annualRatePct * (1 - (Number(taxPct) || 0) / 100);
     const accruedInterest = principal * (netRatePct / 100) * (elapsedDays / 365);
+    const ytdInterest = principal * (netRatePct / 100) * (ytdDays / 365);
     const fullTermInterest = principal * (netRatePct / 100) * (totalDays / 365);
     const annualPassive = principal * (netRatePct / 100);
 
     return {
       totalDays,
       elapsedDays,
+      ytdDays,
       progressPct,
       netRatePct,
       accruedInterest,
+      ytdInterest,
       fullTermInterest,
       annualPassive,
       currentTotal: principal + accruedInterest
@@ -291,23 +300,36 @@
       const stakingApy = isStaked ? (Number(pos.stakingApy) || 0) : 0;
       const stakingCompound = pos.stakingCompound !== undefined ? Boolean(pos.stakingCompound) : true;
       let stakingRewardCoins = 0;
+      let stakingYtdCoins = 0;
       let stakingElapsedDays = 0;
       let stakingAnnualCoins = 0;
 
       if (isStaked && stakingApy > 0) {
+        const now = new Date();
+        const yearStart = new Date(now.getFullYear(), 0, 1);
         const startStr = pos.stakingStartDate || pos.createdAt;
+        const startDateObj = startStr ? new Date(startStr) : now;
+        const msPerDay = 1000 * 60 * 60 * 24;
         if (startStr) {
-          const msPerDay = 1000 * 60 * 60 * 24;
-          stakingElapsedDays = Math.max(0, Math.round((new Date() - new Date(startStr)) / msPerDay));
+          stakingElapsedDays = Math.max(0, Math.round((now - startDateObj) / msPerDay));
         }
+        const ytdFromMs = Math.max(startDateObj.getTime(), yearStart.getTime());
+        const stakingYtdDays = Math.max(0, Math.round((now.getTime() - ytdFromMs) / msPerDay));
+
         const manualEarned = Number(pos.stakingEarnedCoins);
         if (!Number.isNaN(manualEarned) && manualEarned > 0) {
           stakingRewardCoins = manualEarned;
+          const ytdRatio = stakingElapsedDays > 0 ? Math.min(1, stakingYtdDays / stakingElapsedDays) : 1;
+          stakingYtdCoins = manualEarned * ytdRatio;
         } else if (stakingCompound) {
           const dailyRate = (stakingApy / 100) / 365;
           stakingRewardCoins = qty * (Math.pow(1 + dailyRate, stakingElapsedDays) - 1);
+          const daysBeforeYtd = Math.max(0, stakingElapsedDays - stakingYtdDays);
+          const coinsAtYtdStart = qty * Math.pow(1 + dailyRate, daysBeforeYtd);
+          stakingYtdCoins = coinsAtYtdStart * (Math.pow(1 + dailyRate, stakingYtdDays) - 1);
         } else {
           stakingRewardCoins = qty * (stakingApy / 100) * (stakingElapsedDays / 365);
+          stakingYtdCoins = qty * (stakingApy / 100) * (stakingYtdDays / 365);
         }
 
         if (stakingCompound) {
@@ -321,6 +343,7 @@
       const totalQty = qty + stakingRewardCoins;
       const stakingRewardUsd = stakingRewardCoins * livePriceUsd;
       const stakingRewardUah = stakingRewardUsd * rates.USD_UAH;
+      const stakingYtdUah = stakingYtdCoins * livePriceUsd * rates.USD_UAH;
       const stakingAnnualUsd = stakingAnnualCoins * livePriceUsd;
       const stakingAnnualUah = stakingAnnualUsd * rates.USD_UAH;
 
@@ -360,6 +383,7 @@
         pnlUah,
         pnlPct,
         accruedUah: stakingRewardUah,
+        ytdPassiveUah: stakingYtdUah,
         annualPassiveUah: stakingAnnualUah
       };
     }
@@ -397,6 +421,7 @@
         pnlUsd,
         pnlPct,
         accruedUah: pnlUah,
+        ytdPassiveUah: toUah(stats.ytdInterest, curr),
         annualPassiveUah: toUah(stats.annualPassive, curr)
       };
     }
@@ -435,6 +460,7 @@
         pnlUsd,
         pnlPct,
         accruedUah: pnlUah,
+        ytdPassiveUah: toUah(stats.ytdInterest, curr),
         annualPassiveUah: toUah(stats.annualPassive, curr)
       };
     }
@@ -458,6 +484,7 @@
       pnlUsd: 0,
       pnlPct: 0,
       accruedUah: 0,
+      ytdPassiveUah: 0,
       annualPassiveUah: 0
     };
   }
@@ -2791,6 +2818,7 @@
     let totalPnlUah = 0;
     let totalPnlUsd = 0;
     let totalAccruedUah = 0;
+    let totalYtdPassiveUah = 0;
     let totalAnnualPassiveUah = 0;
     let ovdpAnnualUah = 0;
     let depAnnualUah = 0;
@@ -2803,6 +2831,7 @@
       totalPnlUah += p.pnlUah;
       totalPnlUsd += p.pnlUsd;
       totalAccruedUah += p.accruedUah;
+      totalYtdPassiveUah += (p.ytdPassiveUah || 0);
       totalAnnualPassiveUah += p.annualPassiveUah;
       if (p.category === 'ovdp') ovdpAnnualUah += p.annualPassiveUah;
       else if (p.category === 'deposits') depAnnualUah += p.annualPassiveUah;
@@ -2853,14 +2882,22 @@
     document.getElementById('hero-fx-caption').textContent =
       `Курс перерахунку: 1$ = ${rates.USD_UAH.toFixed(2)} ₴ · 1€ = ${rates.EUR_UAH.toFixed(2)} ₴`;
 
+    const ytdLabelEl = document.getElementById('hero-ytd-label');
+    const ytdBarEl = document.getElementById('hero-ytd-bar');
     const yieldAccruedEl = document.getElementById('hero-yield-accrued');
     const yieldAccruedSubEl = document.getElementById('hero-yield-accrued-sub');
+    const dailyPassiveEl = document.getElementById('hero-daily-passive');
+    const dailyPassiveSubEl = document.getElementById('hero-daily-passive-sub');
     const monthlyPassiveEl = document.getElementById('hero-monthly-passive');
     const monthlyPassiveSubEl = document.getElementById('hero-monthly-passive-sub');
     const annualPassiveEl = document.getElementById('hero-annual-passive');
     const annualPassiveSubEl = document.getElementById('hero-annual-passive-sub');
     const passiveSourcesEl = document.getElementById('hero-passive-sources');
 
+    const currentYearNum = new Date().getFullYear();
+    if (ytdLabelEl) ytdLabelEl.textContent = `Зароблено з початку ${currentYearNum} р.`;
+
+    const totalDailyPassiveUah = totalAnnualPassiveUah / 365;
     const totalMonthlyPassiveUah = totalAnnualPassiveUah / 12;
     const fmtPassivePair = (uahVal) => {
       const usdVal = uahVal / rates.USD_UAH;
@@ -2873,18 +2910,30 @@
     if (isBalanceHidden) {
       if (yieldAccruedEl) yieldAccruedEl.textContent = MASK_VAL;
       if (yieldAccruedSubEl) yieldAccruedSubEl.textContent = '••••';
+      if (dailyPassiveEl) dailyPassiveEl.textContent = MASK_VAL;
+      if (dailyPassiveSubEl) dailyPassiveSubEl.textContent = '••••';
       if (monthlyPassiveEl) monthlyPassiveEl.textContent = MASK_VAL;
       if (monthlyPassiveSubEl) monthlyPassiveSubEl.textContent = '••••';
       if (annualPassiveEl) annualPassiveEl.textContent = MASK_VAL;
       if (annualPassiveSubEl) annualPassiveSubEl.textContent = '••••';
       if (passiveSourcesEl) passiveSourcesEl.textContent = 'Джерела пасивного доходу приховано';
+      if (ytdBarEl) ytdBarEl.title = `Пасивний дохід, зароблений з 1 січня ${currentYearNum} р. по сьогодні`;
     } else {
-      const todayPair = fmtPassivePair(totalAccruedUah);
+      const ytdPair = fmtPassivePair(totalYtdPassiveUah);
+      const dayPair = fmtPassivePair(totalDailyPassiveUah);
       const monthPair = fmtPassivePair(totalMonthlyPassiveUah);
       const yearPair = fmtPassivePair(totalAnnualPassiveUah);
+      const allTimeStr = state.primaryCurrency === 'UAH'
+        ? fmtUah(totalAccruedUah, true)
+        : fmtUsd(totalAccruedUah / rates.USD_UAH, true);
 
-      if (yieldAccruedEl) yieldAccruedEl.textContent = todayPair.primary;
-      if (yieldAccruedSubEl) yieldAccruedSubEl.textContent = todayPair.secondary;
+      if (yieldAccruedEl) yieldAccruedEl.textContent = ytdPair.primary;
+      if (yieldAccruedSubEl) yieldAccruedSubEl.textContent = ytdPair.secondary;
+      if (ytdBarEl) {
+        ytdBarEl.title = `Фактично зароблений пасивний дохід з 1 січня ${currentYearNum} р. по сьогодні (за весь час по активних інструментах: ${allTimeStr})`;
+      }
+      if (dailyPassiveEl) dailyPassiveEl.textContent = dayPair.primary;
+      if (dailyPassiveSubEl) dailyPassiveSubEl.textContent = dayPair.secondary;
       if (monthlyPassiveEl) monthlyPassiveEl.textContent = monthPair.primary;
       if (monthlyPassiveSubEl) monthlyPassiveSubEl.textContent = monthPair.secondary;
       if (annualPassiveEl) annualPassiveEl.textContent = yearPair.primary;

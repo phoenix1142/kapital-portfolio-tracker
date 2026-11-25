@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=44" />
+  <link rel="stylesheet" href="index.css?v=45" />
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
@@ -285,11 +285,18 @@
 
           <div class="wealth-stat-block wealth-passive-block">
             <div class="metric-eyebrow">Пасивний дохід (ОВДП + Депозити + Стейкінг)</div>
+            <div class="passive-ytd-bar" id="hero-ytd-bar" title="Фактично зароблений пасивний дохід від початку року по сьогодні">
+              <span class="passive-ytd-label" id="hero-ytd-label">Зароблено з початку року</span>
+              <span class="passive-ytd-values">
+                <strong class="passive-ytd-val" id="hero-yield-accrued">+$0.00</strong>
+                <span class="passive-ytd-sub" id="hero-yield-accrued-sub">0 ₴</span>
+              </span>
+            </div>
             <div class="passive-income-grid">
-              <div class="passive-income-tile passive-tile-today" title="Фактично накопичені відсотки на сьогодні (ОВДП + чисті відсотки депозитів + нарахований стейкінг)">
-                <span class="passive-tile-label">На сьогодні</span>
-                <span class="passive-tile-val" id="hero-yield-accrued">+$0.00</span>
-                <span class="passive-tile-sub" id="hero-yield-accrued-sub">0 ₴</span>
+              <div class="passive-income-tile" title="Орієнтовний пасивний дохід за 1 день (річний прогноз ÷ 365)">
+                <span class="passive-tile-label">За день</span>
+                <span class="passive-tile-val" id="hero-daily-passive">+$0.00</span>
+                <span class="passive-tile-sub" id="hero-daily-passive-sub">0 ₴</span>
               </div>
               <div class="passive-income-tile" title="Середньомісячний пасивний дохід (річний прогноз ÷ 12)">
                 <span class="passive-tile-label">За місяць</span>
@@ -572,6 +579,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=44"></script>
+  <script src="app.js?v=45"></script>
 </body>
 </html>

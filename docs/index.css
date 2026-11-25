@@ -653,6 +653,51 @@ body {
   gap: 7px;
 }
 
+.passive-ytd-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: rgba(16, 185, 129, 0.09);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+html[data-theme="light"] .passive-ytd-bar {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.34);
+}
+
+.passive-ytd-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--positive);
+}
+
+.passive-ytd-values {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.passive-ytd-val {
+  font-family: var(--font-mono);
+  font-size: 15.5px;
+  font-weight: 800;
+  color: var(--positive);
+  letter-spacing: -0.02em;
+}
+
+.passive-ytd-sub {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .passive-income-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -670,18 +715,8 @@ body {
   min-width: 0;
 }
 
-.passive-tile-today {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.28);
-}
-
 html[data-theme="light"] .passive-income-tile {
   background: rgba(15, 23, 42, 0.03);
-}
-
-html[data-theme="light"] .passive-tile-today {
-  background: rgba(16, 185, 129, 0.09);
-  border-color: rgba(16, 185, 129, 0.32);
 }
 
 .passive-tile-label {
@@ -693,13 +728,9 @@ html[data-theme="light"] .passive-tile-today {
   text-overflow: ellipsis;
 }
 
-.passive-tile-today .passive-tile-label {
-  color: var(--positive);
-}
-
 .passive-tile-val {
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text-primary);
@@ -707,10 +738,6 @@ html[data-theme="light"] .passive-tile-today {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.passive-tile-today .passive-tile-val {
-  color: var(--positive);
 }
 
 .passive-tile-sub {
@@ -3174,6 +3201,7 @@ html.balance-hidden .wealth-secondary-amount,
 html.balance-hidden #hero-pnl-primary,
 html.balance-hidden #hero-pnl-secondary,
 html.balance-hidden #hero-yield-accrued,
+html.balance-hidden #hero-daily-passive,
 html.balance-hidden #hero-monthly-passive,
 html.balance-hidden #hero-annual-passive {
   letter-spacing: 0.08em;
