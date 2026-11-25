@@ -1851,7 +1851,7 @@
     return null;
   }
 
-  const TOP_TICKER_WATCHLIST = [
+  const DEFAULT_TOP_TICKER_WATCHLIST = [
     { key: 'SP500', label: 'S&P 500', type: 'stocks', navCat: 'stocks', cnbc: '.SPX', tv: 'SP:SPX' },
     { key: 'VOO',   label: 'VOO (S&P 500 ETF)', type: 'stocks', navCat: 'stocks', cnbc: 'VOO', tv: 'AMEX:VOO' },
     { key: 'BTC',   label: 'Bitcoin (BTC)', type: 'crypto', navCat: 'crypto', binance: 'BTCUSDT', cnbc: 'BTC.CM=' },
@@ -1859,13 +1859,146 @@
     { key: 'BNDW',  label: 'BNDW (World Bond)', type: 'stocks', navCat: 'stocks', cnbc: 'BNDW', tv: 'NASDAQ:BNDW' },
     { key: 'GLD',   label: 'GLD (Золото)', type: 'stocks', navCat: 'stocks', cnbc: 'GLD', tv: 'AMEX:GLD' }
   ];
-  const TOP_TICKER_BY_KEY = Object.fromEntries(TOP_TICKER_WATCHLIST.map(item => [item.key, item]));
+
+  const TICKER_PRESET_CATALOG = [
+    ...DEFAULT_TOP_TICKER_WATCHLIST,
+    { key: 'NASDAQ', label: 'NASDAQ 100', type: 'stocks', navCat: 'stocks', cnbc: '.NDX', tv: 'NASDAQ:NDX' },
+    { key: 'QQQ',    label: 'QQQ (Nasdaq ETF)', type: 'stocks', navCat: 'stocks', cnbc: 'QQQ', tv: 'NASDAQ:QQQ' },
+    { key: 'SPY',    label: 'SPY (S&P 500)', type: 'stocks', navCat: 'stocks', cnbc: 'SPY', tv: 'AMEX:SPY' },
+    { key: 'VT',     label: 'VT (All-World)', type: 'stocks', navCat: 'stocks', cnbc: 'VT', tv: 'AMEX:VT' },
+    { key: 'SCHD',   label: 'SCHD (Dividend)', type: 'stocks', navCat: 'stocks', cnbc: 'SCHD', tv: 'AMEX:SCHD' },
+    { key: 'SLV',    label: 'SLV (Срібло)', type: 'stocks', navCat: 'stocks', cnbc: 'SLV', tv: 'AMEX:SLV' },
+    { key: 'TLT',    label: 'TLT (US 20Y Bond)', type: 'stocks', navCat: 'stocks', cnbc: 'TLT', tv: 'NASDAQ:TLT' },
+    { key: 'AAPL',   label: 'Apple (AAPL)', type: 'stocks', navCat: 'stocks', cnbc: 'AAPL', tv: 'NASDAQ:AAPL' },
+    { key: 'NVDA',   label: 'NVIDIA (NVDA)', type: 'stocks', navCat: 'stocks', cnbc: 'NVDA', tv: 'NASDAQ:NVDA' },
+    { key: 'MSFT',   label: 'Microsoft (MSFT)', type: 'stocks', navCat: 'stocks', cnbc: 'MSFT', tv: 'NASDAQ:MSFT' },
+    { key: 'TSLA',   label: 'Tesla (TSLA)', type: 'stocks', navCat: 'stocks', cnbc: 'TSLA', tv: 'NASDAQ:TSLA' },
+    { key: 'GOOGL',  label: 'Alphabet (GOOGL)', type: 'stocks', navCat: 'stocks', cnbc: 'GOOGL', tv: 'NASDAQ:GOOGL' },
+    { key: 'AMZN',   label: 'Amazon (AMZN)', type: 'stocks', navCat: 'stocks', cnbc: 'AMZN', tv: 'NASDAQ:AMZN' },
+    { key: 'META',   label: 'Meta (META)', type: 'stocks', navCat: 'stocks', cnbc: 'META', tv: 'NASDAQ:META' },
+    { key: 'SOL',    label: 'Solana (SOL)', type: 'crypto', navCat: 'crypto', binance: 'SOLUSDT', cnbc: 'SOL.CM=' },
+    { key: 'BNB',    label: 'BNB', type: 'crypto', navCat: 'crypto', binance: 'BNBUSDT' },
+    { key: 'XRP',    label: 'XRP', type: 'crypto', navCat: 'crypto', binance: 'XRPUSDT' },
+    { key: 'TON',    label: 'Toncoin (TON)', type: 'crypto', navCat: 'crypto', binance: 'TONUSDT' },
+    { key: 'AAVE',   label: 'Aave (AAVE)', type: 'crypto', navCat: 'crypto', binance: 'AAVEUSDT' },
+    { key: 'LINK',   label: 'Chainlink (LINK)', type: 'crypto', navCat: 'crypto', binance: 'LINKUSDT' },
+    { key: 'SUI',    label: 'Sui (SUI)', type: 'crypto', navCat: 'crypto', binance: 'SUIUSDT' },
+    { key: 'DOGE',   label: 'Dogecoin (DOGE)', type: 'crypto', navCat: 'crypto', binance: 'DOGEUSDT' },
+    { key: 'ADA',    label: 'Cardano (ADA)', type: 'crypto', navCat: 'crypto', binance: 'ADAUSDT' },
+    { key: 'AVAX',   label: 'Avalanche (AVAX)', type: 'crypto', navCat: 'crypto', binance: 'AVAXUSDT' }
+  ];
+  const TICKER_PRESET_BY_KEY = Object.fromEntries(TICKER_PRESET_CATALOG.map(item => [item.key.toUpperCase(), item]));
+
+  function normalizeTickerEntry(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const key = String(raw.key || '').trim().toUpperCase().replace(/[^A-Z0-9._-]/g, '');
+    if (!key) return null;
+    const preset = TICKER_PRESET_BY_KEY[key];
+    const type = raw.type === 'crypto' ? 'crypto' : (raw.type === 'stocks' ? 'stocks' : (preset ? preset.type : 'stocks'));
+    const label = String(raw.label || '').trim() || (preset ? preset.label : key);
+    if (type === 'crypto') {
+      const binance = String(raw.binance || (preset && preset.binance) || `${key}USDT`).toUpperCase();
+      return {
+        key,
+        label,
+        type: 'crypto',
+        navCat: 'crypto',
+        binance,
+        cnbc: raw.cnbc || (preset && preset.cnbc) || ''
+      };
+    }
+    const cnbc = String(raw.cnbc || (preset && preset.cnbc) || key);
+    const tv = String(raw.tv || (preset && preset.tv) || `NASDAQ:${key}`);
+    return {
+      key,
+      label,
+      type: 'stocks',
+      navCat: 'stocks',
+      cnbc,
+      tv
+    };
+  }
+
+  const MARKET_TICKERS_LOCAL_KEY = 'kapital_market_tickers_v1';
+
+  function getActiveTopTickers() {
+    const saved = state.settings && Array.isArray(state.settings.marketTickers)
+      ? state.settings.marketTickers.map(normalizeTickerEntry).filter(Boolean)
+      : null;
+    if (saved && saved.length > 0) return saved;
+    try {
+      const localRaw = safeGetItem(MARKET_TICKERS_LOCAL_KEY);
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.map(normalizeTickerEntry).filter(Boolean);
+          if (cleaned.length > 0) return cleaned;
+        }
+      }
+    } catch (_) {}
+    return DEFAULT_TOP_TICKER_WATCHLIST.map(item => ({ ...item }));
+  }
+
+  function getActiveTickerByKey(key) {
+    const upper = String(key || '').toUpperCase();
+    return getActiveTopTickers().find(i => i.key === upper) || TICKER_PRESET_BY_KEY[upper] || null;
+  }
+
+  function saveActiveTopTickers(nextList) {
+    const cleaned = (Array.isArray(nextList) ? nextList : [])
+      .map(normalizeTickerEntry)
+      .filter(Boolean);
+    const seen = new Set();
+    const deduped = cleaned.filter(item => {
+      if (seen.has(item.key)) return false;
+      seen.add(item.key);
+      return true;
+    });
+    const finalList = deduped.length > 0
+      ? deduped
+      : DEFAULT_TOP_TICKER_WATCHLIST.map(i => ({ ...i }));
+    if (!state.settings) state.settings = {};
+    state.settings.marketTickers = finalList;
+    safeSetItem(MARKET_TICKERS_LOCAL_KEY, JSON.stringify(finalList));
+    persistPortfolio();
+
+    const stripEl = document.getElementById('market-ticker-strip');
+    if (stripEl) stripEl.dataset.initialized = '';
+    renderMarketTickerStrip();
+    connectCryptoTickerWebSocket(true);
+    refreshTopTickerAllNow(true);
+  }
+
+  function formatSmartTickerPrice(price) {
+    const n = Number(price) || 0;
+    let maxFrac = 2;
+    let minFrac = 2;
+    if (n > 0 && n < 0.01) {
+      minFrac = 5;
+      maxFrac = 6;
+    } else if (n > 0 && n < 1) {
+      minFrac = 3;
+      maxFrac = 4;
+    }
+    return '$' + new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: minFrac,
+      maximumFractionDigits: maxFrac
+    }).format(n);
+  }
+
+  function roundSmartTickerPrice(price) {
+    const n = Number(price);
+    if (!Number.isFinite(n)) return 0;
+    if (n > 0 && n < 0.01) return Number(n.toFixed(6));
+    if (n > 0 && n < 1) return Number(n.toFixed(4));
+    return Number(n.toFixed(2));
+  }
 
   let tickerPortfolioRenderTimer = null;
   let tickerHasPendingPortfolioSync = false;
 
   function isUserEditingOrModalOpen() {
-    if (document.querySelector('.modal-overlay.open')) return true;
+    if (document.querySelector('.modal-overlay.open, .modal-backdrop.open')) return true;
     const active = document.activeElement;
     if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return true;
     return false;
@@ -1905,7 +2038,8 @@
 
     const prevPrice = Number(cur.priceUsd) || 0;
     const nextPrice = Number(patch.priceUsd);
-    const priceChanged = prevPrice > 0 && Math.abs(nextPrice - prevPrice) >= 0.005;
+    const minDelta = nextPrice < 1 ? 0.00001 : 0.005;
+    const priceChanged = prevPrice > 0 && Math.abs(nextPrice - prevPrice) >= minDelta;
     const dir = priceChanged ? (nextPrice > prevPrice ? 'up' : 'down') : '';
 
     // Keep sparkline tip synchronized with the newest live price
@@ -1941,115 +2075,124 @@
   let isFetchingTopCryptoRest = false;
   async function fetchTopTickerCryptoRest() {
     if (isFetchingTopCryptoRest) return false;
+    const cryptoItems = getActiveTopTickers().filter(item => item.type === 'crypto' && item.binance);
+    if (cryptoItems.length === 0) return false;
     isFetchingTopCryptoRest = true;
+    const binanceToItem = Object.fromEntries(cryptoItems.map(i => [i.binance.toUpperCase(), i]));
+    const resolved = new Set();
+
     try {
       // 1. Primary: Binance Vision Data API (~150ms, CORS: *, works worldwide)
+      const fetchBinanceItem = async (item) => {
+        try {
+          const res = await fetchWithTimeout(
+            `https://data-api.binance.vision/api/v3/ticker/24hr?symbol=${encodeURIComponent(item.binance)}`,
+            { cache: 'no-store' },
+            3500
+          );
+          if (!res.ok) return false;
+          const d = await res.json();
+          const price = parseFloat(d?.lastPrice);
+          const openPrice = parseFloat(d?.openPrice);
+          const chg = parseFloat(d?.priceChangePercent);
+          if (Number.isFinite(price) && price > 0) {
+            const prev = Number.isFinite(openPrice) && openPrice > 0
+              ? openPrice
+              : ((1 + (Number.isFinite(chg) ? chg : 0) / 100) > 0 ? price / (1 + chg / 100) : price);
+            applyLiveTickerQuote('crypto', item.key, {
+              name: item.label,
+              priceUsd: roundSmartTickerPrice(price),
+              prevClose: roundSmartTickerPrice(prev),
+              change24h: Number((Number.isFinite(chg) ? chg : 0).toFixed(2)),
+              source: 'Binance Live',
+              updatedAtMs: Date.now()
+            });
+            resolved.add(item.key);
+            return true;
+          }
+        } catch (_) {}
+        return false;
+      };
+
       try {
+        const symsArr = cryptoItems.map(i => i.binance);
         const res = await fetchWithTimeout(
-          'https://data-api.binance.vision/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22,%22ETHUSDT%22%5D',
+          `https://data-api.binance.vision/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symsArr))}`,
           { cache: 'no-store' },
           3500
         );
         if (res.ok) {
           const list = await res.json();
           if (Array.isArray(list) && list.length > 0) {
-            let hits = 0;
             const nowMs = Date.now();
-            for (const item of list) {
-              const sym = String(item.symbol || '').replace(/USDT$/, '').toUpperCase();
-              const price = parseFloat(item.lastPrice);
-              const openPrice = parseFloat(item.openPrice);
-              const chg = parseFloat(item.priceChangePercent);
-              if ((sym === 'BTC' || sym === 'ETH') && Number.isFinite(price) && price > 0) {
+            for (const row of list) {
+              const item = binanceToItem[String(row.symbol || '').toUpperCase()];
+              if (!item) continue;
+              const price = parseFloat(row.lastPrice);
+              const openPrice = parseFloat(row.openPrice);
+              const chg = parseFloat(row.priceChangePercent);
+              if (Number.isFinite(price) && price > 0) {
                 const prev = Number.isFinite(openPrice) && openPrice > 0
                   ? openPrice
                   : ((1 + (Number.isFinite(chg) ? chg : 0) / 100) > 0 ? price / (1 + chg / 100) : price);
-                applyLiveTickerQuote('crypto', sym, {
-                  name: sym === 'BTC' ? 'Bitcoin' : 'Ethereum',
-                  priceUsd: Number(price.toFixed(2)),
-                  prevClose: Number(prev.toFixed(2)),
+                applyLiveTickerQuote('crypto', item.key, {
+                  name: item.label,
+                  priceUsd: roundSmartTickerPrice(price),
+                  prevClose: roundSmartTickerPrice(prev),
                   change24h: Number((Number.isFinite(chg) ? chg : 0).toFixed(2)),
                   source: 'Binance Live',
                   updatedAtMs: nowMs
                 });
-                hits++;
+                resolved.add(item.key);
               }
             }
-            if (hits >= 2) return true;
+            if (resolved.size >= cryptoItems.length) return true;
           }
+        } else {
+          // If one custom ticker isn't on Binance, batch returns 400 -> fetch each individually!
+          await Promise.allSettled(cryptoItems.map(fetchBinanceItem));
+          if (resolved.size >= cryptoItems.length) return true;
         }
-      } catch (_) {}
+      } catch (_) {
+        await Promise.allSettled(cryptoItems.map(fetchBinanceItem));
+      }
 
-      // 2. Fallback: CNBC Crypto Quotes (CORS: *, ~300ms)
-      try {
-        const cnbcRes = await fetchWithTimeout(
-          `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=BTC.CM%3D%7CETH.CM%3D&requestMethod=itv&noform=1&partnerId=2&fund=1&output=json&_=${Date.now()}`,
-          { cache: 'no-store' },
-          3500
-        );
-        if (cnbcRes.ok) {
-          const cnbcJson = await cnbcRes.json();
-          const quotes = cnbcJson?.FormattedQuoteResult?.FormattedQuote || [];
-          let hits = 0;
-          const nowMs = Date.now();
-          for (const q of quotes) {
-            const sym = q.symbol === 'BTC.CM=' ? 'BTC' : (q.symbol === 'ETH.CM=' ? 'ETH' : '');
-            const parsed = sym ? extractCnbcQuoteData(q) : null;
-            if (sym && parsed) {
-              applyLiveTickerQuote('crypto', sym, { ...parsed, name: sym === 'BTC' ? 'Bitcoin' : 'Ethereum', updatedAtMs: nowMs });
-              hits++;
+      // 2. Fallback for any unresolved crypto with CNBC symbol
+      const cnbcMissing = cryptoItems.filter(i => !resolved.has(i.key) && i.cnbc);
+      if (cnbcMissing.length > 0) {
+        try {
+          const symsParam = encodeURIComponent(cnbcMissing.map(i => i.cnbc).join('|'));
+          const cnbcRes = await fetchWithTimeout(
+            `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${symsParam}&requestMethod=itv&noform=1&partnerId=2&fund=1&output=json&_=${Date.now()}`,
+            { cache: 'no-store' },
+            3500
+          );
+          if (cnbcRes.ok) {
+            const cnbcJson = await cnbcRes.json();
+            const rawList = cnbcJson?.FormattedQuoteResult?.FormattedQuote;
+            const quotes = Array.isArray(rawList) ? rawList : (rawList ? [rawList] : []);
+            const nowMs = Date.now();
+            for (const q of quotes) {
+              const item = cnbcMissing.find(i => i.cnbc.toUpperCase() === String(q.symbol || '').toUpperCase());
+              const parsed = item ? extractCnbcQuoteData(q) : null;
+              if (item && parsed) {
+                applyLiveTickerQuote('crypto', item.key, { ...parsed, name: item.label, updatedAtMs: nowMs });
+                resolved.add(item.key);
+              }
             }
           }
-          if (hits >= 2) return true;
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
 
-      // 3. Fallback: CoinGecko Simple Price (CORS: *)
-      try {
-        const cgRes = await fetchWithTimeout(
-          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true',
-          { cache: 'no-store' },
-          4000
-        );
-        if (cgRes.ok) {
-          const cg = await cgRes.json();
-          const nowMs = Date.now();
-          if (cg?.bitcoin?.usd > 0) {
-            const p = Number(cg.bitcoin.usd);
-            const chg = Number((cg.bitcoin.usd_24h_change || 0).toFixed(2));
-            applyLiveTickerQuote('crypto', 'BTC', {
-              name: 'Bitcoin',
-              priceUsd: p,
-              prevClose: (1 + chg / 100) > 0 ? Number((p / (1 + chg / 100)).toFixed(2)) : p,
-              change24h: chg,
-              source: 'CoinGecko Live',
-              updatedAtMs: nowMs
-            });
-          }
-          if (cg?.ethereum?.usd > 0) {
-            const p = Number(cg.ethereum.usd);
-            const chg = Number((cg.ethereum.usd_24h_change || 0).toFixed(2));
-            applyLiveTickerQuote('crypto', 'ETH', {
-              name: 'Ethereum',
-              priceUsd: p,
-              prevClose: (1 + chg / 100) > 0 ? Number((p / (1 + chg / 100)).toFixed(2)) : p,
-              change24h: chg,
-              source: 'CoinGecko Live',
-              updatedAtMs: nowMs
-            });
-          }
-          return true;
-        }
-      } catch (_) {}
-
-      return false;
+      return resolved.size > 0;
     } finally {
       isFetchingTopCryptoRest = false;
     }
   }
 
-  // True Real-Time Crypto WebSocket Stream (BTC & ETH live tick-by-tick push every ~1s)
+  // True Real-Time Crypto WebSocket Stream (Dynamic tick-by-tick push for ALL active crypto tickers!)
   let cryptoTickerWs = null;
+  let cryptoWsStreamsKey = '';
   let cryptoWsReconnectTimer = null;
   let cryptoWsBackoffMs = 1500;
   let lastCryptoWsTickMs = 0;
@@ -2061,18 +2204,45 @@
     cryptoWsBackoffMs = Math.min(12000, cryptoWsBackoffMs * 2);
     cryptoWsReconnectTimer = setTimeout(() => {
       cryptoWsReconnectTimer = null;
-      connectCryptoTickerWebSocket();
+      connectCryptoTickerWebSocket(false);
     }, delay);
   }
 
-  function connectCryptoTickerWebSocket() {
+  function connectCryptoTickerWebSocket(forceReconnect = false) {
     if (typeof WebSocket === 'undefined') return;
-    if (cryptoTickerWs && (cryptoTickerWs.readyState === WebSocket.OPEN || cryptoTickerWs.readyState === WebSocket.CONNECTING)) {
+    const cryptoItems = getActiveTopTickers().filter(i => i.type === 'crypto' && i.binance);
+    const streamsStr = cryptoItems.map(i => `${i.binance.toLowerCase()}@miniTicker`).join('/');
+
+    if (!streamsStr) {
+      if (cryptoTickerWs) {
+        const old = cryptoTickerWs;
+        cryptoTickerWs = null;
+        cryptoWsStreamsKey = '';
+        try { old.close(); } catch (_) {}
+      }
       return;
     }
+
+    if (
+      !forceReconnect &&
+      cryptoTickerWs &&
+      cryptoWsStreamsKey === streamsStr &&
+      (cryptoTickerWs.readyState === WebSocket.OPEN || cryptoTickerWs.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    if (cryptoTickerWs) {
+      const old = cryptoTickerWs;
+      cryptoTickerWs = null;
+      try { old.close(); } catch (_) {}
+    }
+
+    const binanceToItem = Object.fromEntries(cryptoItems.map(i => [i.binance.toUpperCase(), i]));
     try {
-      const ws = new WebSocket('wss://data-stream.binance.vision/stream?streams=btcusdt@miniTicker/ethusdt@miniTicker');
+      const ws = new WebSocket(`wss://data-stream.binance.vision/stream?streams=${streamsStr}`);
       cryptoTickerWs = ws;
+      cryptoWsStreamsKey = streamsStr;
 
       ws.onopen = () => {
         cryptoWsBackoffMs = 1500;
@@ -2083,19 +2253,19 @@
           const msg = JSON.parse(evt.data);
           const d = msg && msg.data;
           if (!d || !d.s) return;
-          const sym = String(d.s).replace(/USDT$/, '').toUpperCase();
-          if (sym !== 'BTC' && sym !== 'ETH') return;
+          const item = binanceToItem[String(d.s).toUpperCase()];
+          if (!item) return;
           const price = parseFloat(d.c);
           const open24h = parseFloat(d.o);
           if (!Number.isFinite(price) || price <= 0) return;
           const chg = (Number.isFinite(open24h) && open24h > 0)
             ? ((price - open24h) / open24h) * 100
-            : (Number(state.quotes.crypto[sym]?.change24h) || 0);
+            : (Number(state.quotes.crypto[item.key]?.change24h) || 0);
           lastCryptoWsTickMs = Date.now();
-          applyLiveTickerQuote('crypto', sym, {
-            name: sym === 'BTC' ? 'Bitcoin' : 'Ethereum',
-            priceUsd: Number(price.toFixed(2)),
-            prevClose: Number.isFinite(open24h) && open24h > 0 ? Number(open24h.toFixed(2)) : undefined,
+          applyLiveTickerQuote('crypto', item.key, {
+            name: item.label,
+            priceUsd: roundSmartTickerPrice(price),
+            prevClose: Number.isFinite(open24h) && open24h > 0 ? roundSmartTickerPrice(open24h) : undefined,
             change24h: Number(chg.toFixed(2)),
             source: 'Binance Live WS',
             updatedAtMs: lastCryptoWsTickMs
@@ -2108,27 +2278,30 @@
       };
 
       ws.onclose = () => {
-        if (cryptoTickerWs === ws) cryptoTickerWs = null;
-        scheduleCryptoWsReconnect();
+        if (cryptoTickerWs === ws) {
+          cryptoTickerWs = null;
+          scheduleCryptoWsReconnect();
+        }
       };
     } catch (_) {
       scheduleCryptoWsReconnect();
     }
   }
 
-  // Fast Real-Time Stocks / Index / ETF Snapshot (S&P 500, VOO, BNDW, GLD)
-  // Primary: CNBC Real-Time Quotes (1 request, ~250ms, CORS: *); Fallback: TradingView Scanner (CORS preflight-free)
+  // Fast Real-Time Stocks / Index / ETF Snapshot for ALL active stock tickers
+  // Primary: CNBC Real-Time Quotes (1 request, ~250ms, CORS: *); Fallback: TradingView Scanner
   let isFetchingTopStocks = false;
   async function fetchTopTickerStocks() {
     if (isFetchingTopStocks) return false;
+    const stockItems = getActiveTopTickers().filter(item => item.type === 'stocks');
+    if (stockItems.length === 0) return false;
     isFetchingTopStocks = true;
-    const stockItems = TOP_TICKER_WATCHLIST.filter(item => item.type === 'stocks');
     const cnbcToKey = Object.fromEntries(stockItems.map(item => [item.cnbc.toUpperCase(), item.key]));
     const tvToKey = Object.fromEntries(stockItems.map(item => [item.tv.toUpperCase(), item.key]));
     const resolvedKeys = new Set();
 
     try {
-      // 1. Primary: CNBC real-time quote service (direct browser CORS: *, ~250ms for all 4 tickers)
+      // 1. Primary: CNBC real-time quote service (direct browser CORS: *)
       try {
         const symsParam = encodeURIComponent(stockItems.map(i => i.cnbc).join('|'));
         const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${symsParam}&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json&events=1&_=${Date.now()}`;
@@ -2150,10 +2323,24 @@
         }
       } catch (_) {}
 
-      // 2. Fallback: TradingView Global Scanner (direct CORS, text/plain avoids preflight)
+      // 2. Fallback: TradingView Global Scanner (tries preset tv symbol + NYSE/AMEX/NASDAQ variants)
       if (resolvedKeys.size < stockItems.length) {
         try {
-          const missingTv = stockItems.filter(i => !resolvedKeys.has(i.key)).map(i => i.tv);
+          const missingItems = stockItems.filter(i => !resolvedKeys.has(i.key));
+          const missingTv = [];
+          const expandedTvToKey = { ...tvToKey };
+          missingItems.forEach(i => {
+            missingTv.push(i.tv);
+            if (!i.tv.includes(':')) return;
+            const pure = i.key;
+            ['NASDAQ', 'NYSE', 'AMEX'].forEach(ex => {
+              const cand = `${ex}:${pure}`;
+              if (!expandedTvToKey[cand]) {
+                expandedTvToKey[cand] = i.key;
+                missingTv.push(cand);
+              }
+            });
+          });
           const tvRes = await fetchWithTimeout('https://scanner.tradingview.com/global/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
@@ -2167,16 +2354,17 @@
             const rows = Array.isArray(tvJson?.data) ? tvJson.data : [];
             const nowMs = Date.now();
             for (const row of rows) {
-              const symKey = tvToKey[String(row.s || '').toUpperCase()];
+              const symKey = expandedTvToKey[String(row.s || '').toUpperCase()];
+              if (!symKey || resolvedKeys.has(symKey)) continue;
               const d = Array.isArray(row.d) ? row.d : [];
               const price = Number(d[0]);
               const chg = Number(d[1]);
-              if (symKey && Number.isFinite(price) && price > 0) {
+              if (Number.isFinite(price) && price > 0) {
                 const finalChg = Number.isFinite(chg) ? chg : 0;
                 const prev = (1 + finalChg / 100) > 0 ? price / (1 + finalChg / 100) : price;
                 applyLiveTickerQuote('stocks', symKey, {
-                  priceUsd: Number(price.toFixed(2)),
-                  prevClose: Number(prev.toFixed(2)),
+                  priceUsd: roundSmartTickerPrice(price),
+                  prevClose: roundSmartTickerPrice(prev),
                   change24h: Number(finalChg.toFixed(2)),
                   source: 'TradingView Live',
                   updatedAtMs: nowMs
@@ -2194,17 +2382,18 @@
     }
   }
 
-  // Parallel real intraday sparklines for all 6 top tickers (non-blocking)
+  // Parallel real intraday sparklines for all active top tickers (non-blocking)
   let isFetchingTopSparklines = false;
   async function fetchTopTickerSparklines() {
     if (isFetchingTopSparklines) return;
     isFetchingTopSparklines = true;
     try {
-      const tasks = TOP_TICKER_WATCHLIST.map(async (item) => {
+      const activeList = getActiveTopTickers();
+      const tasks = activeList.map(async (item) => {
         try {
           if (item.type === 'crypto' && item.binance) {
             const res = await fetchWithTimeout(
-              `https://data-api.binance.vision/api/v3/klines?symbol=${item.binance}&interval=1h&limit=24`,
+              `https://data-api.binance.vision/api/v3/klines?symbol=${encodeURIComponent(item.binance)}&interval=1h&limit=24`,
               { cache: 'no-store' },
               4000
             );
@@ -2253,7 +2442,7 @@
   async function refreshTopTickerAllNow(includeSparklines = false) {
     const tasks = [fetchTopTickerStocks(), fetchTopTickerCryptoRest()];
     if (includeSparklines) tasks.push(fetchTopTickerSparklines());
-    connectCryptoTickerWebSocket();
+    connectCryptoTickerWebSocket(false);
     await Promise.allSettled(tasks);
   }
 
@@ -2524,15 +2713,12 @@
       }
     }
 
-    const priceStr = '$' + new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(price);
-    const chgStr = `${chgSign}${chg.toFixed(2)}%`;
+    const priceStr = price > 0 ? formatSmartTickerPrice(price) : '—';
+    const chgStr = price > 0 ? `${chgSign}${chg.toFixed(2)}%` : 'Завантаження...';
     const isLive = Boolean(q.isLive);
     const sourceText = q.source ? ` • ${q.source}` : '';
-    const title = `${item.label}: ${priceStr} (${chgStr} за 24г${sourceText}) — натисніть для переходу до категорії`;
-    const sparkSig = `${isUp ? '1' : '0'}|${prevClose.toFixed(2)}|${spark.length}|${spark[0]?.toFixed?.(2) || ''}|${spark[spark.length - 1]?.toFixed?.(2) || ''}`;
+    const title = `${item.label}: ${priceStr} (${chgStr} за 24г${sourceText}) — перетягніть для зміни порядку або натисніть для переходу`;
+    const sparkSig = `${isUp ? '1' : '0'}|${prevClose.toFixed(4)}|${spark.length}|${spark[0]?.toFixed?.(4) || ''}|${spark[spark.length - 1]?.toFixed?.(4) || ''}`;
 
     return { priceStr, chgStr, chgColor, isUp, prevClose, spark, isLive, title, sparkSig };
   }
@@ -2541,7 +2727,7 @@
     const stripEl = document.getElementById('market-ticker-strip');
     if (!stripEl) return;
     const card = stripEl.querySelector(`[data-ticker-key="${key}"]`);
-    const item = TOP_TICKER_BY_KEY[key];
+    const item = getActiveTickerByKey(key);
     if (!card || !item) return;
 
     const m = getTickerDisplayModel(item);
@@ -2581,16 +2767,19 @@
     const stripEl = document.getElementById('market-ticker-strip');
     if (!stripEl) return;
 
-    // Surgical in-place update if cards are already mounted (zero flicker, preserves animations & hover)
-    if (stripEl.dataset.initialized === '1') {
-      TOP_TICKER_WATCHLIST.forEach(item => patchMarketTickerCard(item.key, ''));
+    const activeTickers = getActiveTopTickers();
+    const listSig = activeTickers.map(i => `${i.key}:${i.label}`).join('|');
+
+    // Surgical in-place update if cards are already mounted with the exact same order & labels
+    if (stripEl.dataset.initialized === '1' && stripEl.dataset.listSig === listSig) {
+      activeTickers.forEach(item => patchMarketTickerCard(item.key, ''));
       return;
     }
 
-    stripEl.innerHTML = TOP_TICKER_WATCHLIST.map(item => {
+    const cardsHtml = activeTickers.map(item => {
       const m = getTickerDisplayModel(item);
       return `
-        <div class="market-ticker-card" data-ticker-key="${item.key}" data-ticker-jump="${item.navCat}" title="${escapeHtml(m.title)}">
+        <div class="market-ticker-card" draggable="true" data-ticker-key="${escapeHtml(item.key)}" data-ticker-jump="${item.navCat}" title="${escapeHtml(m.title)}">
           <div class="market-ticker-info">
             <div class="market-ticker-head">
               <span class="market-ticker-live-dot${m.isLive ? ' is-live' : ''}"></span>
@@ -2606,14 +2795,81 @@
       `;
     }).join('');
 
-    stripEl.dataset.initialized = '1';
+    const editBtnHtml = `
+      <button type="button" class="market-ticker-edit-btn" id="btn-edit-market-tickers" title="Редагувати панель котирувань: додати, видалити або змінити порядок" aria-label="Редагувати панель котирувань">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="4" y1="6" x2="20" y2="6"/>
+          <circle cx="9" cy="6" r="2" fill="currentColor"/>
+          <line x1="4" y1="12" x2="20" y2="12"/>
+          <circle cx="15" cy="12" r="2" fill="currentColor"/>
+          <line x1="4" y1="18" x2="20" y2="18"/>
+          <circle cx="11" cy="18" r="2" fill="currentColor"/>
+        </svg>
+        <span>Змінити</span>
+      </button>
+    `;
 
-    stripEl.querySelectorAll('[data-ticker-jump]').forEach(card => {
+    stripEl.innerHTML = cardsHtml + editBtnHtml;
+    stripEl.dataset.initialized = '1';
+    stripEl.dataset.listSig = listSig;
+
+    let draggedKey = null;
+    let suppressNextClick = false;
+
+    stripEl.querySelectorAll('.market-ticker-card').forEach(card => {
+      const cardKey = card.getAttribute('data-ticker-key');
+
       card.addEventListener('click', () => {
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          return;
+        }
         const targetCat = card.getAttribute('data-ticker-jump');
         if (targetCat) setActiveCategory(targetCat);
       });
+
+      card.addEventListener('dragstart', (e) => {
+        draggedKey = cardKey;
+        card.classList.add('is-dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', cardKey || '');
+        }
+      });
+
+      card.addEventListener('dragover', (e) => {
+        if (!draggedKey || draggedKey === cardKey) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        card.classList.add('drag-over');
+      });
+
+      card.addEventListener('dragleave', () => {
+        card.classList.remove('drag-over');
+      });
+
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        card.classList.remove('drag-over');
+        if (!draggedKey || draggedKey === cardKey) return;
+        suppressNextClick = true;
+        const curList = getActiveTopTickers();
+        const fromIdx = curList.findIndex(i => i.key === draggedKey);
+        const toIdx = curList.findIndex(i => i.key === cardKey);
+        if (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) {
+          const [moved] = curList.splice(fromIdx, 1);
+          curList.splice(toIdx, 0, moved);
+          saveActiveTopTickers(curList);
+        }
+      });
+
+      card.addEventListener('dragend', () => {
+        draggedKey = null;
+        stripEl.querySelectorAll('.market-ticker-card').forEach(c => c.classList.remove('is-dragging', 'drag-over'));
+      });
     });
+
+    document.getElementById('btn-edit-market-tickers')?.addEventListener('click', openTickerEditorModal);
   }
 
   // Main UI Rendering
@@ -8728,6 +8984,222 @@
     document.getElementById('modal-passive-breakdown')?.classList.remove('open');
   }
 
+  function renderTickerEditorModal() {
+    const bodyEl = document.getElementById('ticker-editor-body');
+    if (!bodyEl) return;
+
+    const activeList = getActiveTopTickers();
+    const activeKeys = new Set(activeList.map(i => i.key));
+
+    const activeRowsHtml = activeList.map((item, idx) => {
+      const m = getTickerDisplayModel(item);
+      const typeLabel = item.type === 'crypto' ? 'Крипта' : 'Акція/ETF';
+      const typeCls = item.type === 'crypto' ? 'te-type-crypto' : 'te-type-stocks';
+      const canRemove = activeList.length > 1;
+      return `
+        <div class="te-row" draggable="true" data-te-key="${escapeHtml(item.key)}" data-te-idx="${idx}">
+          <div class="te-row-left">
+            <span class="te-drag-handle" title="Перетягніть для зміни порядку">⋮⋮</span>
+            <span class="te-type-pill ${typeCls}">${typeLabel}</span>
+            <div class="te-row-info">
+              <span class="te-row-label">${escapeHtml(item.label)}</span>
+              <span class="te-row-meta">${escapeHtml(item.key)} · ${m.priceStr}</span>
+            </div>
+          </div>
+          <div class="te-row-actions">
+            <button type="button" class="te-icon-btn" data-te-up="${idx}" ${idx === 0 ? 'disabled' : ''} title="Перемістити вище (лівіше)">↑</button>
+            <button type="button" class="te-icon-btn" data-te-down="${idx}" ${idx === activeList.length - 1 ? 'disabled' : ''} title="Перемістити нижче (правіше)">↓</button>
+            <button type="button" class="te-icon-btn te-icon-btn-del" data-te-del="${idx}" ${!canRemove ? 'disabled' : ''} title="${canRemove ? 'Видалити з панелі' : 'Має залишитись хоча б 1 актив'}">✕</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const availablePresets = TICKER_PRESET_CATALOG.filter(p => !activeKeys.has(p.key));
+    const presetsHtml = availablePresets.map(p => `
+      <button type="button" class="te-preset-chip" data-te-preset="${escapeHtml(p.key)}" title="Додати ${escapeHtml(p.label)}">
+        <span>+ ${escapeHtml(p.key)}</span>
+        <span style="opacity:0.65; font-size:10px;">${p.type === 'crypto' ? '₿' : '📈'}</span>
+      </button>
+    `).join('');
+
+    bodyEl.innerHTML = `
+      <div class="te-section-title">Активні котирування (${activeList.length}) — перетягуйте або змінюйте стрілками</div>
+      <div class="te-active-list" id="te-active-list">
+        ${activeRowsHtml}
+      </div>
+
+      <div class="te-section-title">Додати новий актив</div>
+      <form class="te-add-form" id="form-te-add" autocomplete="off">
+        <select class="form-select" id="te-add-type" aria-label="Тип активу" style="font-size:12px; padding:7px 8px;">
+          <option value="crypto">₿ Крипта</option>
+          <option value="stocks">📈 Акція / ETF</option>
+        </select>
+        <input type="text" class="form-input" id="te-add-ticker" placeholder="Тікер (SOL, NVDA...)" maxlength="14" required style="font-size:12.5px; padding:7px 9px; text-transform:uppercase;" />
+        <input type="text" class="form-input" id="te-add-label" placeholder="Підпис (необов'язково)" maxlength="30" style="font-size:12.5px; padding:7px 9px;" />
+        <button type="submit" class="btn btn-primary" style="font-size:12px; padding:7px 12px; white-space:nowrap;">+ Додати</button>
+      </form>
+      <div class="te-add-error" id="te-add-error"></div>
+
+      ${presetsHtml ? `
+        <div class="te-section-title">Швидко додати популярні</div>
+        <div class="te-presets-wrap">${presetsHtml}</div>
+      ` : ''}
+    `;
+
+    // Wire move up / down / delete buttons
+    bodyEl.querySelectorAll('[data-te-up]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.teUp);
+        if (idx <= 0) return;
+        const list = getActiveTopTickers();
+        [list[idx - 1], list[idx]] = [list[idx], list[idx - 1]];
+        saveActiveTopTickers(list);
+        renderTickerEditorModal();
+      });
+    });
+
+    bodyEl.querySelectorAll('[data-te-down]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.teDown);
+        const list = getActiveTopTickers();
+        if (idx < 0 || idx >= list.length - 1) return;
+        [list[idx], list[idx + 1]] = [list[idx + 1], list[idx]];
+        saveActiveTopTickers(list);
+        renderTickerEditorModal();
+      });
+    });
+
+    bodyEl.querySelectorAll('[data-te-del]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.teDel);
+        const list = getActiveTopTickers();
+        if (list.length <= 1 || idx < 0 || idx >= list.length) return;
+        list.splice(idx, 1);
+        saveActiveTopTickers(list);
+        renderTickerEditorModal();
+      });
+    });
+
+    // Wire Drag & Drop reordering inside modal list
+    let dragIdx = null;
+    bodyEl.querySelectorAll('.te-row').forEach(row => {
+      const idx = Number(row.dataset.teIdx);
+      row.addEventListener('dragstart', (e) => {
+        dragIdx = idx;
+        row.classList.add('is-dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(idx));
+        }
+      });
+      row.addEventListener('dragover', (e) => {
+        if (dragIdx === null || dragIdx === idx) return;
+        e.preventDefault();
+        row.classList.add('drag-over');
+      });
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drag-over');
+      });
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        if (dragIdx === null || dragIdx === idx) return;
+        const list = getActiveTopTickers();
+        const [moved] = list.splice(dragIdx, 1);
+        list.splice(idx, 0, moved);
+        dragIdx = null;
+        saveActiveTopTickers(list);
+        renderTickerEditorModal();
+      });
+      row.addEventListener('dragend', () => {
+        dragIdx = null;
+        bodyEl.querySelectorAll('.te-row').forEach(r => r.classList.remove('is-dragging', 'drag-over'));
+      });
+    });
+
+    // Wire 1-click preset chips
+    bodyEl.querySelectorAll('[data-te-preset]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const key = chip.dataset.tePreset;
+        const preset = TICKER_PRESET_BY_KEY[key];
+        if (!preset) return;
+        const list = getActiveTopTickers();
+        if (list.some(i => i.key === preset.key)) return;
+        list.push({ ...preset });
+        saveActiveTopTickers(list);
+        renderTickerEditorModal();
+      });
+    });
+
+    // Smart auto-switch type when user types a known preset ticker
+    const tickerInput = bodyEl.querySelector('#te-add-ticker');
+    const typeSelect = bodyEl.querySelector('#te-add-type');
+    const labelInput = bodyEl.querySelector('#te-add-label');
+    const errEl = bodyEl.querySelector('#te-add-error');
+
+    if (tickerInput && typeSelect) {
+      tickerInput.addEventListener('input', () => {
+        const val = tickerInput.value.trim().toUpperCase();
+        const preset = TICKER_PRESET_BY_KEY[val];
+        if (preset) {
+          typeSelect.value = preset.type;
+          if (labelInput && !labelInput.value.trim()) {
+            labelInput.placeholder = preset.label;
+          }
+        }
+        if (errEl) errEl.style.display = 'none';
+      });
+    }
+
+    // Wire custom add form
+    bodyEl.querySelector('#form-te-add')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const rawKey = (tickerInput?.value || '').trim().toUpperCase().replace(/[^A-Z0-9._-]/g, '');
+      const selType = typeSelect?.value === 'crypto' ? 'crypto' : 'stocks';
+      const customLabel = (labelInput?.value || '').trim();
+
+      if (!rawKey) {
+        if (errEl) {
+          errEl.textContent = 'Введіть коректний тікер (наприклад, SOL, NVDA, QQQ)';
+          errEl.style.display = 'block';
+        }
+        return;
+      }
+
+      const list = getActiveTopTickers();
+      if (list.some(i => i.key === rawKey)) {
+        if (errEl) {
+          errEl.textContent = `Тікер ${rawKey} вже є на панелі`;
+          errEl.style.display = 'block';
+        }
+        return;
+      }
+
+      const preset = TICKER_PRESET_BY_KEY[rawKey];
+      const entry = preset && preset.type === selType
+        ? { ...preset, label: customLabel || preset.label }
+        : normalizeTickerEntry({ key: rawKey, type: selType, label: customLabel || rawKey });
+
+      if (entry) {
+        list.push(entry);
+        saveActiveTopTickers(list);
+        renderTickerEditorModal();
+      }
+    });
+  }
+
+  function openTickerEditorModal() {
+    const modal = document.getElementById('modal-ticker-editor');
+    if (!modal) return;
+    renderTickerEditorModal();
+    modal.classList.add('open');
+  }
+
+  function closeTickerEditorModal() {
+    document.getElementById('modal-ticker-editor')?.classList.remove('open');
+  }
+
   function openLoginModal() {
     document.getElementById('modal-login').classList.add('open');
   }
@@ -8745,8 +9217,23 @@
     document.getElementById('modal-passive-breakdown')?.addEventListener('click', (e) => {
       if (e.target && e.target.id === 'modal-passive-breakdown') closePassiveBreakdownModal();
     });
+
+    // Editable top market ticker strip modal bindings
+    document.getElementById('btn-close-ticker-editor')?.addEventListener('click', closeTickerEditorModal);
+    document.getElementById('btn-done-ticker-editor')?.addEventListener('click', closeTickerEditorModal);
+    document.getElementById('btn-reset-tickers-default')?.addEventListener('click', () => {
+      saveActiveTopTickers(DEFAULT_TOP_TICKER_WATCHLIST.map(i => ({ ...i })));
+      renderTickerEditorModal();
+    });
+    document.getElementById('modal-ticker-editor')?.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'modal-ticker-editor') closeTickerEditorModal();
+    });
+
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closePassiveBreakdownModal();
+      if (e.key === 'Escape') {
+        closePassiveBreakdownModal();
+        closeTickerEditorModal();
+      }
     });
 
     // Theme toggle (syncs PWA status bar theme-color on iOS & Android too)

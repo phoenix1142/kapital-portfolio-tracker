@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=46" />
+  <link rel="stylesheet" href="index.css?v=47" />
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
@@ -575,6 +575,21 @@
     </div>
   </div>
 
+  <!-- Editable Top Market Ticker Strip Modal -->
+  <div class="modal-backdrop" id="modal-ticker-editor" role="dialog" aria-modal="true" aria-labelledby="modal-ticker-editor-title">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-ticker-editor-title">⚙️ Налаштування панелі котирувань</h2>
+        <button type="button" class="btn btn-ghost" id="btn-close-ticker-editor" aria-label="Закрити">✕</button>
+      </div>
+      <div id="ticker-editor-body"></div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn btn-ghost" id="btn-reset-tickers-default" style="font-size:12px;">↺ За замовчуванням</button>
+        <button type="button" class="btn btn-primary" id="btn-done-ticker-editor">Готово</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Login Lock Screen Modal (When requireAuth is enabled) -->
   <div class="modal-backdrop" id="modal-login" role="dialog" aria-modal="true" aria-labelledby="modal-login-title">
     <div class="modal-dialog" style="max-width: 400px;">
@@ -594,6 +609,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=46"></script>
+  <script src="app.js?v=47"></script>
 </body>
 </html>
