@@ -513,15 +513,25 @@ body {
 }
 
 .market-ticker-avg-tag {
-  color: var(--text-muted);
+  color: #60a5fa;
+  opacity: 0.85;
   font-weight: 600;
 }
 
 .market-ticker-avg-num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: #93c5fd;
+}
+
+html[data-theme="light"] .market-ticker-avg-tag {
+  color: #3b82f6;
+  opacity: 0.9;
+}
+
+html[data-theme="light"] .market-ticker-avg-num {
+  color: #2563eb;
 }
 
 .market-ticker-avg-pct {
