@@ -137,6 +137,7 @@
     activeCategory: 'all',
     primaryCurrency: 'USD',
     searchQuery: '',
+    hideTotalBalance: safeGetItem('kapital_hide_balance_v1') === '1',
     token: safeGetItem('kapital_auth_token') || '',
     settings: {
       primaryCurrency: 'USD',
@@ -2815,19 +2816,30 @@
     const pnlPrimary = document.getElementById('hero-pnl-primary');
     const pnlSecondary = document.getElementById('hero-pnl-secondary');
 
-    if (state.primaryCurrency === 'UAH') {
-      heroPrimary.textContent = fmtUah(totalUah);
-      heroSecondary.textContent = fmtUsd(totalUsd);
-      pnlPrimary.textContent = fmtUah(totalPnlUah, true);
-      pnlSecondary.textContent = fmtUsd(totalPnlUsd, true);
+    const isBalanceHidden = Boolean(state.hideTotalBalance);
+    const MASK_VAL = '••••••';
+
+    if (isBalanceHidden) {
+      heroPrimary.textContent = MASK_VAL;
+      heroSecondary.textContent = MASK_VAL;
+      pnlPrimary.textContent = MASK_VAL;
+      pnlSecondary.textContent = MASK_VAL;
+      pnlPrimary.style.color = 'var(--text-primary)';
     } else {
-      heroPrimary.textContent = fmtUsd(totalUsd);
-      heroSecondary.textContent = fmtUah(totalUah);
-      pnlPrimary.textContent = fmtUsd(totalPnlUsd, true);
-      pnlSecondary.textContent = fmtUah(totalPnlUah, true);
+      if (state.primaryCurrency === 'UAH') {
+        heroPrimary.textContent = fmtUah(totalUah);
+        heroSecondary.textContent = fmtUsd(totalUsd);
+        pnlPrimary.textContent = fmtUah(totalPnlUah, true);
+        pnlSecondary.textContent = fmtUsd(totalPnlUsd, true);
+      } else {
+        heroPrimary.textContent = fmtUsd(totalUsd);
+        heroSecondary.textContent = fmtUah(totalUah);
+        pnlPrimary.textContent = fmtUsd(totalPnlUsd, true);
+        pnlSecondary.textContent = fmtUah(totalPnlUah, true);
+      }
+      pnlPrimary.style.color = totalPnlUah >= 0 ? 'var(--positive)' : 'var(--negative)';
     }
 
-    pnlPrimary.style.color = totalPnlUah >= 0 ? 'var(--positive)' : 'var(--negative)';
     const pnlBadge = document.getElementById('hero-pnl-pct');
     pnlBadge.textContent = fmtPct(totalPnlPct, true);
     pnlBadge.className = 'pill-badge ' + (totalPnlUah >= 0 ? 'pill-positive' : 'pill-negative');
@@ -2837,7 +2849,10 @@
 
     const yieldAccruedEl = document.getElementById('hero-yield-accrued');
     const annualPassiveEl = document.getElementById('hero-annual-passive');
-    if (state.primaryCurrency === 'UAH') {
+    if (isBalanceHidden) {
+      yieldAccruedEl.textContent = MASK_VAL;
+      annualPassiveEl.textContent = MASK_VAL;
+    } else if (state.primaryCurrency === 'UAH') {
       yieldAccruedEl.textContent = fmtUah(totalAccruedUah, true);
       annualPassiveEl.textContent = fmtUah(totalAnnualPassiveUah);
     } else {
@@ -5543,9 +5558,11 @@
       if (valUah <= 0 && curr !== 'UAH' && curr !== 'USD') return;
       const valUsd = rates.USD_UAH > 0 ? valUah / rates.USD_UAH : 0;
       const pct = grandTotalUah > 0 ? (valUah / grandTotalUah) * 100 : 0;
-      const amountDisplay = isUsdPrimary
-        ? `${fmtUsd(valUsd)} · ${fmtUah(valUah)}`
-        : `${fmtUah(valUah)} · ${fmtUsd(valUsd)}`;
+      const amountDisplay = state.hideTotalBalance
+        ? '••••••'
+        : (isUsdPrimary
+            ? `${fmtUsd(valUsd)} · ${fmtUah(valUah)}`
+            : `${fmtUah(valUah)} · ${fmtUsd(valUsd)}`);
       const row = document.createElement('div');
       row.className = 'currency-row';
       row.innerHTML = `
@@ -6124,7 +6141,9 @@
     // Center text for Category Circle
     const activeCatSlice = catSlices.find(c => c.key === (hoveredCategorySlice || (circularAllocationScope !== 'all' ? circularAllocationScope : '')));
     const catCenterTop = activeCatSlice ? activeCatSlice.label : 'Увесь портфель';
-    const catCenterMain = activeCatSlice ? fmtPrimary(activeCatSlice.usd, activeCatSlice.uah) : fmtPrimary(grandTotalUsd, grandTotalUah);
+    const catCenterMain = state.hideTotalBalance
+      ? '••••••'
+      : (activeCatSlice ? fmtPrimary(activeCatSlice.usd, activeCatSlice.uah) : fmtPrimary(grandTotalUsd, grandTotalUah));
     const catCenterSub = activeCatSlice ? `${activeCatSlice.pct.toFixed(1)}% портфеля` : `100% · ${allEvaluated.length} поз.`;
 
     // Center text for Asset Circle
@@ -6133,9 +6152,11 @@
     const assetCenterTop = activeAssetSlice
       ? activeAssetSlice.code
       : (circularAllocationScope === 'all' ? 'Усі активи' : scopeMeta.shortName);
-    const assetCenterMain = activeAssetSlice
-      ? fmtPrimary(activeAssetSlice.usd, activeAssetSlice.uah)
-      : fmtPrimary(scopedTotalUsd, scopedTotalUah);
+    const assetCenterMain = state.hideTotalBalance
+      ? '••••••'
+      : (activeAssetSlice
+          ? fmtPrimary(activeAssetSlice.usd, activeAssetSlice.uah)
+          : fmtPrimary(scopedTotalUsd, scopedTotalUah));
     const assetCenterSub = activeAssetSlice
       ? (circularAllocationScope === 'all'
           ? `${activeAssetSlice.pctInTotal.toFixed(1)}% портфеля`
@@ -8311,6 +8332,35 @@
 
     const savedTheme = safeGetItem('kapital_theme');
     applyTheme(savedTheme || 'dark');
+
+    // Hide / Show Total Balance privacy toggle (persisted per device in localStorage)
+    const applyHideBalanceUi = (hidden) => {
+      state.hideTotalBalance = Boolean(hidden);
+      document.documentElement.classList.toggle('balance-hidden', state.hideTotalBalance);
+      const topBtn = document.getElementById('btn-topbar-hide-balance');
+      const heroBtn = document.getElementById('btn-hero-hide-balance');
+      const labelText = state.hideTotalBalance ? 'Показати' : 'Приховати';
+      const titleText = state.hideTotalBalance ? 'Показати загальний баланс' : 'Приховати загальний баланс';
+      if (topBtn) {
+        topBtn.setAttribute('aria-pressed', String(state.hideTotalBalance));
+        topBtn.title = titleText;
+      }
+      if (heroBtn) {
+        heroBtn.setAttribute('aria-pressed', String(state.hideTotalBalance));
+        heroBtn.title = titleText;
+        const txtEl = heroBtn.querySelector('.btn-hero-eye-text');
+        if (txtEl) txtEl.textContent = labelText;
+      }
+    };
+    const toggleHideBalance = () => {
+      const next = !state.hideTotalBalance;
+      safeSetItem('kapital_hide_balance_v1', next ? '1' : '0');
+      applyHideBalanceUi(next);
+      renderAll();
+    };
+    document.getElementById('btn-topbar-hide-balance')?.addEventListener('click', toggleHideBalance);
+    document.getElementById('btn-hero-hide-balance')?.addEventListener('click', toggleHideBalance);
+    applyHideBalanceUi(state.hideTotalBalance);
 
     // Category navigation
     document.querySelectorAll('[data-category]').forEach(btn => {

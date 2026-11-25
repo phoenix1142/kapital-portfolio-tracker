@@ -13,12 +13,15 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=39" />
+  <link rel="stylesheet" href="index.css?v=40" />
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
       if (_lk && _lk.enabled) {
         document.documentElement.classList.add('app-locked');
+      }
+      if (localStorage.getItem('kapital_hide_balance_v1') === '1') {
+        document.documentElement.classList.add('balance-hidden');
       }
     } catch (_) {}
   </script>
@@ -203,6 +206,18 @@
             <button type="button" class="seg-btn" data-currency="UAH" id="btn-curr-uah">₴ UAH + $ USD</button>
           </div>
 
+          <button type="button" class="btn btn-secondary btn-eye-toggle" id="btn-topbar-hide-balance" title="Приховати загальний баланс" aria-label="Приховати або показати загальний баланс" aria-pressed="false">
+            <svg class="eye-icon-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg class="eye-icon-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
+
           <button type="button" class="btn btn-secondary mobile-only-btn" id="btn-mobile-theme-toggle" title="Змінити тему" aria-label="Перемкнути тему">
             ◐
           </button>
@@ -235,8 +250,20 @@
         <!-- Hero Dual-Currency Summary Strip -->
         <section class="wealth-hero" aria-label="Підсумок капіталу">
           <div class="wealth-primary-block">
-            <div class="metric-eyebrow">
+            <div class="metric-eyebrow metric-eyebrow-row">
               <span id="hero-scope-label">Сукупний капітал (Усі активи)</span>
+              <button type="button" class="btn-hero-eye" id="btn-hero-hide-balance" title="Приховати загальний баланс" aria-label="Приховати або показати загальний баланс" aria-pressed="false">
+                <svg class="eye-icon-open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-icon-closed" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+                <span class="btn-hero-eye-text">Приховати</span>
+              </button>
             </div>
             <div class="wealth-dual-values">
               <div class="wealth-main-amount" id="hero-primary-total">$0.00</div>
@@ -531,6 +558,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=39"></script>
+  <script src="app.js?v=40"></script>
 </body>
 </html>

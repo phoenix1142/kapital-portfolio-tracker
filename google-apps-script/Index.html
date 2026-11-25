@@ -2670,12 +2670,84 @@ html.app-locked .biometric-lock-screen {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Hide Total Balance Privacy Toggle */
+.metric-eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-hero-eye {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.btn-hero-eye:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background-color: var(--bg-subtle);
+}
+
+.btn-eye-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 9px;
+}
+
+.eye-icon-closed {
+  display: none;
+}
+
+html.balance-hidden .eye-icon-open {
+  display: none;
+}
+
+html.balance-hidden .eye-icon-closed {
+  display: inline-block;
+}
+
+html.balance-hidden .btn-hero-eye,
+html.balance-hidden .btn-eye-toggle {
+  border-color: var(--accent-primary);
+  background-color: var(--accent-primary-soft);
+  color: var(--accent-primary);
+}
+
+html.balance-hidden .wealth-main-amount,
+html.balance-hidden .wealth-secondary-amount,
+html.balance-hidden #hero-pnl-primary,
+html.balance-hidden #hero-pnl-secondary,
+html.balance-hidden #hero-yield-accrued,
+html.balance-hidden #hero-annual-passive {
+  letter-spacing: 0.08em;
+}
 </style>
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
       if (_lk && _lk.enabled) {
         document.documentElement.classList.add('app-locked');
+      }
+      if (localStorage.getItem('kapital_hide_balance_v1') === '1') {
+        document.documentElement.classList.add('balance-hidden');
       }
     } catch (_) {}
   </script>
@@ -2860,6 +2932,18 @@ html.app-locked .biometric-lock-screen {
             <button type="button" class="seg-btn" data-currency="UAH" id="btn-curr-uah">₴ UAH + $ USD</button>
           </div>
 
+          <button type="button" class="btn btn-secondary btn-eye-toggle" id="btn-topbar-hide-balance" title="Приховати загальний баланс" aria-label="Приховати або показати загальний баланс" aria-pressed="false">
+            <svg class="eye-icon-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg class="eye-icon-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
+
           <button type="button" class="btn btn-secondary mobile-only-btn" id="btn-mobile-theme-toggle" title="Змінити тему" aria-label="Перемкнути тему">
             ◐
           </button>
@@ -2892,8 +2976,20 @@ html.app-locked .biometric-lock-screen {
         <!-- Hero Dual-Currency Summary Strip -->
         <section class="wealth-hero" aria-label="Підсумок капіталу">
           <div class="wealth-primary-block">
-            <div class="metric-eyebrow">
+            <div class="metric-eyebrow metric-eyebrow-row">
               <span id="hero-scope-label">Сукупний капітал (Усі активи)</span>
+              <button type="button" class="btn-hero-eye" id="btn-hero-hide-balance" title="Приховати загальний баланс" aria-label="Приховати або показати загальний баланс" aria-pressed="false">
+                <svg class="eye-icon-open" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-icon-closed" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+                <span class="btn-hero-eye-text">Приховати</span>
+              </button>
             </div>
             <div class="wealth-dual-values">
               <div class="wealth-main-amount" id="hero-primary-total">$0.00</div>
@@ -3328,6 +3424,7 @@ html.app-locked .biometric-lock-screen {
     activeCategory: 'all',
     primaryCurrency: 'USD',
     searchQuery: '',
+    hideTotalBalance: safeGetItem('kapital_hide_balance_v1') === '1',
     token: safeGetItem('kapital_auth_token') || '',
     settings: {
       primaryCurrency: 'USD',
@@ -6006,19 +6103,30 @@ html.app-locked .biometric-lock-screen {
     const pnlPrimary = document.getElementById('hero-pnl-primary');
     const pnlSecondary = document.getElementById('hero-pnl-secondary');
 
-    if (state.primaryCurrency === 'UAH') {
-      heroPrimary.textContent = fmtUah(totalUah);
-      heroSecondary.textContent = fmtUsd(totalUsd);
-      pnlPrimary.textContent = fmtUah(totalPnlUah, true);
-      pnlSecondary.textContent = fmtUsd(totalPnlUsd, true);
+    const isBalanceHidden = Boolean(state.hideTotalBalance);
+    const MASK_VAL = '••••••';
+
+    if (isBalanceHidden) {
+      heroPrimary.textContent = MASK_VAL;
+      heroSecondary.textContent = MASK_VAL;
+      pnlPrimary.textContent = MASK_VAL;
+      pnlSecondary.textContent = MASK_VAL;
+      pnlPrimary.style.color = 'var(--text-primary)';
     } else {
-      heroPrimary.textContent = fmtUsd(totalUsd);
-      heroSecondary.textContent = fmtUah(totalUah);
-      pnlPrimary.textContent = fmtUsd(totalPnlUsd, true);
-      pnlSecondary.textContent = fmtUah(totalPnlUah, true);
+      if (state.primaryCurrency === 'UAH') {
+        heroPrimary.textContent = fmtUah(totalUah);
+        heroSecondary.textContent = fmtUsd(totalUsd);
+        pnlPrimary.textContent = fmtUah(totalPnlUah, true);
+        pnlSecondary.textContent = fmtUsd(totalPnlUsd, true);
+      } else {
+        heroPrimary.textContent = fmtUsd(totalUsd);
+        heroSecondary.textContent = fmtUah(totalUah);
+        pnlPrimary.textContent = fmtUsd(totalPnlUsd, true);
+        pnlSecondary.textContent = fmtUah(totalPnlUah, true);
+      }
+      pnlPrimary.style.color = totalPnlUah >= 0 ? 'var(--positive)' : 'var(--negative)';
     }
 
-    pnlPrimary.style.color = totalPnlUah >= 0 ? 'var(--positive)' : 'var(--negative)';
     const pnlBadge = document.getElementById('hero-pnl-pct');
     pnlBadge.textContent = fmtPct(totalPnlPct, true);
     pnlBadge.className = 'pill-badge ' + (totalPnlUah >= 0 ? 'pill-positive' : 'pill-negative');
@@ -6028,7 +6136,10 @@ html.app-locked .biometric-lock-screen {
 
     const yieldAccruedEl = document.getElementById('hero-yield-accrued');
     const annualPassiveEl = document.getElementById('hero-annual-passive');
-    if (state.primaryCurrency === 'UAH') {
+    if (isBalanceHidden) {
+      yieldAccruedEl.textContent = MASK_VAL;
+      annualPassiveEl.textContent = MASK_VAL;
+    } else if (state.primaryCurrency === 'UAH') {
       yieldAccruedEl.textContent = fmtUah(totalAccruedUah, true);
       annualPassiveEl.textContent = fmtUah(totalAnnualPassiveUah);
     } else {
@@ -8734,9 +8845,11 @@ html.app-locked .biometric-lock-screen {
       if (valUah <= 0 && curr !== 'UAH' && curr !== 'USD') return;
       const valUsd = rates.USD_UAH > 0 ? valUah / rates.USD_UAH : 0;
       const pct = grandTotalUah > 0 ? (valUah / grandTotalUah) * 100 : 0;
-      const amountDisplay = isUsdPrimary
-        ? `${fmtUsd(valUsd)} · ${fmtUah(valUah)}`
-        : `${fmtUah(valUah)} · ${fmtUsd(valUsd)}`;
+      const amountDisplay = state.hideTotalBalance
+        ? '••••••'
+        : (isUsdPrimary
+            ? `${fmtUsd(valUsd)} · ${fmtUah(valUah)}`
+            : `${fmtUah(valUah)} · ${fmtUsd(valUsd)}`);
       const row = document.createElement('div');
       row.className = 'currency-row';
       row.innerHTML = `
@@ -9315,7 +9428,9 @@ html.app-locked .biometric-lock-screen {
     // Center text for Category Circle
     const activeCatSlice = catSlices.find(c => c.key === (hoveredCategorySlice || (circularAllocationScope !== 'all' ? circularAllocationScope : '')));
     const catCenterTop = activeCatSlice ? activeCatSlice.label : 'Увесь портфель';
-    const catCenterMain = activeCatSlice ? fmtPrimary(activeCatSlice.usd, activeCatSlice.uah) : fmtPrimary(grandTotalUsd, grandTotalUah);
+    const catCenterMain = state.hideTotalBalance
+      ? '••••••'
+      : (activeCatSlice ? fmtPrimary(activeCatSlice.usd, activeCatSlice.uah) : fmtPrimary(grandTotalUsd, grandTotalUah));
     const catCenterSub = activeCatSlice ? `${activeCatSlice.pct.toFixed(1)}% портфеля` : `100% · ${allEvaluated.length} поз.`;
 
     // Center text for Asset Circle
@@ -9324,9 +9439,11 @@ html.app-locked .biometric-lock-screen {
     const assetCenterTop = activeAssetSlice
       ? activeAssetSlice.code
       : (circularAllocationScope === 'all' ? 'Усі активи' : scopeMeta.shortName);
-    const assetCenterMain = activeAssetSlice
-      ? fmtPrimary(activeAssetSlice.usd, activeAssetSlice.uah)
-      : fmtPrimary(scopedTotalUsd, scopedTotalUah);
+    const assetCenterMain = state.hideTotalBalance
+      ? '••••••'
+      : (activeAssetSlice
+          ? fmtPrimary(activeAssetSlice.usd, activeAssetSlice.uah)
+          : fmtPrimary(scopedTotalUsd, scopedTotalUah));
     const assetCenterSub = activeAssetSlice
       ? (circularAllocationScope === 'all'
           ? `${activeAssetSlice.pctInTotal.toFixed(1)}% портфеля`
@@ -11502,6 +11619,35 @@ html.app-locked .biometric-lock-screen {
 
     const savedTheme = safeGetItem('kapital_theme');
     applyTheme(savedTheme || 'dark');
+
+    // Hide / Show Total Balance privacy toggle (persisted per device in localStorage)
+    const applyHideBalanceUi = (hidden) => {
+      state.hideTotalBalance = Boolean(hidden);
+      document.documentElement.classList.toggle('balance-hidden', state.hideTotalBalance);
+      const topBtn = document.getElementById('btn-topbar-hide-balance');
+      const heroBtn = document.getElementById('btn-hero-hide-balance');
+      const labelText = state.hideTotalBalance ? 'Показати' : 'Приховати';
+      const titleText = state.hideTotalBalance ? 'Показати загальний баланс' : 'Приховати загальний баланс';
+      if (topBtn) {
+        topBtn.setAttribute('aria-pressed', String(state.hideTotalBalance));
+        topBtn.title = titleText;
+      }
+      if (heroBtn) {
+        heroBtn.setAttribute('aria-pressed', String(state.hideTotalBalance));
+        heroBtn.title = titleText;
+        const txtEl = heroBtn.querySelector('.btn-hero-eye-text');
+        if (txtEl) txtEl.textContent = labelText;
+      }
+    };
+    const toggleHideBalance = () => {
+      const next = !state.hideTotalBalance;
+      safeSetItem('kapital_hide_balance_v1', next ? '1' : '0');
+      applyHideBalanceUi(next);
+      renderAll();
+    };
+    document.getElementById('btn-topbar-hide-balance')?.addEventListener('click', toggleHideBalance);
+    document.getElementById('btn-hero-hide-balance')?.addEventListener('click', toggleHideBalance);
+    applyHideBalanceUi(state.hideTotalBalance);
 
     // Category navigation
     document.querySelectorAll('[data-category]').forEach(btn => {

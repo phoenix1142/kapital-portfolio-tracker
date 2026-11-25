@@ -2655,4 +2655,74 @@ html.app-locked .biometric-lock-screen {
   }
 }
 
+/* Hide Total Balance Privacy Toggle */
+.metric-eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-hero-eye {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.btn-hero-eye:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background-color: var(--bg-subtle);
+}
+
+.btn-eye-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 9px;
+}
+
+.eye-icon-closed {
+  display: none;
+}
+
+html.balance-hidden .eye-icon-open {
+  display: none;
+}
+
+html.balance-hidden .eye-icon-closed {
+  display: inline-block;
+}
+
+html.balance-hidden .btn-hero-eye,
+html.balance-hidden .btn-eye-toggle {
+  border-color: var(--accent-primary);
+  background-color: var(--accent-primary-soft);
+  color: var(--accent-primary);
+}
+
+html.balance-hidden .wealth-main-amount,
+html.balance-hidden .wealth-secondary-amount,
+html.balance-hidden #hero-pnl-primary,
+html.balance-hidden #hero-pnl-secondary,
+html.balance-hidden #hero-yield-accrued,
+html.balance-hidden #hero-annual-passive {
+  letter-spacing: 0.08em;
+}
+
+
 
