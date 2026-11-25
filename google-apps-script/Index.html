@@ -2397,7 +2397,7 @@ html[data-theme="light"] .pos-price-tag-avg {
   flex-direction: column;
   justify-content: space-between;
   height: 230px;
-  padding-top: 14px;
+  padding-top: 22px;
   padding-right: 6px;
   border-right: 1px solid var(--border-default);
   text-align: right;
@@ -2421,10 +2421,10 @@ html[data-theme="light"] .pos-price-tag-avg {
 
 .forecast-grid-lines {
   position: absolute;
-  top: 14px;
+  top: 22px;
   left: 0;
   right: 0;
-  height: 216px;
+  height: 208px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -2435,6 +2435,240 @@ html[data-theme="light"] .pos-price-tag-avg {
 .forecast-grid-line {
   width: 100%;
   border-top: 1px dashed rgba(148, 163, 184, 0.16);
+}
+
+.forecast-goal-overlay {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  right: 0;
+  height: 208px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.forecast-goal-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px dashed rgba(251, 191, 36, 0.9);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.25);
+}
+
+.forecast-goal-line-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #fbbf24;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme="light"] .forecast-goal-line-badge {
+  background: rgba(255, 251, 235, 0.95);
+  color: #b45309;
+  border-color: rgba(217, 119, 6, 0.5);
+}
+
+.forecast-compare-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.forecast-goal-pin {
+  position: absolute;
+  transform: translate(-50%, 50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 4;
+}
+
+.forecast-goal-pin-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #10b981;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.forecast-goal-pin.is-primary .forecast-goal-pin-dot,
+.forecast-goal-pin.is-hold .forecast-goal-pin-dot {
+  background: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.forecast-goal-pin-tag {
+  position: absolute;
+  bottom: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  color: #34d399;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(16, 185, 129, 0.55);
+  border-radius: 6px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+}
+
+.forecast-goal-pin.is-primary .forecast-goal-pin-tag,
+.forecast-goal-pin.is-hold .forecast-goal-pin-tag {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.5);
+  bottom: auto;
+  top: 14px;
+}
+
+html[data-theme="light"] .forecast-goal-pin-tag {
+  background: rgba(255, 255, 255, 0.96);
+  color: #047857;
+}
+
+html[data-theme="light"] .forecast-goal-pin.is-primary .forecast-goal-pin-tag,
+html[data-theme="light"] .forecast-goal-pin.is-hold .forecast-goal-pin-tag {
+  color: #b45309;
+}
+
+.forecast-goal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: rgba(251, 191, 36, 0.05);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  border-radius: 9px;
+  margin-bottom: 14px;
+}
+
+.forecast-goal-input-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.forecast-goal-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.forecast-goal-presets .chip-btn {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+.forecast-goal-panel {
+  background: var(--bg-surface);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.forecast-goal-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.forecast-goal-progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.forecast-goal-progress-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  overflow: visible;
+}
+
+.forecast-goal-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #10b981, #fbbf24);
+  transition: width 0.25s ease;
+}
+
+.forecast-goal-progress-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: #fbbf24;
+  border: 2px solid var(--bg-surface);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.45);
+}
+
+.forecast-goal-scenarios {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.forecast-goal-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.forecast-goal-card.is-dca {
+  border-color: rgba(16, 185, 129, 0.36);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.forecast-goal-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.forecast-goal-card-val {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.forecast-goal-card.is-dca .forecast-goal-card-val strong {
+  color: var(--positive);
+}
+
+.forecast-goal-card-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .forecast-bars-grid {
@@ -2466,6 +2700,14 @@ html[data-theme="light"] .pos-price-tag-avg {
   background: rgba(56, 189, 248, 0.08);
 }
 
+.forecast-bar-col.is-now-bar .forecast-bar-stack {
+  box-shadow: 0 0 0 1.5px #fbbf24, 0 2px 8px rgba(251, 191, 36, 0.3);
+}
+
+.forecast-bar-col.is-goal-hit .forecast-bar-stack {
+  box-shadow: 0 0 0 1.5px #10b981, 0 2px 10px rgba(16, 185, 129, 0.35);
+}
+
 .forecast-bar-top-val {
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -2485,6 +2727,7 @@ html[data-theme="light"] .pos-price-tag-avg {
 .forecast-bar-stack {
   width: 100%;
   max-width: 24px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column-reverse;
   border-radius: 4px 4px 0 0;
@@ -2535,6 +2778,16 @@ html[data-theme="light"] .pos-price-tag-avg {
   flex-wrap: wrap;
   gap: 10px;
   font-size: 12.5px;
+}
+
+@media (max-width: 680px) {
+  .forecast-goal-scenarios {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .forecast-goal-pin-tag {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
 }
 
 /* Shared Toolbar, Filter Pills & KPI Summary Strip (used by Purchase History, etc.) */
@@ -5292,7 +5545,10 @@ html.balance-hidden #hero-annual-passive {
     forecastEquitiesCagr: 8.0, // Консервативний складний ріст акцій (% річних у USD)
     forecastBondsCagr: 4.2,    // Консервативний складний ріст облігацій (% річних у USD)
     forecastMetalsCagr: 5.0,   // Консервативний складний ріст золота/срібла (% річних у USD)
-    forecastIncludeMonthly: false // false = тільки те, що вже є (без нових вкладень), true = + щомісячні інвестиції
+    forecastIncludeMonthly: false, // false = тільки те, що вже є (без нових вкладень), true = + щомісячні інвестиції
+    forecastGoalAmount: 0,     // Ціль капіталу для фондового портфеля (0 = не задано)
+    forecastGoalCurrency: 'USD', // 'USD' | 'UAH'
+    forecastMonthlyAdd: null   // Фіксована сума інвестицій/міс ($) у блоці 4 (null = брати з калькулятора)
   };
 
   const state = {
@@ -10165,7 +10421,12 @@ html.balance-hidden #hero-annual-passive {
       forecastEquitiesCagr: s.forecastEquitiesCagr !== undefined ? Number(s.forecastEquitiesCagr) : 8.0,
       forecastBondsCagr: s.forecastBondsCagr !== undefined ? Number(s.forecastBondsCagr) : 4.2,
       forecastMetalsCagr: s.forecastMetalsCagr !== undefined ? Number(s.forecastMetalsCagr) : 5.0,
-      forecastIncludeMonthly: Boolean(s.forecastIncludeMonthly)
+      forecastIncludeMonthly: Boolean(s.forecastIncludeMonthly),
+      forecastGoalAmount: s.forecastGoalAmount !== undefined ? Math.max(0, Number(s.forecastGoalAmount) || 0) : 0,
+      forecastGoalCurrency: s.forecastGoalCurrency === 'UAH' ? 'UAH' : 'USD',
+      forecastMonthlyAdd: (s.forecastMonthlyAdd !== undefined && s.forecastMonthlyAdd !== null && s.forecastMonthlyAdd !== '')
+        ? Math.max(0, Number(s.forecastMonthlyAdd) || 0)
+        : null
     };
   }
 
@@ -11114,6 +11375,10 @@ html.balance-hidden #hero-annual-passive {
     const strat = getStockStrategy();
     const isFocusedInside = document.activeElement && forecastBox.contains(document.activeElement);
 
+    const effectiveMonthlyAddUsd = strat.forecastMonthlyAdd !== null
+      ? strat.forecastMonthlyAdd
+      : monthlyInvestUsd;
+
     if (!forecastBox.dataset.initialized || !isFocusedInside) {
       forecastBox.dataset.initialized = 'true';
       forecastBox.innerHTML = `
@@ -11158,9 +11423,53 @@ html.balance-hidden #hero-annual-passive {
                 🔒 Тільки те, що вже є (Без вкладень)
               </button>
               <button type="button" class="mode-switch-btn ${strat.forecastIncludeMonthly ? 'active' : ''}" id="btn-forecast-with-monthly" style="padding:5px 10px; font-size:11.5px;">
-                ➕ З урахуванням щомісячних +${fmtUsd(monthlyInvestUsd)}/міс
+                ➕ З урахуванням щомісячних +${fmtUsd(effectiveMonthlyAddUsd)}/міс
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- Goal & Fixed Monthly Investment Planner Bar -->
+        <div class="forecast-goal-bar">
+          <div class="forecast-goal-input-group">
+            <label for="forecast-goal-amount" style="font-size:12px; font-weight:700; color:#fbbf24; white-space:nowrap;">🎯 Моя ціль капіталу:</label>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              id="forecast-goal-amount"
+              class="ticker-pct-inline-input tabular"
+              style="width:118px; text-align:left; padding:5px 8px;"
+              placeholder="напр. 100000"
+              value="${strat.forecastGoalAmount > 0 ? strat.forecastGoalAmount : ''}"
+            />
+            <select id="forecast-goal-curr" class="form-select" style="width:auto; padding:4px 8px; font-size:12px; min-height:29px;" aria-label="Валюта цілі">
+              <option value="USD" ${strat.forecastGoalCurrency === 'USD' ? 'selected' : ''}>$ USD</option>
+              <option value="UAH" ${strat.forecastGoalCurrency === 'UAH' ? 'selected' : ''}>₴ UAH</option>
+            </select>
+            <div class="forecast-goal-presets">
+              <button type="button" class="chip-btn" data-goal-preset="50000">$50K</button>
+              <button type="button" class="chip-btn" data-goal-preset="100000">$100K</button>
+              <button type="button" class="chip-btn" data-goal-preset="250000">$250K</button>
+              <button type="button" class="chip-btn" data-goal-preset="500000">$500K</button>
+              <button type="button" class="chip-btn" data-goal-preset="1000000">$1M</button>
+              <button type="button" class="chip-btn" id="btn-forecast-goal-clear" title="Очистити ціль" style="padding:3px 7px;">✕</button>
+            </div>
+          </div>
+
+          <div class="forecast-goal-input-group">
+            <label for="forecast-monthly-add" style="font-size:12px; font-weight:700; color:var(--positive); white-space:nowrap;">💵 Фіксовано в місяць ($):</label>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              id="forecast-monthly-add"
+              class="ticker-pct-inline-input tabular"
+              style="width:94px; text-align:left; padding:5px 8px;"
+              placeholder="напр. 500"
+              value="${effectiveMonthlyAddUsd > 0 ? Math.round(effectiveMonthlyAddUsd) : ''}"
+            />
+            <span style="font-size:11.5px; color:var(--text-muted); white-space:nowrap;">$/міс</span>
           </div>
         </div>
 
@@ -11170,6 +11479,14 @@ html.balance-hidden #hero-annual-passive {
       const eqCagrInp = document.getElementById('forecast-cagr-equities');
       const bdCagrInp = document.getElementById('forecast-cagr-bonds');
       const mtCagrInp = document.getElementById('forecast-cagr-metals');
+      const goalAmtInp = document.getElementById('forecast-goal-amount');
+      const goalCurrSel = document.getElementById('forecast-goal-curr');
+      const monthlyAddInp = document.getElementById('forecast-monthly-add');
+
+      const syncMonthlyBtnCaption = (valUsd) => {
+        const mb = document.getElementById('btn-forecast-with-monthly');
+        if (mb) mb.textContent = `➕ З урахуванням щомісячних +${fmtUsd(valUsd)}/міс`;
+      };
 
       const onForecastCagrInput = () => {
         const s = getStockStrategy();
@@ -11181,8 +11498,40 @@ html.balance-hidden #hero-annual-passive {
         updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
       };
 
+      const onGoalOrMonthlyInput = () => {
+        const s = getStockStrategy();
+        s.forecastGoalAmount = Math.max(0, parseFloat(goalAmtInp?.value) || 0);
+        s.forecastGoalCurrency = goalCurrSel?.value === 'UAH' ? 'UAH' : 'USD';
+        const rawMonthly = monthlyAddInp?.value;
+        s.forecastMonthlyAdd = (rawMonthly === '' || rawMonthly === undefined || rawMonthly === null)
+          ? 0
+          : Math.max(0, parseFloat(rawMonthly) || 0);
+        state.settings.stockStrategy = s;
+        syncMonthlyBtnCaption(s.forecastMonthlyAdd);
+        schedulePersistStrategy();
+        updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
+      };
+
       [eqCagrInp, bdCagrInp, mtCagrInp].forEach(inp => {
         inp?.addEventListener('input', onForecastCagrInput);
+      });
+
+      goalAmtInp?.addEventListener('input', onGoalOrMonthlyInput);
+      goalCurrSel?.addEventListener('change', onGoalOrMonthlyInput);
+      monthlyAddInp?.addEventListener('input', onGoalOrMonthlyInput);
+
+      forecastBox.querySelectorAll('[data-goal-preset]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const val = Number(btn.dataset.goalPreset) || 0;
+          if (goalCurrSel) goalCurrSel.value = 'USD';
+          if (goalAmtInp) goalAmtInp.value = String(val);
+          onGoalOrMonthlyInput();
+        });
+      });
+
+      document.getElementById('btn-forecast-goal-clear')?.addEventListener('click', () => {
+        if (goalAmtInp) goalAmtInp.value = '';
+        onGoalOrMonthlyInput();
       });
 
       forecastBox.querySelectorAll('[data-forecast-preset]').forEach(btn => {
@@ -11215,10 +11564,9 @@ html.balance-hidden #hero-annual-passive {
         updateStockForecastDynamicView(classValUsd, weights, monthlyInvestUsd);
       });
     } else {
-      // Update button caption for monthly amount if user changed investAmount
       const monthlyBtn = document.getElementById('btn-forecast-with-monthly');
       if (monthlyBtn) {
-        monthlyBtn.textContent = `➕ З урахуванням щомісячних +${fmtUsd(monthlyInvestUsd)}/міс`;
+        monthlyBtn.textContent = `➕ З урахуванням щомісячних +${fmtUsd(effectiveMonthlyAddUsd)}/міс`;
       }
     }
 
@@ -11236,16 +11584,20 @@ html.balance-hidden #hero-annual-passive {
     const rMt = Math.max(0, Number(strat.forecastMetalsCagr) || 0) / 100;
     const includeMonthly = Boolean(strat.forecastIncludeMonthly);
 
+    const fixedMonthlyUsd = strat.forecastMonthlyAdd !== null
+      ? Math.max(0, Number(strat.forecastMonthlyAdd) || 0)
+      : Math.max(0, Number(monthlyInvestUsd) || 0);
+
+    const rawGoalAmt = Math.max(0, Number(strat.forecastGoalAmount) || 0);
+    const goalUsd = rawGoalAmt > 0
+      ? (strat.forecastGoalCurrency === 'UAH' ? rawGoalAmt / rates.USD_UAH : rawGoalAmt)
+      : 0;
+    const goalUah = goalUsd * rates.USD_UAH;
+
     const startEq = classValUsd.equities || 0;
     const startBd = classValUsd.bonds || 0;
     const startMt = classValUsd.metals || 0;
     const startTotal = startEq + startBd + startMt;
-
-    // Annual contribution per class if monthly investing is enabled
-    const annualAddTotal = includeMonthly ? (monthlyInvestUsd * 12) : 0;
-    const annualAddEq = annualAddTotal * (weights.equities || 0);
-    const annualAddBd = annualAddTotal * (weights.bonds || 0);
-    const annualAddMt = annualAddTotal * (weights.metals || 0);
 
     // Helper for compound growth of initial lump sum + optional monthly DCA compounded monthly
     function projectClassValue(v0, annualRate, annualContribution, years) {
@@ -11261,36 +11613,107 @@ html.balance-hidden #hero-annual-passive {
       return lumpSumFuture + dcaFuture;
     }
 
-    const currentCalendarYear = new Date().getFullYear();
-    const timeline = [];
+    const currentDate = new Date();
+    const currentCalendarYear = currentDate.getFullYear();
+    const currentMonthIdx = currentDate.getMonth();
 
-    for (let y = 0; y <= 25; y++) {
-      const eqUsd = projectClassValue(startEq, rEq, annualAddEq, y);
-      const bdUsd = projectClassValue(startBd, rBd, annualAddBd, y);
-      const mtUsd = projectClassValue(startMt, rMt, annualAddMt, y);
-      const totalUsd = eqUsd + bdUsd + mtUsd;
-      const contributedUsd = startTotal + (annualAddTotal * y);
-      const compoundProfitUsd = Math.max(0, totalUsd - contributedUsd);
-      const multiplier = contributedUsd > 0 ? (totalUsd / contributedUsd) : (startTotal > 0 ? totalUsd / startTotal : 1);
-
-      timeline.push({
-        yearOffset: y,
-        calendarYear: currentCalendarYear + y,
-        eqUsd,
-        bdUsd,
-        mtUsd,
-        totalUsd,
-        totalUah: totalUsd * rates.USD_UAH,
-        contributedUsd,
-        compoundProfitUsd,
-        compoundProfitUah: compoundProfitUsd * rates.USD_UAH,
-        multiplier
-      });
+    function build25YearTimeline(monthlyAdd) {
+      const annualAddTotal = Math.max(0, monthlyAdd) * 12;
+      const annualAddEq = annualAddTotal * (weights.equities || 0);
+      const annualAddBd = annualAddTotal * (weights.bonds || 0);
+      const annualAddMt = annualAddTotal * (weights.metals || 0);
+      const arr = [];
+      for (let y = 0; y <= 25; y++) {
+        const eqUsd = projectClassValue(startEq, rEq, annualAddEq, y);
+        const bdUsd = projectClassValue(startBd, rBd, annualAddBd, y);
+        const mtUsd = projectClassValue(startMt, rMt, annualAddMt, y);
+        const totalUsd = eqUsd + bdUsd + mtUsd;
+        const contributedUsd = startTotal + (annualAddTotal * y);
+        const compoundProfitUsd = Math.max(0, totalUsd - contributedUsd);
+        const multiplier = contributedUsd > 0 ? (totalUsd / contributedUsd) : (startTotal > 0 ? totalUsd / startTotal : 1);
+        arr.push({
+          yearOffset: y,
+          calendarYear: currentCalendarYear + y,
+          eqUsd,
+          bdUsd,
+          mtUsd,
+          totalUsd,
+          totalUah: totalUsd * rates.USD_UAH,
+          contributedUsd,
+          compoundProfitUsd,
+          compoundProfitUah: compoundProfitUsd * rates.USD_UAH,
+          multiplier
+        });
+      }
+      return arr;
     }
 
+    // Exact month-by-month solver for reaching targetUsd (up to 600 months = 50 years)
+    function solveMonthsToGoal(targetUsd, monthlyAdd) {
+      if (targetUsd <= 0) return null;
+      if (startTotal >= targetUsd) {
+        return {
+          reached: true,
+          alreadyReached: true,
+          months: 0,
+          yearsFloat: 0,
+          targetCalendarYear: currentCalendarYear,
+          totalContributedUsd: startTotal,
+          compoundProfitUsd: 0
+        };
+      }
+      if (startTotal <= 0 && monthlyAdd <= 0) {
+        return { reached: false, alreadyReached: false, months: null };
+      }
+      const mEq = Math.pow(1 + rEq, 1 / 12) - 1;
+      const mBd = Math.pow(1 + rBd, 1 / 12) - 1;
+      const mMt = Math.pow(1 + rMt, 1 / 12) - 1;
+      const addEq = monthlyAdd * (weights.equities || 0);
+      const addBd = monthlyAdd * (weights.bonds || 0);
+      const addMt = monthlyAdd * (weights.metals || 0);
+
+      let vEq = startEq;
+      let vBd = startBd;
+      let vMt = startMt;
+      for (let m = 1; m <= 600; m++) {
+        vEq = vEq * (1 + mEq) + addEq;
+        vBd = vBd * (1 + mBd) + addBd;
+        vMt = vMt * (1 + mMt) + addMt;
+        const tot = vEq + vBd + vMt;
+        if (tot >= targetUsd) {
+          const totalContributedUsd = startTotal + monthlyAdd * m;
+          return {
+            reached: true,
+            alreadyReached: false,
+            months: m,
+            yearsFloat: m / 12,
+            targetCalendarYear: currentCalendarYear + Math.floor((currentMonthIdx + m) / 12),
+            totalContributedUsd,
+            compoundProfitUsd: Math.max(0, tot - totalContributedUsd)
+          };
+        }
+      }
+      return { reached: false, alreadyReached: false, months: null };
+    }
+
+    function formatGoalDurationUk(totalMonths) {
+      if (totalMonths === null || totalMonths === undefined) return 'понад 50 років';
+      if (totalMonths <= 0) return 'вже досягнуто';
+      const yrs = Math.floor(totalMonths / 12);
+      const mos = totalMonths % 12;
+      if (yrs === 0) return `${mos} міс.`;
+      if (mos === 0) return `${yrs} р.`;
+      return `${yrs} р. ${mos} міс.`;
+    }
+
+    const holdTimeline = build25YearTimeline(0);
+    const dcaTimeline = build25YearTimeline(fixedMonthlyUsd);
+    const timeline = includeMonthly ? dcaTimeline : holdTimeline;
+    const compareTimeline = includeMonthly ? holdTimeline : dcaTimeline;
+    const showCompareCurve = fixedMonthlyUsd > 0;
+
     const y25 = timeline[25];
-    // Effective blended annual CAGR over 25 years for pure Buy & Hold
-    const pureHold25 = (startEq * Math.pow(1 + rEq, 25)) + (startBd * Math.pow(1 + rBd, 25)) + (startMt * Math.pow(1 + rMt, 25));
+    const pureHold25 = holdTimeline[25].totalUsd;
     const blendedCagrPct = startTotal > 0
       ? ((Math.pow(pureHold25 / startTotal, 1 / 25) - 1) * 100)
       : ((rEq * weights.equities + rBd * weights.bonds + rMt * weights.metals) * 100);
@@ -11300,15 +11723,183 @@ html.balance-hidden #hero-annual-passive {
       cagrBadge.textContent = `Ефективний CAGR портфеля: ${blendedCagrPct.toFixed(2)}% річних`;
     }
 
-    const maxTotalUsd = Math.max(1, y25.totalUsd);
+    // Solve goal achievement for both Hold-Only and Fixed Monthly Investment scenarios
+    const holdGoal = goalUsd > 0 ? solveMonthsToGoal(goalUsd, 0) : null;
+    const dcaGoal = goalUsd > 0 ? solveMonthsToGoal(goalUsd, fixedMonthlyUsd) : null;
+    const goalProgressPct = goalUsd > 0 ? Math.min(100, (startTotal / goalUsd) * 100) : 0;
+    const goalRemainingUsd = Math.max(0, goalUsd - startTotal);
+
+    // Chart Y-axis maximum: accommodate bars, optional comparison curve, and goal line cleanly
+    const seriesPeakUsd = Math.max(1, y25.totalUsd, showCompareCurve ? compareTimeline[25].totalUsd : 0);
+    let chartMaxUsd = seriesPeakUsd;
+    let goalAboveScale = false;
+    if (goalUsd > 0) {
+      if (goalUsd <= seriesPeakUsd * 3) {
+        chartMaxUsd = Math.max(seriesPeakUsd, goalUsd * 1.12);
+      } else {
+        chartMaxUsd = seriesPeakUsd * 1.05;
+        goalAboveScale = true;
+      }
+    }
+
+    const goalLinePct = goalUsd > 0
+      ? (goalAboveScale ? 97 : Math.max(2, Math.min(97, (goalUsd / chartMaxUsd) * 100)))
+      : null;
+
+    // First bar index where primary stacked bars cross the goal
+    const activeGoalCrossIdx = goalUsd > 0
+      ? timeline.findIndex(pt => pt.totalUsd >= goalUsd)
+      : -1;
+
+    // Build SVG comparison trajectory path (aligned to exact center of 26 bars across viewBox 0..1000 x 0..208)
+    const SVG_W = 1000;
+    const SVG_H = 208;
+    let compareSvgHtml = '';
+    if (showCompareCurve) {
+      const pts = compareTimeline.map((pt, idx) => {
+        const x = ((idx + 0.5) / 26) * SVG_W;
+        const y = SVG_H * (1 - Math.min(1, pt.totalUsd / chartMaxUsd));
+        return { x, y };
+      });
+      const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+      const isDcaOverlay = !includeMonthly; // When bars are Hold-Only, overlay is the green DCA curve; otherwise dashed baseline
+      const strokeColor = isDcaOverlay ? '#10b981' : '#94a3b8';
+      const strokeDash = isDcaOverlay ? '' : 'stroke-dasharray="6 4"';
+      const strokeW = isDcaOverlay ? '2.6' : '1.8';
+
+      // Exact goal intersection dot on the SVG overlay curve (if within 25 years)
+      let crossPinHtml = '';
+      if (goalUsd > 0 && !goalAboveScale) {
+        const goalRes = isDcaOverlay ? dcaGoal : holdGoal;
+        if (goalRes && goalRes.reached && goalRes.yearsFloat <= 25) {
+          const cxPct = ((goalRes.yearsFloat + 0.5) / 26) * 100;
+          const cyBottomPct = (goalUsd / chartMaxUsd) * 100;
+          const pinText = goalRes.alreadyReached
+            ? '🏁 Вже досягнуто'
+            : `🏁 ${isDcaOverlay ? `+${fmtChartAxisVal(fixedMonthlyUsd, rates, true)}/міс: ` : ''}${formatGoalDurationUk(goalRes.months)} (${goalRes.targetCalendarYear})`;
+          crossPinHtml = `
+            <div class="forecast-goal-pin ${isDcaOverlay ? 'is-dca' : 'is-hold'}" style="left:${Math.max(4, Math.min(96, cxPct)).toFixed(2)}%; bottom:${Math.max(4, Math.min(95, cyBottomPct)).toFixed(2)}%;">
+              <span class="forecast-goal-pin-dot"></span>
+              <span class="forecast-goal-pin-tag">${pinText}</span>
+            </div>
+          `;
+        }
+      }
+
+      // Also mark primary bars' crossing point when in Monthly-DCA mode (or Hold-Only crossing)
+      let primaryPinHtml = '';
+      if (goalUsd > 0 && !goalAboveScale) {
+        const primRes = includeMonthly ? dcaGoal : holdGoal;
+        if (primRes && primRes.reached && !primRes.alreadyReached && primRes.yearsFloat <= 25) {
+          const pxPct = ((primRes.yearsFloat + 0.5) / 26) * 100;
+          const pyBottomPct = (goalUsd / chartMaxUsd) * 100;
+          primaryPinHtml = `
+            <div class="forecast-goal-pin ${includeMonthly ? 'is-dca' : 'is-primary'}" style="left:${Math.max(4, Math.min(96, pxPct)).toFixed(2)}%; bottom:${Math.max(4, Math.min(95, pyBottomPct)).toFixed(2)}%;">
+              <span class="forecast-goal-pin-dot"></span>
+              <span class="forecast-goal-pin-tag">🏁 ${formatGoalDurationUk(primRes.months)} (${primRes.targetCalendarYear})</span>
+            </div>
+          `;
+        }
+      }
+
+      compareSvgHtml = `
+        <svg class="forecast-compare-svg" viewBox="0 0 ${SVG_W} ${SVG_H}" preserveAspectRatio="none" aria-hidden="true">
+          <path d="${pathD}" fill="none" stroke="${strokeColor}" stroke-width="${strokeW}" ${strokeDash} vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        ${crossPinHtml}
+        ${primaryPinHtml}
+      `;
+    } else if (goalUsd > 0 && !goalAboveScale && holdGoal && holdGoal.reached && !holdGoal.alreadyReached && holdGoal.yearsFloat <= 25) {
+      const pxPct = ((holdGoal.yearsFloat + 0.5) / 26) * 100;
+      const pyBottomPct = (goalUsd / chartMaxUsd) * 100;
+      compareSvgHtml = `
+        <div class="forecast-goal-pin is-primary" style="left:${Math.max(4, Math.min(96, pxPct)).toFixed(2)}%; bottom:${Math.max(4, Math.min(95, pyBottomPct)).toFixed(2)}%;">
+          <span class="forecast-goal-pin-dot"></span>
+          <span class="forecast-goal-pin-tag">🏁 ${formatGoalDurationUk(holdGoal.months)} (${holdGoal.targetCalendarYear})</span>
+        </div>
+      `;
+    }
+
+    // Build Goal Progress & Achievement Panel HTML (only when goalUsd > 0)
+    let goalSummaryHtml = '';
+    if (goalUsd > 0) {
+      const savedMonths = (holdGoal && holdGoal.reached && dcaGoal && dcaGoal.reached && holdGoal.months > dcaGoal.months)
+        ? (holdGoal.months - dcaGoal.months)
+        : 0;
+      const savedBadge = savedMonths > 0
+        ? `<span class="pill-badge pill-positive" style="font-size:10.5px; padding:1px 7px;">⚡ швидше на ${formatGoalDurationUk(savedMonths)}</span>`
+        : '';
+
+      const holdEtaText = holdGoal.alreadyReached
+        ? '🎉 Вже досягнуто!'
+        : (holdGoal.reached
+          ? `через <strong>${formatGoalDurationUk(holdGoal.months)}</strong> (${holdGoal.targetCalendarYear} р.)`
+          : `<strong>понад 50 років</strong> — потрібні регулярні внески`);
+
+      const dcaEtaText = fixedMonthlyUsd <= 0
+        ? 'Вкажіть фіксовану суму $/міс вище'
+        : (dcaGoal.alreadyReached
+          ? '🎉 Вже досягнуто!'
+          : (dcaGoal.reached
+            ? `через <strong>${formatGoalDurationUk(dcaGoal.months)}</strong> (${dcaGoal.targetCalendarYear} р.)`
+            : `<strong>понад 50 років</strong> — збільште внесок/міс`));
+
+      const dcaSubText = (fixedMonthlyUsd > 0 && dcaGoal && dcaGoal.reached && !dcaGoal.alreadyReached)
+        ? `Ваші внески: ${fmtUsd(dcaGoal.totalContributedUsd)} · Чистий складний %: <strong style="color:var(--positive);">+${fmtUsd(dcaGoal.compoundProfitUsd)}</strong>`
+        : (fixedMonthlyUsd > 0 ? `При внеску +${fmtUsd(fixedMonthlyUsd)}/міс (${fmtUsd(fixedMonthlyUsd * 12)}/рік)` : 'Наприклад, $300–$1 000/міс для прискорення цілі');
+
+      goalSummaryHtml = `
+        <div class="forecast-goal-panel">
+          <div class="forecast-goal-progress-wrap">
+            <div class="forecast-goal-progress-top">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span style="font-size:12.5px; font-weight:800; color:#fbbf24;">🎯 Ціль: ${fmtUsd(goalUsd)}</span>
+                <span style="font-size:11.5px; color:var(--text-muted);">(${fmtUah(goalUah)})</span>
+                <span class="pill-badge ${goalProgressPct >= 100 ? 'pill-positive' : ''}" style="font-size:11px; padding:1px 8px; ${goalProgressPct < 100 ? 'background:rgba(251,191,36,0.14); color:#fbbf24; border:1px solid rgba(251,191,36,0.35);' : ''}">
+                  📍 Ви зараз на ${goalProgressPct.toFixed(1)}%
+                </span>
+              </div>
+              <div class="tabular" style="font-size:12px; color:var(--text-secondary);">
+                Зараз: <strong style="color:var(--text-primary);">${fmtUsd(startTotal)}</strong>
+                ${goalRemainingUsd > 0.01 ? ` · До цілі: <strong style="color:#fbbf24;">${fmtUsd(goalRemainingUsd)}</strong>` : ' · <strong style="color:var(--positive);">Ціль досягнута!</strong>'}
+              </div>
+            </div>
+            <div class="forecast-goal-progress-track">
+              <div class="forecast-goal-progress-fill" style="width:${Math.max(1.5, Math.min(100, goalProgressPct)).toFixed(2)}%;"></div>
+              <div class="forecast-goal-progress-dot" style="left:${Math.max(1.5, Math.min(99, goalProgressPct)).toFixed(2)}%;" title="Ваш поточний капітал: ${fmtUsd(startTotal)} (${goalProgressPct.toFixed(1)}%)"></div>
+            </div>
+          </div>
+
+          <div class="forecast-goal-scenarios">
+            <div class="forecast-goal-card">
+              <div class="forecast-goal-card-label">🔒 Без нових вкладень (Buy & Hold)</div>
+              <div class="forecast-goal-card-val">${holdEtaText}</div>
+              <div class="forecast-goal-card-sub">Лише складний % (${blendedCagrPct.toFixed(1)}% річних) на поточні ${fmtUsd(startTotal)}</div>
+            </div>
+            <div class="forecast-goal-card is-dca">
+              <div class="forecast-goal-card-label" style="display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:wrap;">
+                <span>🚀 З фіксованим внеском +${fmtUsd(fixedMonthlyUsd)}/міс</span>
+                ${savedBadge}
+              </div>
+              <div class="forecast-goal-card-val">${dcaEtaText}</div>
+              <div class="forecast-goal-card-sub">${dcaSubText}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     const milestoneOffsets = [0, 5, 10, 15, 20, 25];
 
     if (selectedForecastYear < 0 || selectedForecastYear > 25) {
       selectedForecastYear = 25;
     }
     const selPoint = timeline[selectedForecastYear] || y25;
+    const selComparePt = compareTimeline[selectedForecastYear];
 
     viewEl.innerHTML = `
+      ${goalSummaryHtml}
+
       <!-- Milestone KPI Cards (0, 5, 10, 15, 20, 25 years) -->
       <div class="forecast-kpi-grid">
         ${milestoneOffsets.map(offset => {
@@ -11317,7 +11908,7 @@ html.balance-hidden #hero-annual-passive {
           const cardBorder = is25 ? 'border-color: var(--accent-primary); box-shadow: 0 0 0 1px rgba(56,189,248,0.25);' : '';
           const titleText = offset === 0 ? `Зараз (${pt.calendarYear})` : `Через ${offset} р. (${pt.calendarYear})`;
           const badgeHtml = offset === 0
-            ? `<span style="color:var(--text-muted);">Старт</span>`
+            ? (goalUsd > 0 ? `<span style="color:#fbbf24;">${goalProgressPct.toFixed(1)}% цілі</span>` : `<span style="color:var(--text-muted);">Старт</span>`)
             : `<span style="color:var(--positive);">×${pt.multiplier.toFixed(2)}</span>`;
           return `
             <div class="forecast-kpi-card" data-select-forecast-year="${offset}" style="cursor:pointer; ${cardBorder}">
@@ -11333,28 +11924,31 @@ html.balance-hidden #hero-annual-passive {
         }).join('')}
       </div>
 
-      <!-- 25-Year Stacked Bar Chart with Vertical Y-Axis Sum Markings -->
+      <!-- 25-Year Stacked Bar Chart with Vertical Y-Axis, Goal Line & Monthly DCA Curve -->
       <div class="forecast-chart-stage">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px; font-size:11.5px; color:var(--text-secondary);">
-          <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.equities.color}; margin-right:4px;"></span>Акції (${strat.forecastEquitiesCagr}% річних)</span>
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.bonds.color}; margin-right:4px;"></span>Облігації (${strat.forecastBondsCagr}% річних)</span>
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.metals.color}; margin-right:4px;"></span>Золото / Срібло (${strat.forecastMetalsCagr}% річних)</span>
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.equities.color}; margin-right:4px;"></span>Акції (${strat.forecastEquitiesCagr}%)</span>
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.bonds.color}; margin-right:4px;"></span>Облігації (${strat.forecastBondsCagr}%)</span>
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${STOCK_SUBTYPES_META.metals.color}; margin-right:4px;"></span>Золото/Срібло (${strat.forecastMetalsCagr}%)</span>
+            ${goalUsd > 0 ? `<span><span style="display:inline-block; width:14px; height:0; border-top:2px dashed #fbbf24; vertical-align:middle; margin-right:4px;"></span><strong style="color:#fbbf24;">Ціль (${fmtChartAxisVal(goalUsd, rates, true)})</strong></span>` : ''}
+            ${showCompareCurve && !includeMonthly ? `<span><span style="display:inline-block; width:14px; height:0; border-top:2.5px solid #10b981; vertical-align:middle; margin-right:4px;"></span><strong style="color:#10b981;">З +${fmtChartAxisVal(fixedMonthlyUsd, rates, true)}/міс</strong></span>` : ''}
+            ${showCompareCurve && includeMonthly ? `<span><span style="display:inline-block; width:14px; height:0; border-top:2px dashed #94a3b8; vertical-align:middle; margin-right:4px;"></span>Без вкладень</span>` : ''}
           </div>
-          <span style="color:var(--text-muted);">Пік (25р): <strong style="color:var(--positive);">${fmtChartAxisVal(y25.totalUsd, rates)}</strong> · Наведіть на стовпчик року для деталізації</span>
+          <span style="color:var(--text-muted);">Пік (25р): <strong style="color:var(--positive);">${fmtChartAxisVal(y25.totalUsd, rates)}</strong> · Наведіть на рік</span>
         </div>
 
         <div class="forecast-plot-area">
           <!-- Left Vertical Y-Axis Sum Markings -->
           <div class="forecast-y-axis">
-            <div class="forecast-y-tick" style="color:var(--positive); font-weight:700;">${fmtChartAxisVal(maxTotalUsd, rates)}</div>
-            <div class="forecast-y-tick">${fmtChartAxisVal(maxTotalUsd * 0.75, rates)}</div>
-            <div class="forecast-y-tick">${fmtChartAxisVal(maxTotalUsd * 0.50, rates)}</div>
-            <div class="forecast-y-tick">${fmtChartAxisVal(maxTotalUsd * 0.25, rates)}</div>
+            <div class="forecast-y-tick" style="color:var(--positive); font-weight:700;">${fmtChartAxisVal(chartMaxUsd, rates)}</div>
+            <div class="forecast-y-tick">${fmtChartAxisVal(chartMaxUsd * 0.75, rates)}</div>
+            <div class="forecast-y-tick">${fmtChartAxisVal(chartMaxUsd * 0.50, rates)}</div>
+            <div class="forecast-y-tick">${fmtChartAxisVal(chartMaxUsd * 0.25, rates)}</div>
             <div class="forecast-y-tick">${fmtChartAxisVal(0, rates)}</div>
           </div>
 
-          <!-- Right Bars Stage with Horizontal Grid Lines -->
+          <!-- Right Bars Stage with Horizontal Grid Lines, Goal Line & Monthly DCA Curve -->
           <div class="forecast-bars-wrap">
             <div class="forecast-grid-lines">
               <div class="forecast-grid-line"></div>
@@ -11364,23 +11958,38 @@ html.balance-hidden #hero-annual-passive {
               <div class="forecast-grid-line" style="border-top:none;"></div>
             </div>
 
+            <div class="forecast-goal-overlay">
+              ${goalLinePct !== null ? `
+                <div class="forecast-goal-line" style="bottom: ${goalLinePct.toFixed(2)}%;">
+                  <span class="forecast-goal-line-badge">🎯 Ціль: ${fmtChartAxisVal(goalUsd, rates, true)}${goalAboveScale ? ' (▲ вище шкали)' : ''}</span>
+                </div>
+              ` : ''}
+              ${compareSvgHtml}
+            </div>
+
             <div class="forecast-bars-grid">
               ${timeline.map(pt => {
-                const totalHeightPct = maxTotalUsd > 0 ? Math.max(2, (pt.totalUsd / maxTotalUsd) * 100) : 2;
+                const totalHeightPct = chartMaxUsd > 0 ? Math.max(2, Math.min(100, (pt.totalUsd / chartMaxUsd) * 100)) : 2;
                 const eqShare = pt.totalUsd > 0 ? (pt.eqUsd / pt.totalUsd) * 100 : 0;
                 const bdShare = pt.totalUsd > 0 ? (pt.bdUsd / pt.totalUsd) * 100 : 0;
                 const mtShare = pt.totalUsd > 0 ? (pt.mtUsd / pt.totalUsd) * 100 : 0;
                 const isActive = pt.yearOffset === selectedForecastYear;
                 const isMilestone = pt.yearOffset % 5 === 0;
-                const showTopLabel = isMilestone || isActive;
+                const isNowGoalMarker = goalUsd > 0 && pt.yearOffset === 0;
+                const isGoalCrossBar = activeGoalCrossIdx === pt.yearOffset && pt.yearOffset > 0;
+                const showTopLabel = (isMilestone || isActive) && !(isGoalCrossBar && !isActive);
+
+                const topText = isNowGoalMarker && !isActive
+                  ? '📍'
+                  : fmtChartAxisVal(pt.totalUsd, rates, true);
 
                 return `
                   <div
-                    class="forecast-bar-col ${isActive ? 'active' : ''}"
+                    class="forecast-bar-col ${isActive ? 'active' : ''} ${isNowGoalMarker ? 'is-now-bar' : ''} ${isGoalCrossBar ? 'is-goal-hit' : ''}"
                     data-forecast-year-bar="${pt.yearOffset}"
-                    title="Рік +${pt.yearOffset} (${pt.calendarYear}): ${fmtUsd(pt.totalUsd)} (${fmtUah(pt.totalUah)}) · Чистий складний приріст: +${fmtUsd(pt.compoundProfitUsd)}"
+                    title="Рік +${pt.yearOffset} (${pt.calendarYear}): ${fmtUsd(pt.totalUsd)} (${fmtUah(pt.totalUah)})${goalUsd > 0 ? ` · ${((pt.totalUsd / goalUsd) * 100).toFixed(1)}% від цілі` : ''}"
                   >
-                    ${showTopLabel ? `<div class="forecast-bar-top-val">${fmtChartAxisVal(pt.totalUsd, rates, true)}</div>` : ''}
+                    ${showTopLabel ? `<div class="forecast-bar-top-val">${topText}</div>` : ''}
                     <div class="forecast-bar-stack" style="height: ${totalHeightPct.toFixed(1)}%;">
                       <div class="forecast-bar-seg" style="height: ${eqShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.equities.color};"></div>
                       <div class="forecast-bar-seg" style="height: ${bdShare.toFixed(1)}%; background: ${STOCK_SUBTYPES_META.bonds.color};"></div>
@@ -11394,8 +12003,9 @@ html.balance-hidden #hero-annual-passive {
             <div class="forecast-x-labels">
               ${timeline.map(pt => {
                 const isMilestone = pt.yearOffset % 5 === 0;
-                const label = pt.yearOffset === 0 ? '0р' : `+${pt.yearOffset}р`;
-                return `<div class="forecast-x-label ${isMilestone ? 'milestone' : ''}">${label}</div>`;
+                const isGoalHit = activeGoalCrossIdx === pt.yearOffset && pt.yearOffset > 0;
+                const label = pt.yearOffset === 0 ? (goalUsd > 0 ? '📍0р' : '0р') : `+${pt.yearOffset}р`;
+                return `<div class="forecast-x-label ${isMilestone || isGoalHit ? 'milestone' : ''}" style="${isGoalHit ? 'color:#fbbf24;' : ''}">${label}</div>`;
               }).join('')}
             </div>
           </div>
@@ -11409,13 +12019,19 @@ html.balance-hidden #hero-annual-passive {
               ${selPoint.yearOffset === 0 ? `Поточний стан (${selPoint.calendarYear} рік)` : `Через ${selPoint.yearOffset} р. (${selPoint.calendarYear} рік)`}
             </strong>
             <span class="pill-badge pill-positive" style="margin-left:6px;">×${selPoint.multiplier.toFixed(2)} до бази</span>
+            ${goalUsd > 0 ? `
+              <span class="pill-badge" style="margin-left:6px; background:${selPoint.totalUsd >= goalUsd ? 'rgba(16,185,129,0.16)' : 'rgba(251,191,36,0.14)'}; color:${selPoint.totalUsd >= goalUsd ? 'var(--positive)' : '#fbbf24'};">
+                ${selPoint.totalUsd >= goalUsd ? '✅ Ціль досягнута' : `🎯 ${((selPoint.totalUsd / goalUsd) * 100).toFixed(1)}% цілі`}
+              </span>
+            ` : ''}
           </div>
 
-          <div class="tabular" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+          <div class="tabular" style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
             <span>📈 Акції: <strong>${fmtUsd(selPoint.eqUsd)}</strong></span>
             <span>📜 Облігації: <strong>${fmtUsd(selPoint.bdUsd)}</strong></span>
             <span>🥇 Золото/Срібло: <strong>${fmtUsd(selPoint.mtUsd)}</strong></span>
-            <span>Чистий складний %: <strong style="color:var(--positive);">+${fmtUsd(selPoint.compoundProfitUsd)}</strong></span>
+            <span>Складний %: <strong style="color:var(--positive);">+${fmtUsd(selPoint.compoundProfitUsd)}</strong></span>
+            ${showCompareCurve && !includeMonthly && selComparePt ? `<span>🚀 З +${fmtUsd(fixedMonthlyUsd)}/міс: <strong style="color:#10b981;">${fmtUsd(selComparePt.totalUsd)}</strong></span>` : ''}
             <span style="font-size:14px;">Разом: <strong style="color:var(--accent-primary);">${fmtUsd(selPoint.totalUsd)}</strong> <span style="color:var(--text-secondary);">(${fmtUah(selPoint.totalUah)})</span></span>
           </div>
         </div>
