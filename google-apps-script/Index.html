@@ -9237,11 +9237,35 @@ html.balance-hidden #hero-annual-passive {
     return isUah ? fmtUsd(valUsd, showSign) : fmtUah((Number(valUsd) || 0) * r.USD_UAH, showSign);
   }
 
+  function getLocalDateStr(d = new Date()) {
+    const dt = d instanceof Date ? d : new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function isShowingDemoPositions() {
+    if (!Array.isArray(state.positions) || state.positions.length === 0) return false;
+    const demoIds = new Set((DEFAULT_DEMO_POSITIONS || []).map(p => p.id));
+    return state.positions.length === demoIds.size && state.positions.every(p => demoIds.has(p.id));
+  }
+
   function recordCategoryHistorySnapshots(allEvaluated) {
     if (!state.settings.categoryHistory || typeof state.settings.categoryHistory !== 'object') {
       state.settings.categoryHistory = { all: [], crypto: [], stocks: [] };
     }
-    const todayStr = new Date().toISOString().slice(0, 10);
+    // Never pollute user history with fallback demo portfolio or half-loaded live quotes
+    if (isShowingDemoPositions()) return;
+    const hasMissingLiveQuote = allEvaluated.some(p =>
+      (p.category === 'crypto' || p.category === 'stocks') &&
+      Number(p.quantity) > 0 &&
+      Number(p.investedUsd) > 0 &&
+      !(Number(p.currentValUsd) > 0)
+    );
+    if (hasMissingLiveQuote) return;
+
+    const todayStr = getLocalDateStr();
 
     ['all', 'crypto', 'stocks'].forEach(cat => {
       const catPositions = cat === 'all' ? allEvaluated : allEvaluated.filter(p => p.category === cat);
@@ -9250,7 +9274,7 @@ html.balance-hidden #hero-annual-passive {
       if (!Array.isArray(state.settings.categoryHistory[cat])) {
         state.settings.categoryHistory[cat] = [];
       }
-      if (valUsd <= 0 && invUsd <= 0) return;
+      if (!Number.isFinite(valUsd) || (valUsd <= 0 && invUsd <= 0)) return;
 
       const arr = state.settings.categoryHistory[cat];
       const existingIdx = arr.findIndex(pt => pt.date === todayStr);
@@ -9281,7 +9305,7 @@ html.balance-hidden #hero-annual-passive {
 
   function buildCategoryDynamicsTimeline(category, positions, rangeKey = '1m') {
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = getLocalDateStr(now);
     const totalCurrentUsd = positions.reduce((s, p) => s + (p.currentValUsd || 0), 0);
     const totalInvestedUsd = positions.reduce((s, p) => s + (p.investedUsd || 0), 0);
 
@@ -9357,7 +9381,7 @@ html.balance-hidden #hero-annual-passive {
     posDates.sort();
     const earliestEntryDateStr = posDates.length > 0
       ? posDates[0]
-      : new Date(now.getTime() - 180 * 86400000).toISOString().slice(0, 10);
+      : getLocalDateStr(new Date(now.getTime() - 180 * 86400000));
     const earliestEntryMs = new Date(earliestEntryDateStr + 'T00:00:00').getTime();
 
     const yesterdayMs = now.getTime() - 86400000;
@@ -9367,30 +9391,12 @@ html.balance-hidden #hero-annual-passive {
       : (now.getTime() - rangeMeta.days * 86400000);
     const effectiveEarliestMs = Math.min(earliestEntryMs, windowStartMs);
 
-    // Recorded daily snapshots map
-    const recorded = (state.settings.categoryHistory && Array.isArray(state.settings.categoryHistory[category]))
-      ? state.settings.categoryHistory[category]
-      : [];
-    const recordedMap = {};
-    recorded.forEach(pt => {
-      if (pt && pt.date && pt.valUsd > 0) {
-        recordedMap[pt.date] = pt;
-      }
-    });
-
     const catSeed = category === 'crypto' ? 17 : (category === 'stocks' ? 31 : 7);
 
-    function evaluateHistoricalPoint(targetMs, stepIndex, totalSteps) {
-      const dStr = new Date(targetMs).toISOString().slice(0, 10);
-      if (recordedMap[dStr]) {
-        const rv = Number(recordedMap[dStr].valUsd);
-        const ri = Number(recordedMap[dStr].investedUsd || totalInvestedUsd);
-        return { valUsd: rv, investedUsd: ri, isRecorded: true };
-      }
-
+    // Pure smooth synthetic baseline (used for unrecorded days & anomaly detection)
+    function computeSyntheticPoint(targetMs, stepIndex, totalSteps) {
       const spanMs = Math.max(86400000, yesterdayMs - effectiveEarliestMs);
       const overallProg = Math.max(0, Math.min(1, (targetMs - effectiveEarliestMs) / spanMs));
-      // Organic deterministic multi-frequency market movement (smooth, repeatable, no jitter on re-render)
       const edgeFade = Math.sin((stepIndex / Math.max(1, totalSteps)) * Math.PI);
       const volScale = category === 'crypto' ? 0.032 : (category === 'stocks' ? 0.016 : 0.018);
       const organicWave = (
@@ -9435,13 +9441,120 @@ html.balance-hidden #hero-annual-passive {
       };
     }
 
+    // Sanitize recorded daily snapshots: filter out stale demo-portfolio snapshots, different-scope snapshots,
+    // and uncorroborated single-day spikes/drops (e.g. from pre-sync or missing-quote loads)
+    const rawRecorded = (state.settings.categoryHistory && Array.isArray(state.settings.categoryHistory[category]))
+      ? state.settings.categoryHistory[category]
+      : [];
+    const validPastRaw = rawRecorded
+      .filter(pt => pt && typeof pt.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pt.date) && pt.date < todayStr && Number(pt.valUsd) > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const maxDevFromBaseline = category === 'crypto' ? 0.16 : 0.06;
+    const windowDaysCount = Math.max(1, Math.round((yesterdayMs - windowStartMs) / 86400000));
+    const inWindowRaw = validPastRaw.filter(pt => {
+      const ms = new Date(pt.date + 'T12:00:00').getTime();
+      return ms >= windowStartMs && ms <= yesterdayMs;
+    });
+    const hasDenseCoverage = inWindowRaw.length >= Math.max(5, Math.floor(windowDaysCount * 0.65));
+
+    const cleanRecordedMap = {};
+    const badDatesToPrune = new Set();
+
+    validPastRaw.forEach((pt, idx) => {
+      const ptVal = Number(pt.valUsd);
+      const ptInv = Number(pt.investedUsd) || 0;
+      const ptMs = new Date(pt.date + 'T12:00:00').getTime();
+
+      // 1) Scope mismatch check (e.g. demo portfolio $43k or pre-import partial portfolio mixed with synthetic days)
+      if (!hasDenseCoverage && ptInv > 0 && totalInvestedUsd > 0) {
+        const invDiffRatio = Math.abs(ptInv - totalInvestedUsd) / totalInvestedUsd;
+        if (invDiffRatio > 0.15) {
+          badDatesToPrune.add(pt.date);
+          return;
+        }
+      }
+
+      // 2) Single-day outlier check against smooth synthetic baseline & neighbors
+      const baseRef = computeSyntheticPoint(ptMs, 1, 2).valUsd || totalCurrentUsd;
+      const devRatio = baseRef > 0 ? Math.abs(ptVal - baseRef) / baseRef : 0;
+      if (devRatio > maxDevFromBaseline) {
+        // Check if corroborated by an adjacent recorded day within ±2 days at a similar level (<= 8% diff)
+        const prevPt = idx > 0 ? validPastRaw[idx - 1] : null;
+        const nextPt = idx < validPastRaw.length - 1 ? validPastRaw[idx + 1] : null;
+        const nearAndSimilar = (other) => {
+          if (!other) return false;
+          const otherMs = new Date(other.date + 'T12:00:00').getTime();
+          const dayGap = Math.abs(ptMs - otherMs) / 86400000;
+          const valDiff = Math.abs(Number(other.valUsd) - ptVal) / Math.max(1, ptVal);
+          return dayGap <= 2.2 && valDiff <= 0.08;
+        };
+        if (!nearAndSimilar(prevPt) && !nearAndSimilar(nextPt)) {
+          badDatesToPrune.add(pt.date);
+          return;
+        }
+      }
+
+      cleanRecordedMap[pt.date] = pt;
+    });
+
+    // Permanently prune clearly corrupt isolated outliers from local history so they never re-appear
+    if (badDatesToPrune.size > 0 && Array.isArray(state.settings.categoryHistory?.[category])) {
+      const prevLen = state.settings.categoryHistory[category].length;
+      state.settings.categoryHistory[category] = state.settings.categoryHistory[category].filter(
+        pt => !pt || !badDatesToPrune.has(pt.date)
+      );
+      if (state.settings.categoryHistory[category].length !== prevLen) {
+        try { saveLocalBackup(); } catch (_) {}
+      }
+    }
+
+    // Build smooth daily anchors from sanitized recorded snapshots so sub-day steps never form sharp cliffs
+    const recordedAnchorList = Object.values(cleanRecordedMap)
+      .map(pt => ({
+        ms: new Date(pt.date + 'T12:00:00').getTime(),
+        date: pt.date,
+        valUsd: Number(pt.valUsd),
+        investedUsd: Number(pt.investedUsd || totalInvestedUsd)
+      }))
+      .sort((a, b) => a.ms - b.ms);
+
+    function evaluateHistoricalPoint(targetMs, stepIndex, totalSteps) {
+      const synth = computeSyntheticPoint(targetMs, stepIndex, totalSteps);
+      if (recordedAnchorList.length === 0) return synth;
+
+      const dStr = getLocalDateStr(new Date(targetMs));
+      // If between two consecutive recorded days (<= 3 days apart), interpolate smoothly between them
+      for (let k = 0; k < recordedAnchorList.length - 1; k++) {
+        const a = recordedAnchorList[k];
+        const b = recordedAnchorList[k + 1];
+        if (targetMs >= a.ms && targetMs <= b.ms && (b.ms - a.ms) <= 3.2 * 86400000) {
+          const t = (targetMs - a.ms) / Math.max(1, b.ms - a.ms);
+          return {
+            valUsd: Number((a.valUsd + (b.valUsd - a.valUsd) * t).toFixed(2)),
+            investedUsd: Number((a.investedUsd + (b.investedUsd - a.investedUsd) * t).toFixed(2)),
+            isRecorded: true
+          };
+        }
+      }
+
+      // Direct match on a valid sanitized recorded date
+      if (cleanRecordedMap[dStr]) {
+        const rv = Number(cleanRecordedMap[dStr].valUsd);
+        const ri = Number(cleanRecordedMap[dStr].investedUsd || totalInvestedUsd);
+        return { valUsd: rv, investedUsd: ri, isRecorded: true };
+      }
+
+      return synth;
+    }
+
     const numSteps = rangeMeta.steps || 48;
     const points = [];
     for (let i = 0; i < numSteps; i++) {
       const frac = numSteps > 1 ? (i / (numSteps - 1)) : 0;
       const stepMs = windowStartMs + (yesterdayMs - windowStartMs) * frac;
       const dObj = new Date(stepMs);
-      const dStr = dObj.toISOString().slice(0, 10);
+      const dStr = getLocalDateStr(dObj);
       const ev = evaluateHistoricalPoint(stepMs, i, numSteps);
       const shortDate = rangeKey === '7d'
         ? dObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
@@ -9467,6 +9580,23 @@ html.balance-hidden #hero-annual-passive {
       investedUsd: Number(totalInvestedUsd.toFixed(2)),
       pnlUsd: Number((totalCurrentUsd - totalInvestedUsd).toFixed(2))
     });
+
+    // Final safety pass: eliminate any residual isolated 1-point V/Λ spike (>12% all/stocks, >22% crypto)
+    const spikeThresh = category === 'crypto' ? 0.22 : 0.12;
+    for (let i = 1; i < points.length - 1; i++) {
+      const prevV = points[i - 1].valUsd;
+      const curV = points[i].valUsd;
+      const nextV = points[i + 1].valUsd;
+      const midV = (prevV + nextV) / 2;
+      if (midV > 0) {
+        const neighborSpread = Math.abs(nextV - prevV) / midV;
+        const spikeDev = Math.abs(curV - midV) / midV;
+        if (neighborSpread < 0.06 && spikeDev > spikeThresh) {
+          points[i].valUsd = Number(midV.toFixed(2));
+          points[i].pnlUsd = Number((points[i].valUsd - points[i].investedUsd).toFixed(2));
+        }
+      }
+    }
 
     return points;
   }
