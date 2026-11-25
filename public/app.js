@@ -2792,6 +2792,9 @@
     let totalPnlUsd = 0;
     let totalAccruedUah = 0;
     let totalAnnualPassiveUah = 0;
+    let ovdpAnnualUah = 0;
+    let depAnnualUah = 0;
+    let stakingAnnualUah = 0;
 
     scopedPositions.forEach(p => {
       totalUah += p.currentValUah;
@@ -2801,6 +2804,9 @@
       totalPnlUsd += p.pnlUsd;
       totalAccruedUah += p.accruedUah;
       totalAnnualPassiveUah += p.annualPassiveUah;
+      if (p.category === 'ovdp') ovdpAnnualUah += p.annualPassiveUah;
+      else if (p.category === 'deposits') depAnnualUah += p.annualPassiveUah;
+      else if (p.category === 'crypto') stakingAnnualUah += p.annualPassiveUah;
     });
 
     const totalPnlPct = totalInvestedUah > 0 ? (totalPnlUah / totalInvestedUah) * 100 : 0;
@@ -2848,16 +2854,52 @@
       `Курс перерахунку: 1$ = ${rates.USD_UAH.toFixed(2)} ₴ · 1€ = ${rates.EUR_UAH.toFixed(2)} ₴`;
 
     const yieldAccruedEl = document.getElementById('hero-yield-accrued');
+    const yieldAccruedSubEl = document.getElementById('hero-yield-accrued-sub');
+    const monthlyPassiveEl = document.getElementById('hero-monthly-passive');
+    const monthlyPassiveSubEl = document.getElementById('hero-monthly-passive-sub');
     const annualPassiveEl = document.getElementById('hero-annual-passive');
+    const annualPassiveSubEl = document.getElementById('hero-annual-passive-sub');
+    const passiveSourcesEl = document.getElementById('hero-passive-sources');
+
+    const totalMonthlyPassiveUah = totalAnnualPassiveUah / 12;
+    const fmtPassivePair = (uahVal) => {
+      const usdVal = uahVal / rates.USD_UAH;
+      if (state.primaryCurrency === 'UAH') {
+        return { primary: fmtUah(uahVal, true), secondary: fmtUsd(usdVal) };
+      }
+      return { primary: fmtUsd(usdVal, true), secondary: fmtUah(uahVal) };
+    };
+
     if (isBalanceHidden) {
-      yieldAccruedEl.textContent = MASK_VAL;
-      annualPassiveEl.textContent = MASK_VAL;
-    } else if (state.primaryCurrency === 'UAH') {
-      yieldAccruedEl.textContent = fmtUah(totalAccruedUah, true);
-      annualPassiveEl.textContent = fmtUah(totalAnnualPassiveUah);
+      if (yieldAccruedEl) yieldAccruedEl.textContent = MASK_VAL;
+      if (yieldAccruedSubEl) yieldAccruedSubEl.textContent = '••••';
+      if (monthlyPassiveEl) monthlyPassiveEl.textContent = MASK_VAL;
+      if (monthlyPassiveSubEl) monthlyPassiveSubEl.textContent = '••••';
+      if (annualPassiveEl) annualPassiveEl.textContent = MASK_VAL;
+      if (annualPassiveSubEl) annualPassiveSubEl.textContent = '••••';
+      if (passiveSourcesEl) passiveSourcesEl.textContent = 'Джерела пасивного доходу приховано';
     } else {
-      yieldAccruedEl.textContent = fmtUsd(totalAccruedUah / rates.USD_UAH, true);
-      annualPassiveEl.textContent = fmtUsd(totalAnnualPassiveUah / rates.USD_UAH);
+      const todayPair = fmtPassivePair(totalAccruedUah);
+      const monthPair = fmtPassivePair(totalMonthlyPassiveUah);
+      const yearPair = fmtPassivePair(totalAnnualPassiveUah);
+
+      if (yieldAccruedEl) yieldAccruedEl.textContent = todayPair.primary;
+      if (yieldAccruedSubEl) yieldAccruedSubEl.textContent = todayPair.secondary;
+      if (monthlyPassiveEl) monthlyPassiveEl.textContent = monthPair.primary;
+      if (monthlyPassiveSubEl) monthlyPassiveSubEl.textContent = monthPair.secondary;
+      if (annualPassiveEl) annualPassiveEl.textContent = yearPair.primary;
+      if (annualPassiveSubEl) annualPassiveSubEl.textContent = yearPair.secondary;
+
+      if (passiveSourcesEl) {
+        const fmtSrc = (uahV) => state.primaryCurrency === 'UAH' ? fmtUah(uahV) : fmtUsd(uahV / rates.USD_UAH);
+        const parts = [];
+        if (ovdpAnnualUah > 0.01) parts.push(`ОВДП: ${fmtSrc(ovdpAnnualUah)}/рік`);
+        if (depAnnualUah > 0.01) parts.push(`Депозити: ${fmtSrc(depAnnualUah)}/рік`);
+        if (stakingAnnualUah > 0.01) parts.push(`Стейкінг: ${fmtSrc(stakingAnnualUah)}/рік`);
+        passiveSourcesEl.textContent = parts.length > 0
+          ? `Джерела: ${parts.join(' · ')}`
+          : 'Додайте ОВДП, депозит або стейкінг для прогнозу доходу';
+      }
     }
 
     // Record daily value snapshot for Crypto and Stocks so user can track value growth/decline dynamics over time

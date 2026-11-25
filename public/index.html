@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=43" />
+  <link rel="stylesheet" href="index.css?v=44" />
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
@@ -283,12 +283,26 @@
             </div>
           </div>
 
-          <div class="wealth-stat-block">
+          <div class="wealth-stat-block wealth-passive-block">
             <div class="metric-eyebrow">Пасивний дохід (ОВДП + Депозити + Стейкінг)</div>
-            <div class="wealth-stat-value" id="hero-yield-accrued">+$0.00</div>
-            <div class="wealth-stat-sub">
-              <span id="hero-yield-sub">Накопичено на сьогодні · Прогноз за рік: <strong id="hero-annual-passive">$0.00</strong></span>
+            <div class="passive-income-grid">
+              <div class="passive-income-tile passive-tile-today" title="Фактично накопичені відсотки на сьогодні (ОВДП + чисті відсотки депозитів + нарахований стейкінг)">
+                <span class="passive-tile-label">На сьогодні</span>
+                <span class="passive-tile-val" id="hero-yield-accrued">+$0.00</span>
+                <span class="passive-tile-sub" id="hero-yield-accrued-sub">0 ₴</span>
+              </div>
+              <div class="passive-income-tile" title="Середньомісячний пасивний дохід (річний прогноз ÷ 12)">
+                <span class="passive-tile-label">За місяць</span>
+                <span class="passive-tile-val" id="hero-monthly-passive">+$0.00</span>
+                <span class="passive-tile-sub" id="hero-monthly-passive-sub">0 ₴</span>
+              </div>
+              <div class="passive-income-tile" title="Прогнозований річний пасивний дохід (ОВДП + чисті відсотки депозитів + стейкінг)">
+                <span class="passive-tile-label">За рік</span>
+                <span class="passive-tile-val" id="hero-annual-passive">+$0.00</span>
+                <span class="passive-tile-sub" id="hero-annual-passive-sub">0 ₴</span>
+              </div>
             </div>
+            <div class="passive-income-sources" id="hero-passive-sources"></div>
           </div>
         </section>
 
@@ -558,6 +572,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=43"></script>
+  <script src="app.js?v=44"></script>
 </body>
 </html>

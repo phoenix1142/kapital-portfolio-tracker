@@ -605,11 +605,11 @@ body {
   background: linear-gradient(165deg, var(--bg-surface) 0%, var(--bg-elevated) 100%);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  padding: 24px 26px;
+  padding: 22px 24px;
   box-shadow: var(--shadow-card);
   display: grid;
-  grid-template-columns: 1.35fr 1fr 1fr;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) minmax(0, 1.35fr);
+  gap: 20px;
   align-items: center;
 }
 
@@ -618,7 +618,8 @@ body {
   flex-direction: column;
   gap: 6px;
   border-right: 1px solid var(--border-subtle);
-  padding-right: 20px;
+  padding-right: 18px;
+  min-width: 0;
 }
 
 .metric-eyebrow {
@@ -659,6 +660,120 @@ body {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-width: 0;
+}
+
+.wealth-passive-block {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 18px;
+  gap: 7px;
+}
+
+.passive-income-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.passive-income-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.passive-tile-today {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+html[data-theme="light"] .passive-income-tile {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+html[data-theme="light"] .passive-tile-today {
+  background: rgba(16, 185, 129, 0.09);
+  border-color: rgba(16, 185, 129, 0.32);
+}
+
+.passive-tile-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.passive-tile-today .passive-tile-label {
+  color: var(--positive);
+}
+
+.passive-tile-val {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.passive-tile-today .passive-tile-val {
+  color: var(--positive);
+}
+
+.passive-tile-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.passive-income-sources {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+@media (max-width: 1280px) {
+  .wealth-hero {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 18px;
+  }
+  .wealth-passive-block {
+    grid-column: 1 / -1;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+    padding-left: 0;
+    padding-top: 14px;
+  }
+}
+
+@media (max-width: 520px) {
+  .passive-income-grid {
+    gap: 6px;
+  }
+  .passive-income-tile {
+    padding: 6px 7px;
+  }
+  .passive-tile-val {
+    font-size: 13px;
+  }
+  .passive-tile-sub {
+    font-size: 10px;
+  }
 }
 
 .wealth-stat-value {
@@ -3075,6 +3190,7 @@ html.balance-hidden .wealth-secondary-amount,
 html.balance-hidden #hero-pnl-primary,
 html.balance-hidden #hero-pnl-secondary,
 html.balance-hidden #hero-yield-accrued,
+html.balance-hidden #hero-monthly-passive,
 html.balance-hidden #hero-annual-passive {
   letter-spacing: 0.08em;
 }
@@ -3352,12 +3468,26 @@ html.balance-hidden #hero-annual-passive {
             </div>
           </div>
 
-          <div class="wealth-stat-block">
+          <div class="wealth-stat-block wealth-passive-block">
             <div class="metric-eyebrow">Пасивний дохід (ОВДП + Депозити + Стейкінг)</div>
-            <div class="wealth-stat-value" id="hero-yield-accrued">+$0.00</div>
-            <div class="wealth-stat-sub">
-              <span id="hero-yield-sub">Накопичено на сьогодні · Прогноз за рік: <strong id="hero-annual-passive">$0.00</strong></span>
+            <div class="passive-income-grid">
+              <div class="passive-income-tile passive-tile-today" title="Фактично накопичені відсотки на сьогодні (ОВДП + чисті відсотки депозитів + нарахований стейкінг)">
+                <span class="passive-tile-label">На сьогодні</span>
+                <span class="passive-tile-val" id="hero-yield-accrued">+$0.00</span>
+                <span class="passive-tile-sub" id="hero-yield-accrued-sub">0 ₴</span>
+              </div>
+              <div class="passive-income-tile" title="Середньомісячний пасивний дохід (річний прогноз ÷ 12)">
+                <span class="passive-tile-label">За місяць</span>
+                <span class="passive-tile-val" id="hero-monthly-passive">+$0.00</span>
+                <span class="passive-tile-sub" id="hero-monthly-passive-sub">0 ₴</span>
+              </div>
+              <div class="passive-income-tile" title="Прогнозований річний пасивний дохід (ОВДП + чисті відсотки депозитів + стейкінг)">
+                <span class="passive-tile-label">За рік</span>
+                <span class="passive-tile-val" id="hero-annual-passive">+$0.00</span>
+                <span class="passive-tile-sub" id="hero-annual-passive-sub">0 ₴</span>
+              </div>
             </div>
+            <div class="passive-income-sources" id="hero-passive-sources"></div>
           </div>
         </section>
 
@@ -6422,6 +6552,9 @@ html.balance-hidden #hero-annual-passive {
     let totalPnlUsd = 0;
     let totalAccruedUah = 0;
     let totalAnnualPassiveUah = 0;
+    let ovdpAnnualUah = 0;
+    let depAnnualUah = 0;
+    let stakingAnnualUah = 0;
 
     scopedPositions.forEach(p => {
       totalUah += p.currentValUah;
@@ -6431,6 +6564,9 @@ html.balance-hidden #hero-annual-passive {
       totalPnlUsd += p.pnlUsd;
       totalAccruedUah += p.accruedUah;
       totalAnnualPassiveUah += p.annualPassiveUah;
+      if (p.category === 'ovdp') ovdpAnnualUah += p.annualPassiveUah;
+      else if (p.category === 'deposits') depAnnualUah += p.annualPassiveUah;
+      else if (p.category === 'crypto') stakingAnnualUah += p.annualPassiveUah;
     });
 
     const totalPnlPct = totalInvestedUah > 0 ? (totalPnlUah / totalInvestedUah) * 100 : 0;
@@ -6478,16 +6614,52 @@ html.balance-hidden #hero-annual-passive {
       `Курс перерахунку: 1$ = ${rates.USD_UAH.toFixed(2)} ₴ · 1€ = ${rates.EUR_UAH.toFixed(2)} ₴`;
 
     const yieldAccruedEl = document.getElementById('hero-yield-accrued');
+    const yieldAccruedSubEl = document.getElementById('hero-yield-accrued-sub');
+    const monthlyPassiveEl = document.getElementById('hero-monthly-passive');
+    const monthlyPassiveSubEl = document.getElementById('hero-monthly-passive-sub');
     const annualPassiveEl = document.getElementById('hero-annual-passive');
+    const annualPassiveSubEl = document.getElementById('hero-annual-passive-sub');
+    const passiveSourcesEl = document.getElementById('hero-passive-sources');
+
+    const totalMonthlyPassiveUah = totalAnnualPassiveUah / 12;
+    const fmtPassivePair = (uahVal) => {
+      const usdVal = uahVal / rates.USD_UAH;
+      if (state.primaryCurrency === 'UAH') {
+        return { primary: fmtUah(uahVal, true), secondary: fmtUsd(usdVal) };
+      }
+      return { primary: fmtUsd(usdVal, true), secondary: fmtUah(uahVal) };
+    };
+
     if (isBalanceHidden) {
-      yieldAccruedEl.textContent = MASK_VAL;
-      annualPassiveEl.textContent = MASK_VAL;
-    } else if (state.primaryCurrency === 'UAH') {
-      yieldAccruedEl.textContent = fmtUah(totalAccruedUah, true);
-      annualPassiveEl.textContent = fmtUah(totalAnnualPassiveUah);
+      if (yieldAccruedEl) yieldAccruedEl.textContent = MASK_VAL;
+      if (yieldAccruedSubEl) yieldAccruedSubEl.textContent = '••••';
+      if (monthlyPassiveEl) monthlyPassiveEl.textContent = MASK_VAL;
+      if (monthlyPassiveSubEl) monthlyPassiveSubEl.textContent = '••••';
+      if (annualPassiveEl) annualPassiveEl.textContent = MASK_VAL;
+      if (annualPassiveSubEl) annualPassiveSubEl.textContent = '••••';
+      if (passiveSourcesEl) passiveSourcesEl.textContent = 'Джерела пасивного доходу приховано';
     } else {
-      yieldAccruedEl.textContent = fmtUsd(totalAccruedUah / rates.USD_UAH, true);
-      annualPassiveEl.textContent = fmtUsd(totalAnnualPassiveUah / rates.USD_UAH);
+      const todayPair = fmtPassivePair(totalAccruedUah);
+      const monthPair = fmtPassivePair(totalMonthlyPassiveUah);
+      const yearPair = fmtPassivePair(totalAnnualPassiveUah);
+
+      if (yieldAccruedEl) yieldAccruedEl.textContent = todayPair.primary;
+      if (yieldAccruedSubEl) yieldAccruedSubEl.textContent = todayPair.secondary;
+      if (monthlyPassiveEl) monthlyPassiveEl.textContent = monthPair.primary;
+      if (monthlyPassiveSubEl) monthlyPassiveSubEl.textContent = monthPair.secondary;
+      if (annualPassiveEl) annualPassiveEl.textContent = yearPair.primary;
+      if (annualPassiveSubEl) annualPassiveSubEl.textContent = yearPair.secondary;
+
+      if (passiveSourcesEl) {
+        const fmtSrc = (uahV) => state.primaryCurrency === 'UAH' ? fmtUah(uahV) : fmtUsd(uahV / rates.USD_UAH);
+        const parts = [];
+        if (ovdpAnnualUah > 0.01) parts.push(`ОВДП: ${fmtSrc(ovdpAnnualUah)}/рік`);
+        if (depAnnualUah > 0.01) parts.push(`Депозити: ${fmtSrc(depAnnualUah)}/рік`);
+        if (stakingAnnualUah > 0.01) parts.push(`Стейкінг: ${fmtSrc(stakingAnnualUah)}/рік`);
+        passiveSourcesEl.textContent = parts.length > 0
+          ? `Джерела: ${parts.join(' · ')}`
+          : 'Додайте ОВДП, депозит або стейкінг для прогнозу доходу';
+      }
     }
 
     // Record daily value snapshot for Crypto and Stocks so user can track value growth/decline dynamics over time
