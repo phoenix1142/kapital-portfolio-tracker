@@ -3404,10 +3404,14 @@
       }
     }
 
-    // Refresh passive breakdown modal if it is currently open (e.g. after currency/privacy change)
+    // Refresh passive breakdown modal only when currency, privacy, or entry counts change (never wipe active hover/form on live price ticks)
     const openPassiveModal = document.getElementById('modal-passive-breakdown');
     if (openPassiveModal && openPassiveModal.classList.contains('open')) {
-      renderPassiveBreakdownModal(currentPassiveModalMode);
+      const modalSig = `${state.primaryCurrency}|${state.hideTotalBalance}|${state.positions.length}|${getPassiveHistoryManualEntries().length}|${state.activeCategory}`;
+      if (openPassiveModal.dataset.renderSig !== modalSig) {
+        openPassiveModal.dataset.renderSig = modalSig;
+        renderPassiveBreakdownModal(currentPassiveModalMode);
+      }
     }
 
     // Show/hide Stocks Strategy & Monthly Rebalancing Calculator section
@@ -9176,17 +9180,17 @@
       const earnedSharePct = totalBarPct > 1e-6 ? (earnedPct / totalBarPct) * 100 : 0;
 
       return `
-        <div class="ph-bar-col" title="${escapeHtml(tooltipLines)}">
+        <div class="ph-bar-col" data-ph-year="${y.year}" title="${escapeHtml(tooltipLines)}">
           <div class="ph-bar-stack-wrap">
             ${yoyBadge}
             <div class="ph-bar-top-val">${y.earnedTotalUah > 0.01 ? fmtP(y.earnedTotalUah) : '—'}</div>
             <div class="ph-bar-body" style="height:${bodyHeightPct.toFixed(1)}%;">
-              ${extraProjPct > 0.5 ? `<div class="ph-bar-projected" style="height:${projSharePct.toFixed(1)}%;" title="Очікувано до кінця ${y.year} р.: +${fmtP(extraProjUah)}"></div>` : ''}
+              ${extraProjPct > 0.5 ? `<div class="ph-bar-projected" data-ph-seg="projected" data-ph-year="${y.year}" style="height:${projSharePct.toFixed(1)}%;" title="Очікувано до кінця ${y.year} р.: +${fmtP(extraProjUah)}"></div>` : ''}
               <div class="ph-bar-earned${extraProjPct > 0.5 ? ' has-projected' : ''}" style="height:${earnedSharePct.toFixed(1)}%;">
-                ${segOvdp > 0.2 ? `<div class="ph-seg-ovdp" style="height:${segOvdp.toFixed(1)}%;"></div>` : ''}
-                ${segDep > 0.2 ? `<div class="ph-seg-deposits" style="height:${segDep.toFixed(1)}%;"></div>` : ''}
-                ${segCrypto > 0.2 ? `<div class="ph-seg-crypto" style="height:${segCrypto.toFixed(1)}%;"></div>` : ''}
-                ${segOther > 0.2 ? `<div class="ph-seg-other" style="height:${segOther.toFixed(1)}%;"></div>` : ''}
+                ${segOvdp > 0.2 ? `<div class="ph-seg-ovdp" data-ph-seg="ovdp" data-ph-year="${y.year}" style="height:${segOvdp.toFixed(1)}%;"></div>` : ''}
+                ${segDep > 0.2 ? `<div class="ph-seg-deposits" data-ph-seg="deposits" data-ph-year="${y.year}" style="height:${segDep.toFixed(1)}%;"></div>` : ''}
+                ${segCrypto > 0.2 ? `<div class="ph-seg-crypto" data-ph-seg="crypto" data-ph-year="${y.year}" style="height:${segCrypto.toFixed(1)}%;"></div>` : ''}
+                ${segOther > 0.2 ? `<div class="ph-seg-other" data-ph-seg="other" data-ph-year="${y.year}" style="height:${segOther.toFixed(1)}%;"></div>` : ''}
               </div>
             </div>
           </div>
@@ -9195,7 +9199,8 @@
       `;
     }).join('');
 
-    const sourceNames = { ovdp: 'ОВДП', deposits: 'Депозити', crypto: 'Стейкінг', other: 'Інше' };
+    const sourceNames = { ovdp: 'ОВДП', deposits: 'Депозити', crypto: 'Стейкінг', other: 'Інше', projected: `Прогноз ${curYear}*` };
+    const sourceColors = { ovdp: '#38bdf8', deposits: '#a855f7', crypto: '#f59e0b', other: '#10b981', projected: '#10b981' };
 
     const yearRowsHtml = [...years].reverse().map(y => {
       const yoyStr = y.yoyPct !== null
@@ -9217,7 +9222,7 @@
         : '';
 
       return `
-        <div class="ph-year-row">
+        <div class="ph-year-row" data-ph-year="${y.year}">
           <div class="ph-year-row-top">
             <div class="ph-year-title">
               <span>${y.year} р.</span>
@@ -9295,22 +9300,23 @@
 
         <div class="ph-main-grid">
           <div class="ph-chart-card">
+            <div class="ph-spotlight" id="ph-spotlight"></div>
             <div class="ph-bars-stage">
               ${barsHtml}
             </div>
             <div class="ph-legend">
-              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-ovdp"></span>ОВДП</span>
-              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-deposits"></span>Депозити</span>
-              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-crypto"></span>Стейкінг</span>
-              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-other"></span>Інше / Архів</span>
-              <span class="ph-legend-item"><span class="ph-legend-dot is-proj"></span>Прогноз ${curYear}*</span>
+              <button type="button" class="ph-legend-btn" data-ph-source="ovdp"><span class="ph-legend-dot ph-seg-ovdp"></span>ОВДП</button>
+              <button type="button" class="ph-legend-btn" data-ph-source="deposits"><span class="ph-legend-dot ph-seg-deposits"></span>Депозити</button>
+              <button type="button" class="ph-legend-btn" data-ph-source="crypto"><span class="ph-legend-dot ph-seg-crypto"></span>Стейкінг</button>
+              <button type="button" class="ph-legend-btn" data-ph-source="other"><span class="ph-legend-dot ph-seg-other"></span>Інше / Архів</button>
+              <button type="button" class="ph-legend-btn" data-ph-source="projected"><span class="ph-legend-dot is-proj"></span>Прогноз ${curYear}*</button>
             </div>
           </div>
 
           <div class="ph-table-card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <strong style="font-size:12.5px; color:var(--text-primary);">📅 Підсумок по роках</strong>
-              <span style="font-size:11px; color:var(--text-muted);">Авто + ручні записи</span>
+              <span style="font-size:11px; color:var(--text-muted);">Наведіть або натисніть рік</span>
             </div>
             <div class="ph-year-rows">
               ${yearRowsHtml}
@@ -9319,6 +9325,240 @@
         </div>
       </div>
     `;
+
+    // Interactive bidirectional spotlight & highlight (no DOM rebuilds, 60fps CSS transitions)
+    const yearsByNum = new Map(years.map(y => [String(y.year), y]));
+    let hoveredYear = null;
+    let pinnedYear = null;
+    let hoveredSource = null;
+    let pinnedSource = null;
+
+    const spotlightEl = containerEl.querySelector('#ph-spotlight');
+    const barCols = [...containerEl.querySelectorAll('.ph-bar-col[data-ph-year]')];
+    const yearRows = [...containerEl.querySelectorAll('.ph-year-row[data-ph-year]')];
+    const segEls = [...containerEl.querySelectorAll('[data-ph-seg]')];
+    const legendBtns = [...containerEl.querySelectorAll('.ph-legend-btn[data-ph-source]')];
+
+    const getSourceVal = (y, src) => {
+      if (src === 'ovdp') return y.ovdpUah;
+      if (src === 'deposits') return y.depositsUah;
+      if (src === 'crypto') return y.cryptoUah;
+      if (src === 'other') return y.otherUah;
+      if (src === 'projected') return y.isCurrent ? Math.max(0, y.projectedTotalUah - y.earnedTotalUah) : 0;
+      return 0;
+    };
+
+    const syncInteractiveState = () => {
+      const activeYear = hoveredYear || pinnedYear;
+      const activeSource = hoveredSource || pinnedSource;
+      const isPinned = Boolean((pinnedYear && !hoveredYear) || (pinnedSource && !hoveredSource));
+
+      // Update bars & rows
+      barCols.forEach(col => {
+        const yKey = col.dataset.phYear;
+        const yObj = yearsByNum.get(yKey);
+        const matchesSource = activeSource ? getSourceVal(yObj, activeSource) > 0.01 : true;
+        const isAct = activeYear ? yKey === activeYear : (activeSource && matchesSource);
+        const isDim = activeYear ? yKey !== activeYear : (activeSource && !matchesSource);
+        col.classList.toggle('is-active', Boolean(isAct));
+        col.classList.toggle('is-dimmed', Boolean(isDim));
+      });
+
+      yearRows.forEach(row => {
+        const yKey = row.dataset.phYear;
+        const yObj = yearsByNum.get(yKey);
+        const matchesSource = activeSource ? getSourceVal(yObj, activeSource) > 0.01 : true;
+        const isAct = activeYear ? yKey === activeYear : (activeSource && matchesSource);
+        const isDim = activeYear ? yKey !== activeYear : (activeSource && !matchesSource);
+        row.classList.toggle('is-active', Boolean(isAct));
+        row.classList.toggle('is-dimmed', Boolean(isDim));
+      });
+
+      // Update segments
+      segEls.forEach(seg => {
+        const sKey = seg.dataset.phSeg;
+        const sYear = seg.dataset.phYear;
+        if (activeSource) {
+          const match = sKey === activeSource && (!activeYear || sYear === activeYear);
+          seg.classList.toggle('ph-seg-active', match);
+          seg.classList.toggle('ph-seg-dimmed', !match);
+        } else {
+          seg.classList.remove('ph-seg-active', 'ph-seg-dimmed');
+        }
+      });
+
+      // Update legend buttons
+      legendBtns.forEach(btn => {
+        const sKey = btn.dataset.phSource;
+        btn.classList.toggle('is-active', activeSource === sKey);
+        btn.classList.toggle('is-dimmed', Boolean(activeSource && activeSource !== sKey));
+      });
+
+      if (!spotlightEl) return;
+
+      // Render spotlight content
+      if (activeYear && activeSource) {
+        const y = yearsByNum.get(activeYear);
+        const srcUah = getSourceVal(y, activeSource);
+        const denom = activeSource === 'projected' ? Math.max(1e-6, y.projectedTotalUah) : Math.max(1e-6, y.earnedTotalUah);
+        const sharePct = srcUah > 0 ? (srcUah / denom) * 100 : 0;
+        const colColor = sourceColors[activeSource] || 'var(--positive)';
+        spotlightEl.classList.add('is-live');
+        spotlightEl.style.borderLeftColor = colColor;
+        spotlightEl.innerHTML = `
+          <div class="ph-spotlight-top">
+            <div class="ph-spotlight-title">
+              <span class="ph-legend-dot" style="background:${colColor};"></span>
+              <span>${y.year} р. · ${escapeHtml(sourceNames[activeSource] || activeSource)}</span>
+              ${isPinned ? '<span class="ph-pin-badge">📌 Обрано</span>' : ''}
+            </div>
+            <div class="ph-spotlight-val" style="color:${colColor};">${srcUah > 0.01 ? fmtP(srcUah, true) : fmtP(0)}</div>
+          </div>
+          <div class="ph-spotlight-chips">
+            <span>${fmtS(srcUah)}</span>
+            <span>·</span>
+            <span><strong>${sharePct.toFixed(1)}%</strong> ${activeSource === 'projected' ? 'від річного прогнозу' : `доходу за ${y.year} р.`}</span>
+          </div>
+        `;
+      } else if (activeYear) {
+        const y = yearsByNum.get(activeYear);
+        const extraProj = y.isCurrent ? Math.max(0, y.projectedTotalUah - y.earnedTotalUah) : 0;
+        const yoyChip = y.yoyPct !== null
+          ? `<span class="ph-bar-yoy ${y.yoyPct >= 0 ? 'is-up' : 'is-down'}">${y.yoyPct >= 0 ? '▲ +' : '▼ '}${y.yoyPct.toFixed(1)}% YoY</span>`
+          : '';
+        const srcChips = [
+          ['ovdp', y.ovdpUah],
+          ['deposits', y.depositsUah],
+          ['crypto', y.cryptoUah],
+          ['other', y.otherUah]
+        ].filter(([, v]) => v > 0.1).map(([k, v]) => {
+          const pct = y.earnedTotalUah > 0 ? (v / y.earnedTotalUah) * 100 : 0;
+          return `<span class="ph-spotlight-chip"><span class="ph-legend-dot" style="background:${sourceColors[k]};"></span>${sourceNames[k]}: <strong>${fmtP(v)}</strong> (${pct.toFixed(0)}%)</span>`;
+        });
+        if (extraProj > 1) {
+          srcChips.push(`<span class="ph-spotlight-chip"><span class="ph-legend-dot is-proj"></span>Очікувано до кінця року: <strong>+${fmtP(extraProj)}</strong></span>`);
+        }
+        spotlightEl.classList.add('is-live');
+        spotlightEl.style.borderLeftColor = 'var(--positive)';
+        spotlightEl.innerHTML = `
+          <div class="ph-spotlight-top">
+            <div class="ph-spotlight-title">
+              <span>${y.year} рік${y.isCurrent ? ' (поточний)' : ''}</span>
+              ${yoyChip}
+              ${isPinned ? '<span class="ph-pin-badge">📌 Обрано</span>' : ''}
+            </div>
+            <div class="ph-spotlight-val">${y.earnedTotalUah > 0.01 ? fmtP(y.earnedTotalUah, true) : fmtP(0)} <span style="font-size:11px; color:var(--text-muted); font-weight:600;">(${fmtS(y.earnedTotalUah)})</span></div>
+          </div>
+          <div class="ph-spotlight-chips">
+            ${srcChips.length > 0 ? srcChips.join('') : '<span>Ще немає записів за цей рік — додайте через «+ Додати запис»</span>'}
+          </div>
+        `;
+      } else if (activeSource) {
+        const sumUah = years.reduce((acc, y) => acc + getSourceVal(y, activeSource), 0);
+        const shareAll = totalAllTimeUah > 0 && activeSource !== 'projected' ? (sumUah / totalAllTimeUah) * 100 : null;
+        const activeYrs = years.filter(y => getSourceVal(y, activeSource) > 0.1).map(y => `${y.year}: ${fmtP(getSourceVal(y, activeSource))}`);
+        const colColor = sourceColors[activeSource] || 'var(--positive)';
+        spotlightEl.classList.add('is-live');
+        spotlightEl.style.borderLeftColor = colColor;
+        spotlightEl.innerHTML = `
+          <div class="ph-spotlight-top">
+            <div class="ph-spotlight-title">
+              <span class="ph-legend-dot" style="background:${colColor};"></span>
+              <span>Джерело: ${escapeHtml(sourceNames[activeSource] || activeSource)}</span>
+              ${isPinned ? '<span class="ph-pin-badge">📌 Фільтр</span>' : ''}
+            </div>
+            <div class="ph-spotlight-val" style="color:${colColor};">${sumUah > 0.01 ? fmtP(sumUah, true) : fmtP(0)}${shareAll !== null ? ` <span style="font-size:11px; color:var(--text-muted); font-weight:600;">(${shareAll.toFixed(1)}%)</span>` : ''}</div>
+          </div>
+          <div class="ph-spotlight-chips">
+            <span>${activeYrs.length > 0 ? activeYrs.join(' · ') : 'Немає нарахувань по цьому джерелу'}</span>
+          </div>
+        `;
+      } else {
+        spotlightEl.classList.remove('is-live');
+        spotlightEl.style.borderLeftColor = 'var(--border-strong)';
+        spotlightEl.innerHTML = `
+          <div class="ph-spotlight-top">
+            <div class="ph-spotlight-title" style="font-weight:700; color:var(--text-secondary);">
+              👆 Наведіть або натисніть на стовпець, рік чи джерело
+            </div>
+            <div class="ph-spotlight-val" style="font-size:12.5px; color:var(--text-primary);">${fmtP(totalAllTimeUah, true)}</div>
+          </div>
+          <div class="ph-spotlight-chips">
+            <span>Підсвічується детальна розбивка по роках і джерелах · натисніть повторно, щоб скинути</span>
+          </div>
+        `;
+      }
+    };
+
+    // Wire hover & click-to-pin on bars
+    barCols.forEach(col => {
+      const yKey = col.dataset.phYear;
+      col.addEventListener('mouseenter', () => {
+        hoveredYear = yKey;
+        syncInteractiveState();
+      });
+      col.addEventListener('mouseleave', () => {
+        hoveredYear = null;
+        hoveredSource = null;
+        syncInteractiveState();
+      });
+      col.addEventListener('click', () => {
+        pinnedYear = pinnedYear === yKey ? null : yKey;
+        syncInteractiveState();
+      });
+    });
+
+    // Wire hover on individual colored bar segments
+    segEls.forEach(seg => {
+      const sKey = seg.dataset.phSeg;
+      const yKey = seg.dataset.phYear;
+      seg.addEventListener('mouseenter', () => {
+        hoveredYear = yKey;
+        hoveredSource = sKey;
+        syncInteractiveState();
+      });
+      seg.addEventListener('mouseleave', () => {
+        hoveredSource = null;
+        syncInteractiveState();
+      });
+    });
+
+    // Wire hover & click-to-pin on year breakdown rows
+    yearRows.forEach(row => {
+      const yKey = row.dataset.phYear;
+      row.addEventListener('mouseenter', () => {
+        hoveredYear = yKey;
+        syncInteractiveState();
+      });
+      row.addEventListener('mouseleave', () => {
+        hoveredYear = null;
+        syncInteractiveState();
+      });
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('[data-ph-del]')) return;
+        pinnedYear = pinnedYear === yKey ? null : yKey;
+        syncInteractiveState();
+      });
+    });
+
+    // Wire hover & click-to-filter on legend pills
+    legendBtns.forEach(btn => {
+      const sKey = btn.dataset.phSource;
+      btn.addEventListener('mouseenter', () => {
+        hoveredSource = sKey;
+        syncInteractiveState();
+      });
+      btn.addEventListener('mouseleave', () => {
+        hoveredSource = null;
+        syncInteractiveState();
+      });
+      btn.addEventListener('click', () => {
+        pinnedSource = pinnedSource === sKey ? null : sKey;
+        syncInteractiveState();
+      });
+    });
+
+    syncInteractiveState();
 
     containerEl.querySelector('#btn-ph-toggle-add')?.addEventListener('click', () => {
       passiveHistoryAddFormOpen = !passiveHistoryAddFormOpen;
@@ -9351,7 +9591,8 @@
     });
 
     containerEl.querySelectorAll('[data-ph-del]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const id = btn.dataset.phDel;
         const next = getPassiveHistoryManualEntries().filter(m => m.id !== id);
         savePassiveHistoryManualEntries(next);
@@ -9368,6 +9609,11 @@
     const titleEl = document.getElementById('modal-passive-title');
     const dialogEl = document.getElementById('modal-passive-dialog');
     if (!bodyEl) return;
+
+    const modalRoot = document.getElementById('modal-passive-breakdown');
+    if (modalRoot) {
+      modalRoot.dataset.renderSig = `${state.primaryCurrency}|${state.hideTotalBalance}|${state.positions.length}|${getPassiveHistoryManualEntries().length}|${state.activeCategory}`;
+    }
 
     if (dialogEl) {
       dialogEl.classList.toggle('pb-dialog-wide', currentPassiveModalMode === 'history');
@@ -9469,17 +9715,25 @@
       if (catTotals[it.pos.category] !== undefined) catTotals[it.pos.category] += it.amountUah;
     });
     const catMetaMap = {
-      ovdp: { icon: '🛡️', label: 'ОВДП', badge: 'ОВДП', badgeCls: 'pb-badge-ovdp' },
-      deposits: { icon: '🏦', label: 'Депозити', badge: 'ДЕП', badgeCls: 'pb-badge-deposits' },
-      crypto: { icon: '⚡', label: 'Стейкінг', badge: 'STK', badgeCls: 'pb-badge-crypto' }
+      ovdp: { icon: '🛡️', label: 'ОВДП', badge: 'ОВДП', badgeCls: 'pb-badge-ovdp', color: '#38bdf8' },
+      deposits: { icon: '🏦', label: 'Депозити', badge: 'ДЕП', badgeCls: 'pb-badge-deposits', color: '#a855f7' },
+      crypto: { icon: '⚡', label: 'Стейкінг', badge: 'STK', badgeCls: 'pb-badge-crypto', color: '#f59e0b' }
     };
 
-    const catChipsHtml = ['ovdp', 'deposits', 'crypto']
-      .filter(k => catTotals[k] > 0.0001)
+    const activeCats = ['ovdp', 'deposits', 'crypto'].filter(k => catTotals[k] > 0.0001);
+
+    const distBarHtml = activeCats.length > 0 && totalUah > 0
+      ? `<div class="pb-dist-bar" aria-label="Розподіл пасивного доходу за джерелами">${activeCats.map(k => {
+          const pct = (catTotals[k] / totalUah) * 100;
+          return `<div class="pb-dist-seg" data-pb-cat="${k}" style="width:${Math.max(2, pct).toFixed(2)}%; background:${catMetaMap[k].color};" title="${catMetaMap[k].label}: ${pct.toFixed(1)}%"></div>`;
+        }).join('')}</div>`
+      : '';
+
+    const catChipsHtml = activeCats
       .map(k => {
         const sharePct = totalUah > 0 ? (catTotals[k] / totalUah) * 100 : 0;
         const amtStr = isHidden ? MASK : fmtPair(catTotals[k]).primary;
-        return `<span class="pb-cat-chip">${catMetaMap[k].icon} ${catMetaMap[k].label}: <strong>${amtStr}</strong> <span style="color:var(--text-muted);">(${sharePct.toFixed(0)}%)</span></span>`;
+        return `<button type="button" class="pb-cat-chip" data-pb-cat="${k}">${catMetaMap[k].icon} ${catMetaMap[k].label}: <strong>${amtStr}</strong> <span style="color:var(--text-muted);">(${sharePct.toFixed(0)}%)</span></button>`;
       }).join('');
 
     const buildItemMetaText = (p) => {
@@ -9513,13 +9767,13 @@
     };
 
     const rowsHtml = passiveItems.length > 0
-      ? passiveItems.map(({ pos: p, amountUah }) => {
+      ? passiveItems.map(({ pos: p, amountUah }, idx) => {
           const sharePct = totalUah > 0 ? (amountUah / totalUah) * 100 : 0;
           const pair = fmtPair(amountUah);
           const cm = catMetaMap[p.category] || catMetaMap.ovdp;
           const badgeText = p.category === 'crypto' ? escapeHtml(p.ticker || 'STK') : cm.badge;
           return `
-            <div class="pb-item">
+            <div class="pb-item" data-pb-item-idx="${idx}" data-pb-item-cat="${p.category}">
               <div class="pb-item-top">
                 <div class="pb-item-left">
                   <span class="pb-item-badge ${cm.badgeCls}">${badgeText}</span>
@@ -9534,7 +9788,7 @@
                 </div>
               </div>
               <div class="pb-bar-track">
-                <div class="pb-bar-fill" style="width:${Math.max(2, Math.min(100, sharePct)).toFixed(1)}%;"></div>
+                <div class="pb-bar-fill" style="width:${Math.max(2, Math.min(100, sharePct)).toFixed(1)}%; background:${cm.color};"></div>
               </div>
             </div>
           `;
@@ -9547,13 +9801,14 @@
       <div class="pb-tabs" role="tablist" aria-label="Період деталізації пасивного доходу">
         ${tabsHtml}
       </div>
-      <div class="pb-summary-box">
+      <div class="pb-summary-box" id="pb-summary-box">
         <div class="pb-summary-top">
-          <div class="pb-summary-val">${isHidden ? MASK : totalPair.primary}</div>
-          <div class="pb-summary-sub">${isHidden ? MASK : totalPair.secondary}</div>
+          <div class="pb-summary-val" id="pb-summary-val">${isHidden ? MASK : totalPair.primary}</div>
+          <div class="pb-summary-sub" id="pb-summary-sub">${isHidden ? MASK : totalPair.secondary}</div>
         </div>
-        <div class="pb-summary-caption">${meta.caption}</div>
+        <div class="pb-summary-caption" id="pb-summary-caption">${meta.caption}</div>
       </div>
+      ${distBarHtml}
       ${catChipsHtml ? `<div class="pb-cat-chips">${catChipsHtml}</div>` : ''}
       <div class="pb-list">
         ${rowsHtml}
@@ -9563,6 +9818,97 @@
     bodyEl.querySelectorAll('[data-pb-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
         renderPassiveBreakdownModal(btn.dataset.pbTab);
+      });
+    });
+
+    // Interactive category & item highlighting (mirroring Allocation's hover/click feel on rectangular bars)
+    let hoveredCat = null;
+    let pinnedCat = null;
+    let hoveredItemIdx = null;
+
+    const sumValEl = bodyEl.querySelector('#pb-summary-val');
+    const sumSubEl = bodyEl.querySelector('#pb-summary-sub');
+    const sumCapEl = bodyEl.querySelector('#pb-summary-caption');
+    const sumBoxEl = bodyEl.querySelector('#pb-summary-box');
+    const catControls = [...bodyEl.querySelectorAll('[data-pb-cat]')];
+    const itemRows = [...bodyEl.querySelectorAll('.pb-item[data-pb-item-idx]')];
+
+    const syncPeriodHighlight = () => {
+      const activeCat = hoveredCat || pinnedCat;
+      const activeItem = hoveredItemIdx !== null ? passiveItems[hoveredItemIdx] : null;
+      const focusCat = activeItem ? activeItem.pos.category : activeCat;
+
+      catControls.forEach(el => {
+        const k = el.dataset.pbCat;
+        el.classList.toggle('is-active', focusCat === k);
+        el.classList.toggle('is-dimmed', Boolean(focusCat && focusCat !== k));
+      });
+
+      itemRows.forEach(row => {
+        const idx = Number(row.dataset.pbItemIdx);
+        const cat = row.dataset.pbItemCat;
+        if (hoveredItemIdx !== null) {
+          row.classList.toggle('is-active', idx === hoveredItemIdx);
+          row.classList.toggle('is-dimmed', idx !== hoveredItemIdx);
+        } else if (activeCat) {
+          row.classList.toggle('is-active', cat === activeCat);
+          row.classList.toggle('is-dimmed', cat !== activeCat);
+        } else {
+          row.classList.remove('is-active', 'is-dimmed');
+        }
+      });
+
+      if (activeItem) {
+        const p = activeItem.pos;
+        const pair = fmtPair(activeItem.amountUah);
+        const pct = totalUah > 0 ? (activeItem.amountUah / totalUah) * 100 : 0;
+        const cm = catMetaMap[p.category] || catMetaMap.ovdp;
+        if (sumValEl) sumValEl.textContent = isHidden ? MASK : pair.primary;
+        if (sumSubEl) sumSubEl.textContent = `${isHidden ? '••••' : pair.secondary} · ${pct.toFixed(1)}%`;
+        if (sumCapEl) sumCapEl.textContent = `${cm.icon} ${p.displayName} — ${buildItemMetaText(p)}`;
+        if (sumBoxEl) sumBoxEl.style.borderColor = cm.color;
+      } else if (activeCat && catTotals[activeCat] > 0.0001) {
+        const cm = catMetaMap[activeCat];
+        const pair = fmtPair(catTotals[activeCat]);
+        const pct = totalUah > 0 ? (catTotals[activeCat] / totalUah) * 100 : 0;
+        const cnt = passiveItems.filter(it => it.pos.category === activeCat).length;
+        if (sumValEl) sumValEl.textContent = isHidden ? MASK : pair.primary;
+        if (sumSubEl) sumSubEl.textContent = `${isHidden ? '••••' : pair.secondary} · ${pct.toFixed(1)}%`;
+        if (sumCapEl) sumCapEl.textContent = `${cm.icon} ${cm.label} (${cnt} поз.)${pinnedCat === activeCat && !hoveredCat ? ' · 📌 обрано (натисніть ще раз щоб скинути)' : ''}`;
+        if (sumBoxEl) sumBoxEl.style.borderColor = cm.color;
+      } else {
+        if (sumValEl) sumValEl.textContent = isHidden ? MASK : totalPair.primary;
+        if (sumSubEl) sumSubEl.textContent = isHidden ? MASK : totalPair.secondary;
+        if (sumCapEl) sumCapEl.textContent = meta.caption;
+        if (sumBoxEl) sumBoxEl.style.borderColor = '';
+      }
+    };
+
+    catControls.forEach(el => {
+      const k = el.dataset.pbCat;
+      el.addEventListener('mouseenter', () => {
+        hoveredCat = k;
+        syncPeriodHighlight();
+      });
+      el.addEventListener('mouseleave', () => {
+        hoveredCat = null;
+        syncPeriodHighlight();
+      });
+      el.addEventListener('click', () => {
+        pinnedCat = pinnedCat === k ? null : k;
+        syncPeriodHighlight();
+      });
+    });
+
+    itemRows.forEach(row => {
+      const idx = Number(row.dataset.pbItemIdx);
+      row.addEventListener('mouseenter', () => {
+        hoveredItemIdx = idx;
+        syncPeriodHighlight();
+      });
+      row.addEventListener('mouseleave', () => {
+        hoveredItemIdx = null;
+        syncPeriodHighlight();
       });
     });
   }
