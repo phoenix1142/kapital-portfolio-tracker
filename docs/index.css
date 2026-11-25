@@ -1116,9 +1116,13 @@ html[data-theme="light"] .passive-income-tile {
 }
 
 /* Passive Income Breakdown Modal */
+.modal-dialog.pb-dialog-wide {
+  max-width: 680px !important;
+}
+
 .pb-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1.25fr 0.85fr 0.95fr 0.85fr 1.05fr;
   gap: 4px;
   background: var(--bg-canvas);
   border: 1px solid var(--border-subtle);
@@ -1132,9 +1136,9 @@ html[data-theme="light"] .passive-income-tile {
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
-  padding: 7px 6px;
+  padding: 7px 5px;
   border-radius: 7px;
   cursor: pointer;
   transition: all 0.14s ease;
@@ -1335,6 +1339,9 @@ html[data-theme="light"] .pb-tab-btn.active {
 @media (max-width: 520px) {
   .pb-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pb-tab-btn[data-pb-tab="history"] {
+    grid-column: 1 / -1;
   }
   .pb-summary-val {
     font-size: 20px;
@@ -4228,6 +4235,80 @@ html.balance-hidden #hero-annual-passive {
     width: 30px;
   }
 }
+
+/* Modal-integrated Yearly Passive Income History overrides */
+.ph-modal-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.ph-modal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ph-modal-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  flex: 1 1 220px;
+}
+
+.ph-modal-wrap .ph-add-panel {
+  margin-bottom: 0;
+  padding: 10px 11px;
+}
+
+.ph-modal-wrap .ph-add-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ph-modal-wrap .ph-kpi-grid {
+  margin-bottom: 0;
+  gap: 8px;
+}
+
+.ph-modal-wrap .ph-kpi-card {
+  padding: 9px 11px;
+}
+
+.ph-modal-wrap .ph-kpi-val {
+  font-size: 15.5px;
+}
+
+.ph-modal-wrap .ph-main-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.ph-modal-wrap .ph-bars-stage {
+  height: 190px;
+}
+
+.ph-modal-wrap .ph-year-rows {
+  max-height: 220px;
+}
+
+@media (max-width: 560px) {
+  .ph-modal-wrap .ph-add-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ph-modal-wrap .ph-add-grid button[type="submit"] {
+    grid-column: 1 / -1;
+  }
+  .ph-modal-wrap .ph-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ph-modal-wrap .ph-bars-stage {
+    height: 175px;
+  }
+}
+
 
 
 

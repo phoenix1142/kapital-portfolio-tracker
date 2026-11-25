@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=53" />
+  <link rel="stylesheet" href="index.css?v=54" />
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
@@ -339,9 +339,6 @@
         <!-- Category Value Dynamics & Performance Chart (Shown on 'crypto' and 'stocks' views) -->
         <section class="panel-card" id="category-dynamics-section" style="display:none; margin-bottom:20px;" aria-label="Динаміка вартості активів категорії"></section>
 
-        <!-- Yearly Passive Income History & Dynamics (Shown on overview, OVDP, deposits) -->
-        <section class="panel-card" id="passive-history-section" style="display:none; margin-bottom:20px;" aria-label="Історія пасивного доходу по роках"></section>
-
         <!-- Stocks Portfolio Strategy & Monthly Rebalancing Calculator -->
         <section class="panel-card" id="stocks-strategy-section" style="display:none; margin-bottom:20px;" aria-label="Стратегія фондового портфеля та калькулятор ребалансування"></section>
 
@@ -566,7 +563,7 @@
 
   <!-- Passive Income Detailed Breakdown Modal -->
   <div class="modal-backdrop" id="modal-passive-breakdown" role="dialog" aria-modal="true" aria-labelledby="modal-passive-title">
-    <div class="modal-dialog" style="max-width: 600px;">
+    <div class="modal-dialog" id="modal-passive-dialog" style="max-width: 600px;">
       <div class="modal-header">
         <h2 class="modal-title" id="modal-passive-title">💰 Деталізація пасивного доходу</h2>
         <button type="button" class="btn btn-ghost" id="btn-close-passive-modal" aria-label="Закрити">✕</button>
@@ -626,6 +623,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=53"></script>
+  <script src="app.js?v=54"></script>
 </body>
 </html>

@@ -3404,15 +3404,10 @@
       }
     }
 
-    // Show/hide Yearly Passive Income History & Dynamics section (on 'all', 'ovdp', 'deposits')
-    const passiveHistorySection = document.getElementById('passive-history-section');
-    if (passiveHistorySection) {
-      if (state.activeCategory === 'all' || state.activeCategory === 'ovdp' || state.activeCategory === 'deposits') {
-        passiveHistorySection.style.display = 'block';
-        renderPassiveIncomeHistorySection(evaluated, totalUah);
-      } else {
-        passiveHistorySection.style.display = 'none';
-      }
+    // Refresh passive breakdown modal if it is currently open (e.g. after currency/privacy change)
+    const openPassiveModal = document.getElementById('modal-passive-breakdown');
+    if (openPassiveModal && openPassiveModal.classList.contains('open')) {
+      renderPassiveBreakdownModal(currentPassiveModalMode);
     }
 
     // Show/hide Stocks Strategy & Monthly Rebalancing Calculator section
@@ -9121,9 +9116,8 @@
     return years;
   }
 
-  function renderPassiveIncomeHistorySection(evaluated, totalCapitalUah) {
-    const sectionEl = document.getElementById('passive-history-section');
-    if (!sectionEl) return;
+  function renderPassiveHistoryIntoContainer(containerEl, evaluated, totalCapitalUah, onUpdated) {
+    if (!containerEl) return;
 
     const rates = getEffectiveRates();
     const isHidden = Boolean(state.hideTotalBalance);
@@ -9243,103 +9237,102 @@
 
     const yoyHeadline = curYearObj.yoyPct !== null && prevYearObj
       ? `${curYearObj.yoyPct >= 0 ? '+' : ''}${curYearObj.yoyPct.toFixed(1)}% до ${prevYearObj.year} р.`
-      : `${yieldOnCapitalPct.toFixed(2)}% річних на капітал`;
+      : `${yieldOnCapitalPct.toFixed(2)}% річних`;
     const yoySub = curYearObj.yoyPct !== null && prevYearObj
       ? `Дохідність капіталу: ${yieldOnCapitalPct.toFixed(2)}% річних`
-      : `Додайте архівні роки (напр. ${curYear - 1}), щоб бачити ріст YoY`;
+      : `Додайте ${curYear - 1} р. для YoY`;
 
-    sectionEl.innerHTML = `
-      <div class="panel-header">
-        <div>
-          <div class="panel-title">📊 Історія пасивного доходу по роках</div>
-          <div class="panel-subtitle">Динаміка заробітку на ваш капітал: авторозрахунок активних інструментів + закриті виплати за минулі роки</div>
+    containerEl.innerHTML = `
+      <div class="ph-modal-wrap">
+        <div class="ph-modal-toolbar">
+          <div class="ph-modal-hint">Авторозрахунок активних інструментів + архівні виплати за минулі роки</div>
+          <button type="button" class="btn btn-primary" id="btn-ph-toggle-add" style="font-size:11.5px; padding:5px 11px; white-space:nowrap;">
+            ${passiveHistoryAddFormOpen ? '✕ Сховати' : '+ Додати запис'}
+          </button>
         </div>
-        <button type="button" class="btn btn-primary" id="btn-ph-toggle-add" style="font-size:12px; padding:6px 12px;">
-          ${passiveHistoryAddFormOpen ? '✕ Сховати форму' : '+ Додати запис за рік'}
-        </button>
-      </div>
 
-      ${passiveHistoryAddFormOpen ? `
-        <form class="ph-add-panel" id="form-ph-add" autocomplete="off">
-          <div style="font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:8px;">
-            ✍️ Додати отриманий пасивний дохід за рік (закриті ОВДП, погашені депозити, дивіденди тощо)
+        ${passiveHistoryAddFormOpen ? `
+          <form class="ph-add-panel" id="form-ph-add" autocomplete="off">
+            <div style="font-size:11.5px; font-weight:700; color:var(--text-primary); margin-bottom:7px;">
+              ✍️ Додати отриманий пасивний дохід за рік (закриті ОВДП, депозити, дивіденди тощо)
+            </div>
+            <div class="ph-add-grid">
+              <input type="number" class="form-input tabular" id="ph-in-year" min="2015" max="${curYear}" value="${curYear - 1}" required placeholder="Рік" title="Рік отримання доходу" />
+              <input type="number" step="any" min="0.01" class="form-input tabular" id="ph-in-amount" required placeholder="Сума (напр. 450)" />
+              <select class="form-select" id="ph-in-curr" aria-label="Валюта">
+                <option value="USD" ${state.primaryCurrency === 'USD' ? 'selected' : ''}>$ USD</option>
+                <option value="UAH" ${state.primaryCurrency === 'UAH' ? 'selected' : ''}>₴ UAH</option>
+              </select>
+              <select class="form-select" id="ph-in-source" aria-label="Джерело">
+                <option value="ovdp">🛡️ ОВДП</option>
+                <option value="deposits">🏦 Депозити</option>
+                <option value="crypto">⚡ Стейкінг</option>
+                <option value="other">💵 Дивіденди / Інше</option>
+              </select>
+              <input type="text" class="form-input" id="ph-in-note" maxlength="60" placeholder="Коментар (напр. ОВДП 2025)" />
+              <button type="submit" class="btn btn-primary" style="font-size:12px; padding:7px 12px; white-space:nowrap;">Зберегти</button>
+            </div>
+          </form>
+        ` : ''}
+
+        <div class="ph-kpi-grid">
+          <div class="ph-kpi-card is-accent">
+            <div class="ph-kpi-label">Усього пасивно</div>
+            <div class="ph-kpi-val">${fmtP(totalAllTimeUah, true)}</div>
+            <div class="ph-kpi-sub">${fmtS(totalAllTimeUah)} · за ${years.length} р.</div>
           </div>
-          <div class="ph-add-grid">
-            <input type="number" class="form-input tabular" id="ph-in-year" min="2015" max="${curYear}" value="${curYear - 1}" required placeholder="Рік" title="Рік отримання доходу" />
-            <input type="number" step="any" min="0.01" class="form-input tabular" id="ph-in-amount" required placeholder="Сума (напр. 450)" />
-            <select class="form-select" id="ph-in-curr" aria-label="Валюта">
-              <option value="USD" ${state.primaryCurrency === 'USD' ? 'selected' : ''}>$ USD</option>
-              <option value="UAH" ${state.primaryCurrency === 'UAH' ? 'selected' : ''}>₴ UAH</option>
-            </select>
-            <select class="form-select" id="ph-in-source" aria-label="Джерело">
-              <option value="ovdp">🛡️ ОВДП</option>
-              <option value="deposits">🏦 Депозити</option>
-              <option value="crypto">⚡ Стейкінг</option>
-              <option value="other">💵 Дивіденди / Інше</option>
-            </select>
-            <input type="text" class="form-input" id="ph-in-note" maxlength="60" placeholder="Коментар (напр. Погашені ОВДП 2025)" />
-            <button type="submit" class="btn btn-primary" style="font-size:12px; padding:8px 14px; white-space:nowrap;">Зберегти</button>
+          <div class="ph-kpi-card">
+            <div class="ph-kpi-label">За ${curYear} р. (факт)</div>
+            <div class="ph-kpi-val">${fmtP(curYearObj.earnedTotalUah, true)}</div>
+            <div class="ph-kpi-sub">Прогноз: ${fmtP(curYearObj.projectedTotalUah)}</div>
           </div>
-        </form>
-      ` : ''}
-
-      <div class="ph-kpi-grid">
-        <div class="ph-kpi-card is-accent">
-          <div class="ph-kpi-label">Усього зароблено пасивно</div>
-          <div class="ph-kpi-val">${fmtP(totalAllTimeUah, true)}</div>
-          <div class="ph-kpi-sub">${fmtS(totalAllTimeUah)} · за ${years.length} р.</div>
-        </div>
-        <div class="ph-kpi-card">
-          <div class="ph-kpi-label">За ${curYear} рік (факт / прогноз)</div>
-          <div class="ph-kpi-val">${fmtP(curYearObj.earnedTotalUah, true)}</div>
-          <div class="ph-kpi-sub">Прогноз до кінця ${curYear}: ${fmtP(curYearObj.projectedTotalUah)}</div>
-        </div>
-        <div class="ph-kpi-card">
-          <div class="ph-kpi-label">Динаміка / Дохідність капіталу</div>
-          <div class="ph-kpi-val" style="color:${curYearObj.yoyPct !== null ? (curYearObj.yoyPct >= 0 ? 'var(--positive)' : 'var(--negative)') : 'var(--accent-primary)'};">${yoyHeadline}</div>
-          <div class="ph-kpi-sub">${yoySub}</div>
-        </div>
-      </div>
-
-      <div class="ph-main-grid">
-        <div class="ph-chart-card">
-          <div class="ph-bars-stage">
-            ${barsHtml}
-          </div>
-          <div class="ph-legend">
-            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-ovdp"></span>ОВДП</span>
-            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-deposits"></span>Депозити</span>
-            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-crypto"></span>Стейкінг</span>
-            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-other"></span>Інше / Архів</span>
-            <span class="ph-legend-item"><span class="ph-legend-dot is-proj"></span>Прогноз до кінця ${curYear}*</span>
+          <div class="ph-kpi-card">
+            <div class="ph-kpi-label">Динаміка / Дохідність</div>
+            <div class="ph-kpi-val" style="color:${curYearObj.yoyPct !== null ? (curYearObj.yoyPct >= 0 ? 'var(--positive)' : 'var(--negative)') : 'var(--accent-primary)'};">${yoyHeadline}</div>
+            <div class="ph-kpi-sub">${yoySub}</div>
           </div>
         </div>
 
-        <div class="ph-table-card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <strong style="font-size:12.5px; color:var(--text-primary);">📅 Підсумок по роках</strong>
-            <span style="font-size:11px; color:var(--text-muted);">Авто + ручні записи</span>
+        <div class="ph-main-grid">
+          <div class="ph-chart-card">
+            <div class="ph-bars-stage">
+              ${barsHtml}
+            </div>
+            <div class="ph-legend">
+              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-ovdp"></span>ОВДП</span>
+              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-deposits"></span>Депозити</span>
+              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-crypto"></span>Стейкінг</span>
+              <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-other"></span>Інше / Архів</span>
+              <span class="ph-legend-item"><span class="ph-legend-dot is-proj"></span>Прогноз ${curYear}*</span>
+            </div>
           </div>
-          <div class="ph-year-rows">
-            ${yearRowsHtml}
+
+          <div class="ph-table-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="font-size:12.5px; color:var(--text-primary);">📅 Підсумок по роках</strong>
+              <span style="font-size:11px; color:var(--text-muted);">Авто + ручні записи</span>
+            </div>
+            <div class="ph-year-rows">
+              ${yearRowsHtml}
+            </div>
           </div>
         </div>
       </div>
     `;
 
-    sectionEl.querySelector('#btn-ph-toggle-add')?.addEventListener('click', () => {
+    containerEl.querySelector('#btn-ph-toggle-add')?.addEventListener('click', () => {
       passiveHistoryAddFormOpen = !passiveHistoryAddFormOpen;
-      renderPassiveIncomeHistorySection(evaluated, totalCapitalUah);
-      if (passiveHistoryAddFormOpen) sectionEl.querySelector('#ph-in-amount')?.focus();
+      renderPassiveHistoryIntoContainer(containerEl, evaluated, totalCapitalUah, onUpdated);
+      if (passiveHistoryAddFormOpen) containerEl.querySelector('#ph-in-amount')?.focus();
     });
 
-    sectionEl.querySelector('#form-ph-add')?.addEventListener('submit', (e) => {
+    containerEl.querySelector('#form-ph-add')?.addEventListener('submit', (e) => {
       e.preventDefault();
-      const year = parseInt(sectionEl.querySelector('#ph-in-year')?.value, 10);
-      const amount = parseFloat(sectionEl.querySelector('#ph-in-amount')?.value);
-      const currency = sectionEl.querySelector('#ph-in-curr')?.value === 'UAH' ? 'UAH' : 'USD';
-      const source = sectionEl.querySelector('#ph-in-source')?.value || 'other';
-      const note = (sectionEl.querySelector('#ph-in-note')?.value || '').trim();
+      const year = parseInt(containerEl.querySelector('#ph-in-year')?.value, 10);
+      const amount = parseFloat(containerEl.querySelector('#ph-in-amount')?.value);
+      const currency = containerEl.querySelector('#ph-in-curr')?.value === 'UAH' ? 'UAH' : 'USD';
+      const source = containerEl.querySelector('#ph-in-source')?.value || 'other';
+      const note = (containerEl.querySelector('#ph-in-note')?.value || '').trim();
       if (!Number.isFinite(year) || year < 2015 || year > curYear + 1 || !Number.isFinite(amount) || amount <= 0) return;
 
       const list = getPassiveHistoryManualEntries();
@@ -9354,15 +9347,15 @@
       });
       savePassiveHistoryManualEntries(list);
       passiveHistoryAddFormOpen = false;
-      renderAll();
+      if (typeof onUpdated === 'function') onUpdated();
     });
 
-    sectionEl.querySelectorAll('[data-ph-del]').forEach(btn => {
+    containerEl.querySelectorAll('[data-ph-del]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.dataset.phDel;
         const next = getPassiveHistoryManualEntries().filter(m => m.id !== id);
         savePassiveHistoryManualEntries(next);
-        renderAll();
+        if (typeof onUpdated === 'function') onUpdated();
       });
     });
   }
@@ -9370,10 +9363,15 @@
   let currentPassiveModalMode = 'ytd';
 
   function renderPassiveBreakdownModal(mode) {
-    currentPassiveModalMode = ['ytd', 'day', 'month', 'year'].includes(mode) ? mode : 'ytd';
+    currentPassiveModalMode = ['ytd', 'day', 'month', 'year', 'history'].includes(mode) ? mode : 'ytd';
     const bodyEl = document.getElementById('passive-breakdown-body');
     const titleEl = document.getElementById('modal-passive-title');
+    const dialogEl = document.getElementById('modal-passive-dialog');
     if (!bodyEl) return;
+
+    if (dialogEl) {
+      dialogEl.classList.toggle('pb-dialog-wide', currentPassiveModalMode === 'history');
+    }
 
     const rates = getEffectiveRates();
     const isHidden = Boolean(state.hideTotalBalance);
@@ -9381,6 +9379,7 @@
     const yearNum = new Date().getFullYear();
 
     const evaluated = state.positions.map(evaluatePosition);
+    const totalCapitalUah = evaluated.reduce((s, p) => s + (Number(p.currentValUah) || 0), 0);
     const isDedicatedUtilityView = state.activeCategory === 'invested_uah' || state.activeCategory === 'important_links';
     const scopedPositions = (state.activeCategory === 'all' || isDedicatedUtilityView)
       ? evaluated
@@ -9406,10 +9405,38 @@
         tabLabel: 'За рік',
         heading: '💰 Пасивний дохід за рік',
         caption: 'Прогнозований річний пасивний дохід від усіх активних ОВДП, депозитів і стейкінгу'
+      },
+      history: {
+        tabLabel: '📊 По роках',
+        heading: '📊 Історія пасивного доходу по роках',
+        caption: 'Динаміка пасивного доходу на ваш капітал по роках'
       }
     };
     const meta = MODE_META[currentPassiveModalMode];
     if (titleEl) titleEl.textContent = meta.heading;
+
+    const tabsHtml = ['ytd', 'day', 'month', 'year', 'history'].map(m => `
+      <button type="button" class="pb-tab-btn${currentPassiveModalMode === m ? ' active' : ''}" data-pb-tab="${m}">${MODE_META[m].tabLabel}</button>
+    `).join('');
+
+    if (currentPassiveModalMode === 'history') {
+      bodyEl.innerHTML = `
+        <div class="pb-tabs" role="tablist" aria-label="Період деталізації пасивного доходу">
+          ${tabsHtml}
+        </div>
+        <div id="passive-history-modal-slot"></div>
+      `;
+      bodyEl.querySelectorAll('[data-pb-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          renderPassiveBreakdownModal(btn.dataset.pbTab);
+        });
+      });
+      const slotEl = bodyEl.querySelector('#passive-history-modal-slot');
+      renderPassiveHistoryIntoContainer(slotEl, evaluated, totalCapitalUah, () => {
+        renderAll();
+      });
+      return;
+    }
 
     const getAmountUah = (p) => {
       if (currentPassiveModalMode === 'ytd') return Number(p.ytdPassiveUah) || 0;
@@ -9516,10 +9543,6 @@
            Наразі немає активних інструментів пасивного доходу.<br/>Додайте <strong>ОВДП</strong>, <strong>депозит</strong> або увімкніть <strong>стейкінг</strong> для криптовалюти.
          </div>`;
 
-    const tabsHtml = ['ytd', 'day', 'month', 'year'].map(m => `
-      <button type="button" class="pb-tab-btn${currentPassiveModalMode === m ? ' active' : ''}" data-pb-tab="${m}">${MODE_META[m].tabLabel}</button>
-    `).join('');
-
     bodyEl.innerHTML = `
       <div class="pb-tabs" role="tablist" aria-label="Період деталізації пасивного доходу">
         ${tabsHtml}
@@ -9535,27 +9558,12 @@
       <div class="pb-list">
         ${rowsHtml}
       </div>
-      <div style="margin-top:10px; display:flex; justify-content:flex-end;">
-        <button type="button" class="btn btn-ghost" id="btn-pb-jump-yearly" style="font-size:12px; color:var(--accent-primary);">
-          📊 Перейти до історії по роках →
-        </button>
-      </div>
     `;
 
     bodyEl.querySelectorAll('[data-pb-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
         renderPassiveBreakdownModal(btn.dataset.pbTab);
       });
-    });
-
-    bodyEl.querySelector('#btn-pb-jump-yearly')?.addEventListener('click', () => {
-      closePassiveBreakdownModal();
-      if (state.activeCategory !== 'all' && state.activeCategory !== 'ovdp' && state.activeCategory !== 'deposits') {
-        setActiveCategory('all');
-      }
-      setTimeout(() => {
-        document.getElementById('passive-history-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 60);
     });
   }
 
