@@ -335,9 +335,9 @@ body {
 .market-ticker-card {
   flex: 1 0 176px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
   padding: 7px 11px;
   border-radius: 9px;
   background-color: var(--bg-elevated);
@@ -345,6 +345,15 @@ body {
   cursor: pointer;
   transition: border-color var(--transition-fast), transform var(--transition-fast), background-color 260ms ease, opacity 150ms ease;
   min-width: 176px;
+}
+
+.market-ticker-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .market-ticker-card:hover {
@@ -466,6 +475,64 @@ body {
   font-weight: 700;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.market-ticker-avg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  font-size: 10.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.market-ticker-avg-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+html[data-theme="light"] .market-ticker-avg {
+  background: rgba(2, 132, 199, 0.08);
+  border-color: rgba(2, 132, 199, 0.26);
+}
+
+.market-ticker-avg-tag {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+html[data-theme="light"] .market-ticker-avg-tag {
+  color: #0284c7;
+}
+
+.market-ticker-avg-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.market-ticker-avg-pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.market-ticker-avg-pct.is-up {
+  color: var(--positive);
+}
+
+.market-ticker-avg-pct.is-down {
+  color: var(--negative);
 }
 
 .market-ticker-spark {

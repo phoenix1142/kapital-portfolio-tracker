@@ -2693,6 +2693,25 @@
     `;
   }
 
+  function getPortfolioAvgBuyPriceUsd(tickerKey) {
+    const key = String(tickerKey || '').toUpperCase().trim();
+    if (!key || !Array.isArray(state.positions)) return null;
+    let totalQty = 0;
+    let totalCostUsd = 0;
+    for (const p of state.positions) {
+      if (p.category !== 'crypto' && p.category !== 'stocks') continue;
+      if (String(p.ticker || '').toUpperCase().trim() !== key) continue;
+      const qty = Number(p.quantity) || 0;
+      const buy = Number(p.buyPriceUsd) || 0;
+      if (qty > 0 && buy > 0) {
+        totalQty += qty;
+        totalCostUsd += qty * buy;
+      }
+    }
+    if (totalQty <= 0) return null;
+    return totalCostUsd / totalQty;
+  }
+
   function getTickerDisplayModel(item) {
     const book = item.type === 'crypto' ? state.quotes.crypto : state.quotes.stocks;
     const q = (book && book[item.key]) || (DEFAULT_QUOTES[item.type] && DEFAULT_QUOTES[item.type][item.key]) || { priceUsd: 0, change24h: 0, sparkline: [] };
@@ -2717,10 +2736,31 @@
     const chgStr = price > 0 ? `${chgSign}${chg.toFixed(2)}%` : 'Завантаження...';
     const isLive = Boolean(q.isLive);
     const sourceText = q.source ? ` • ${q.source}` : '';
-    const title = `${item.label}: ${priceStr} (${chgStr} за 24г${sourceText}) — перетягніть для зміни порядку або натисніть для переходу`;
+
+    const avgBuyUsd = getPortfolioAvgBuyPriceUsd(item.key);
+    const avgBuyStr = avgBuyUsd !== null ? formatSmartTickerPrice(avgBuyUsd) : '';
+    const vsAvgPct = (avgBuyUsd !== null && avgBuyUsd > 0 && price > 0)
+      ? ((price - avgBuyUsd) / avgBuyUsd) * 100
+      : null;
+    const avgTitleExtra = avgBuyStr
+      ? ` • Ваша сер. ціна: ${avgBuyStr}${vsAvgPct !== null ? ` (${vsAvgPct >= 0 ? '+' : ''}${vsAvgPct.toFixed(1)}%)` : ''}`
+      : '';
+
+    const title = `${item.label}: ${priceStr} (${chgStr} за 24г${sourceText})${avgTitleExtra} — перетягніть для зміни порядку або натисніть для переходу`;
     const sparkSig = `${isUp ? '1' : '0'}|${prevClose.toFixed(4)}|${spark.length}|${spark[0]?.toFixed?.(4) || ''}|${spark[spark.length - 1]?.toFixed?.(4) || ''}`;
 
-    return { priceStr, chgStr, chgColor, isUp, prevClose, spark, isLive, title, sparkSig };
+    return { priceStr, chgStr, chgColor, isUp, prevClose, spark, isLive, title, sparkSig, avgBuyUsd, avgBuyStr, vsAvgPct };
+  }
+
+  function buildTickerAvgHtml(m) {
+    if (!m.avgBuyStr) return '';
+    let vsHtml = '';
+    if (m.vsAvgPct !== null && Number.isFinite(m.vsAvgPct)) {
+      const sign = m.vsAvgPct >= 0 ? '+' : '';
+      const cls = m.vsAvgPct >= 0 ? 'is-up' : 'is-down';
+      vsHtml = `<span class="market-ticker-avg-pct ${cls}">${sign}${m.vsAvgPct.toFixed(1)}%</span>`;
+    }
+    return `<span class="market-ticker-avg-left"><span class="market-ticker-avg-tag">Сер.</span> <span class="market-ticker-avg-num">${m.avgBuyStr}</span></span>${vsHtml}`;
   }
 
   function patchMarketTickerCard(key, flashDir = '') {
@@ -2735,6 +2775,7 @@
     const chgEl = card.querySelector('.market-ticker-chg');
     const dotEl = card.querySelector('.market-ticker-live-dot');
     const sparkEl = card.querySelector('.market-ticker-spark');
+    const avgEl = card.querySelector('.market-ticker-avg');
 
     if (priceEl && priceEl.textContent !== m.priceStr) priceEl.textContent = m.priceStr;
     if (chgEl) {
@@ -2743,6 +2784,16 @@
     }
     if (dotEl) dotEl.classList.toggle('is-live', m.isLive);
     if (card.title !== m.title) card.title = m.title;
+
+    if (avgEl) {
+      if (m.avgBuyStr) {
+        const nextHtml = buildTickerAvgHtml(m);
+        if (avgEl.innerHTML !== nextHtml) avgEl.innerHTML = nextHtml;
+        avgEl.style.display = '';
+      } else {
+        avgEl.style.display = 'none';
+      }
+    }
 
     if (sparkEl && sparkEl.dataset.sparkSig !== m.sparkSig) {
       sparkEl.dataset.sparkSig = m.sparkSig;
@@ -2778,19 +2829,23 @@
 
     const cardsHtml = activeTickers.map(item => {
       const m = getTickerDisplayModel(item);
+      const avgContent = buildTickerAvgHtml(m);
       return `
         <div class="market-ticker-card" draggable="true" data-ticker-key="${escapeHtml(item.key)}" data-ticker-jump="${item.navCat}" title="${escapeHtml(m.title)}">
-          <div class="market-ticker-info">
-            <div class="market-ticker-head">
-              <span class="market-ticker-live-dot${m.isLive ? ' is-live' : ''}"></span>
-              <div class="market-ticker-label">${escapeHtml(item.label)}</div>
+          <div class="market-ticker-top">
+            <div class="market-ticker-info">
+              <div class="market-ticker-head">
+                <span class="market-ticker-live-dot${m.isLive ? ' is-live' : ''}"></span>
+                <div class="market-ticker-label">${escapeHtml(item.label)}</div>
+              </div>
+              <div class="market-ticker-price">${m.priceStr}</div>
+              <div class="market-ticker-chg" style="color:${m.chgColor};">${m.chgStr}</div>
             </div>
-            <div class="market-ticker-price">${m.priceStr}</div>
-            <div class="market-ticker-chg" style="color:${m.chgColor};">${m.chgStr}</div>
+            <div class="market-ticker-spark" data-spark-sig="${escapeHtml(m.sparkSig)}">
+              ${buildSparklineSvg(m.spark, m.prevClose, m.isUp)}
+            </div>
           </div>
-          <div class="market-ticker-spark" data-spark-sig="${escapeHtml(m.sparkSig)}">
-            ${buildSparklineSvg(m.spark, m.prevClose, m.isUp)}
-          </div>
+          <div class="market-ticker-avg" style="${m.avgBuyStr ? '' : 'display:none;'}">${avgContent}</div>
         </div>
       `;
     }).join('');
