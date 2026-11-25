@@ -2805,11 +2805,10 @@
           <line x1="4" y1="18" x2="20" y2="18"/>
           <circle cx="11" cy="18" r="2" fill="currentColor"/>
         </svg>
-        <span>Змінити</span>
       </button>
     `;
 
-    stripEl.innerHTML = cardsHtml + editBtnHtml;
+    stripEl.innerHTML = `<div class="market-ticker-track">${cardsHtml}</div>${editBtnHtml}`;
     stripEl.dataset.initialized = '1';
     stripEl.dataset.listSig = listSig;
 
