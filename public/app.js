@@ -647,9 +647,8 @@
   }
 
   const GITHUB_PAGES_HOME_URL = 'https://phoenix1142.github.io/kapital-portfolio-tracker/';
-  const DEFAULT_CLOUD_SYNC_URL = 'https://script.google.com/macros/s/AKfycbwoxq-PirVnix_5jvyuama9S_UBc187LwDRMk4moSg9RwhE3LyquTRu-r8VhfJdbqX8/exec';
   const LIVE_QUOTES_CACHE_KEY = 'kapital_live_quotes_cache_v1';
-  state.cloudSyncUrl = safeGetItem('kapital_cloud_sync_url') || DEFAULT_CLOUD_SYNC_URL;
+  state.cloudSyncUrl = safeGetItem('kapital_cloud_sync_url') || '';
   state.cloudSynced = false;
   state.cloudSyncError = '';
   state.justSyncedFromBridge = '';
@@ -721,56 +720,110 @@
     }, 2500);
   }
 
-  // Built-in Zero-Config Cloud Sync Slots (CORS-enabled HTTPS JSON storage with client-side cipher)
-  const CLOUD_STORE_BASE_URL = 'https://api.restful-api.dev/objects';
-  const CLOUD_STORE_SLOT_IDS = [
-    'ff808181a09d98f701a20a2269b92b53',
-    'ff808181a09d98f701a20a2454642b54',
-    'ff808181a09d98f701a20a2454d02b55',
-    'ff808181a09d98f701a20a24554e2b56',
-    'ff808181a09d98f701a20a2455e12b57',
-    'ff808181a09d98f701a20a2456692b58',
-    'ff808181a09d98f701a20a2456c82b59',
-    'ff808181a09d98f701a20a24573e2b5a',
-    'ff808181a09d98f701a20a2457b92b5b',
-    'ff808181a09d98f701a20a2458312b5c',
-    'ff808181a09d98f701a20a2458af2b5d',
-    'ff808181a09d98f701a20a24592d2b5e',
-    'ff808181a09d98f701a20a2509712b61',
-    'ff808181a09d98f701a20a2509db2b62',
-    'ff808181a09d98f701a20a250a4a2b63',
-    'ff808181a09d98f701a20a250ac72b64',
-    'ff808181a09d98f701a20a250b6f2b65',
-    'ff808181a09d98f701a20a250bd02b66',
-    'ff808181a09d98f701a20a250c3f2b67',
-    'ff808181a09d98f701a20a250cb62b68'
-  ];
-  const CLOUD_CIPHER_KEY = 'ManiKesh_VaultKey_2026_v1';
+  // Zero-Knowledge End-to-End Encrypted Personal Cloud Vault (Web Crypto API: PBKDF2-SHA256 + AES-256-GCM)
+  // Passphrase lives ONLY in the user's local browser storage — zero hardcoded secrets or vault URLs in code!
+  const E2EE_PASSPHRASE_STORAGE_KEY = 'kapital_e2ee_passphrase_v1';
+  const E2EE_TOPIC_PREFIX = 'https://ntfy.sh/mk2_';
+  const E2EE_PBKDF2_ITERATIONS = 100000;
+  let cachedVaultCtx = null; // { passphrase, topicBaseUrl, topicTag, aesKey }
 
-  function encodeEncryptedCloudString(obj) {
-    const json = JSON.stringify(obj);
-    const bytes = new TextEncoder().encode(json);
-    const keyBytes = new TextEncoder().encode(CLOUD_CIPHER_KEY);
+  function getCloudVaultPassphrase() {
+    try {
+      return String(safeGetItem(E2EE_PASSPHRASE_STORAGE_KEY) || '').trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function hasPrivateCloudVault() {
+    return getCloudVaultPassphrase().length >= 6;
+  }
+
+  function isCloudSyncConfigured() {
+    return hasPrivateCloudVault() || Boolean((state.cloudSyncUrl || '').trim());
+  }
+
+  function bytesToBase64Url(bytes) {
     let bin = '';
-    for (let i = 0; i < bytes.length; i++) {
-      bin += String.fromCharCode(bytes[i] ^ keyBytes[i % keyBytes.length]);
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
     }
     return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
-  function decodeEncryptedCloudString(b64url) {
+  function base64UrlToBytes(b64url) {
     const b64 = String(b64url || '').replace(/-/g, '+').replace(/_/g, '/');
     const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
     const bin = atob(b64 + pad);
-    const keyBytes = new TextEncoder().encode(CLOUD_CIPHER_KEY);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) {
-      bytes[i] = bin.charCodeAt(i) ^ keyBytes[i % keyBytes.length];
-    }
-    return JSON.parse(new TextDecoder().decode(bytes));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
   }
 
-  const NTFY_VAULT_BASE_URL = 'https://ntfy.sh/mk_vault_1X_VHDRMMMszQhb_0TFPg';
+  async function deriveVaultContext(passphraseOverride) {
+    const pass = String(passphraseOverride !== undefined ? passphraseOverride : getCloudVaultPassphrase()).trim();
+    if (pass.length < 6) return null;
+    if (cachedVaultCtx && cachedVaultCtx.passphrase === pass) return cachedVaultCtx;
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      throw new Error('Web Crypto API (HTTPS) недоступний у цьому браузері');
+    }
+
+    const enc = new TextEncoder();
+    // 1. Derive unguessable 144-bit private topic name from passphrase via SHA-256
+    const topicHashBuf = await crypto.subtle.digest('SHA-256', enc.encode(`ManiKesh_E2EE_Topic_v2::${pass}`));
+    const topicTag = bytesToBase64Url(new Uint8Array(topicHashBuf)).slice(0, 24);
+    const topicBaseUrl = `${E2EE_TOPIC_PREFIX}${topicTag}`;
+
+    // 2. Derive 256-bit AES-GCM key via PBKDF2 (100,000 SHA-256 iterations)
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+    const aesKey = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: enc.encode('ManiKesh_E2EE_AES256GCM_Salt_v2'),
+        iterations: E2EE_PBKDF2_ITERATIONS,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    const ctx = { passphrase: pass, topicBaseUrl, topicTag, aesKey };
+    if (pass === getCloudVaultPassphrase()) {
+      cachedVaultCtx = ctx;
+    }
+    return ctx;
+  }
+
+  async function encryptE2eeObject(obj, vaultCtx) {
+    const ctx = vaultCtx || await deriveVaultContext();
+    if (!ctx) throw new Error('Приватний ключ шифрування не налаштовано');
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const plaintext = new TextEncoder().encode(JSON.stringify(obj));
+    const cipherBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, ctx.aesKey, plaintext);
+    const cipherBytes = new Uint8Array(cipherBuf);
+    const combined = new Uint8Array(iv.length + cipherBytes.length);
+    combined.set(iv, 0);
+    combined.set(cipherBytes, iv.length);
+    return `v2.${bytesToBase64Url(combined)}`;
+  }
+
+  async function decryptE2eeObject(encStr, vaultCtx) {
+    const ctx = vaultCtx || await deriveVaultContext();
+    if (!ctx) throw new Error('Приватний ключ шифрування не налаштовано');
+    const raw = String(encStr || '');
+    if (!raw.startsWith('v2.')) {
+      throw new Error('Непідтримуваний формат зашифрованого пакета');
+    }
+    const combined = base64UrlToBytes(raw.slice(3));
+    if (combined.length < 28) throw new Error('Пошкоджений зашифрований пакет');
+    const iv = combined.subarray(0, 12);
+    const cipherBytes = combined.subarray(12);
+    const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, ctx.aesKey, cipherBytes);
+    return JSON.parse(new TextDecoder().decode(plainBuf));
+  }
 
   async function ntfyFetchLatestJson(topicUrl) {
     const res = await fetch(`${topicUrl}/json?poll=1&since=all&_t=${Date.now()}`, {
@@ -791,7 +844,10 @@
     return lastMsg;
   }
 
-  async function directCloudSlotSave(payloadObj) {
+  async function directCloudSlotSave(payloadObj, vaultCtxOverride) {
+    const ctx = vaultCtxOverride || await deriveVaultContext();
+    if (!ctx) return { ok: false, skipped: true };
+
     // Strip heavy auto-generated daily snapshot array so cloud payload stays compact & fast
     const cleanSettings = { ...(payloadObj.settings || state.settings) };
     delete cleanSettings.categoryHistory;
@@ -799,18 +855,17 @@
       settings: cleanSettings,
       positions: Array.isArray(payloadObj.positions) ? payloadObj.positions : state.positions
     };
-    const encStr = encodeEncryptedCloudString(compactPayload);
+    const encStr = await encryptE2eeObject(compactPayload, ctx);
     const ntfyChunkSize = 3500;
     const numNtfyChunks = Math.max(1, Math.ceil(encStr.length / ntfyChunkSize));
     const ts = Date.now();
 
-    // 1. Primary: write via CORS-preflight-free simple POST (text/plain) to ntfy.sh
     const ntfyPromises = [];
     for (let i = 0; i < numNtfyChunks; i++) {
       const slice = encStr.slice(i * ntfyChunkSize, (i + 1) * ntfyChunkSize);
       const bodyStr = JSON.stringify({ n: numNtfyChunks, i, ts, v: slice });
       ntfyPromises.push(
-        fetch(`${NTFY_VAULT_BASE_URL}_s${i}`, {
+        fetch(`${ctx.topicBaseUrl}_s${i}`, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
           body: bodyStr
@@ -824,23 +879,25 @@
     return { ok: true, settings: compactPayload.settings, positions: compactPayload.positions };
   }
 
-  async function directCloudSlotLoad() {
-    // 1. Primary: load from ntfy.sh
+  async function directCloudSlotLoad(vaultCtxOverride) {
+    const ctx = vaultCtxOverride || await deriveVaultContext();
+    if (!ctx) return null;
+
     try {
-      const s0 = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_s0`);
+      const s0 = await ntfyFetchLatestJson(`${ctx.topicBaseUrl}_s0`);
       if (s0 && s0.n > 0 && s0.v) {
         let fullEnc = String(s0.v);
         if (s0.n > 1) {
           const tailPromises = [];
           for (let i = 1; i < s0.n; i++) {
-            tailPromises.push(ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_s${i}`));
+            tailPromises.push(ntfyFetchLatestJson(`${ctx.topicBaseUrl}_s${i}`));
           }
           const tailResults = await Promise.all(tailPromises);
           for (let i = 0; i < tailResults.length; i++) {
             fullEnc += String(tailResults[i]?.v || '');
           }
         }
-        const decoded = decodeEncryptedCloudString(fullEnc);
+        const decoded = await decryptE2eeObject(fullEnc, ctx);
         if (decoded && Array.isArray(decoded.positions)) {
           return {
             settings: decoded.settings || { primaryCurrency: 'USD' },
@@ -849,44 +906,18 @@
         }
       }
     } catch (_) {}
-
-    // 2. Fallback: load from restful-api.dev slots
-    const qAll = CLOUD_STORE_SLOT_IDS.map(id => `id=${id}`).join('&');
-    const res = await fetch(`${CLOUD_STORE_BASE_URL}?${qAll}&_t=${Date.now()}`, {
-      method: 'GET'
-    });
-    if (!res.ok) throw new Error(`Cloud load HTTP ${res.status}`);
-    const items = await res.json();
-    if (!Array.isArray(items) || items.length === 0) return null;
-
-    const byId = {};
-    items.forEach(it => {
-      if (it && it.id) byId[it.id] = it.data || {};
-    });
-
-    const slot0 = byId[CLOUD_STORE_SLOT_IDS[0]];
-    const numChunks = Number(slot0?.n) || 0;
-    if (numChunks <= 0 || !slot0?.v) {
-      return { settings: { primaryCurrency: 'USD' }, positions: [], isDemoSeed: true };
-    }
-
-    let fullEnc = '';
-    for (let i = 0; i < numChunks; i++) {
-      const slotData = byId[CLOUD_STORE_SLOT_IDS[i]];
-      fullEnc += String(slotData?.v || '');
-    }
-    const decoded = decodeEncryptedCloudString(fullEnc);
-    return {
-      settings: decoded.settings || { primaryCurrency: 'USD' },
-      positions: Array.isArray(decoded.positions) ? decoded.positions : []
-    };
+    return null;
   }
 
   async function triggerOneClickGoogleDrivePush(btnEl) {
+    if (!hasPrivateCloudVault()) {
+      openCloudVaultModal();
+      return;
+    }
     const origText = btnEl ? btnEl.textContent : '';
     if (btnEl) {
       btnEl.disabled = true;
-      btnEl.textContent = '⏳ Збереження в хмару...';
+      btnEl.textContent = '⏳ Шифрування та збереження...';
     }
     try {
       state.settings.updatedAt = new Date().toISOString();
@@ -914,10 +945,14 @@
   }
 
   async function triggerOneClickGoogleDrivePull(btnEl) {
+    if (!hasPrivateCloudVault()) {
+      openCloudVaultModal();
+      return;
+    }
     const origText = btnEl ? btnEl.textContent : '';
     if (btnEl) {
       btnEl.disabled = true;
-      btnEl.textContent = '⏳ Завантаження з хмари...';
+      btnEl.textContent = '⏳ Завантаження та розшифрування...';
     }
     try {
       const [data, dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([
@@ -946,6 +981,9 @@
             importantLinksUpdatedAt: resolvedLinks.updatedAt
           };
           state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+          if (Array.isArray(state.settings.marketTickers) && state.settings.marketTickers.length > 0) {
+            safeSetItem(MARKET_TICKERS_LOCAL_KEY, JSON.stringify(state.settings.marketTickers));
+          }
         }
         state.cloudSynced = true;
         state.justSyncedFromBridge = 'imported_to_device';
@@ -958,7 +996,7 @@
       } else {
         if (btnEl) {
           btnEl.disabled = false;
-          btnEl.textContent = '⚠️ Спочатку натисніть «Зберегти» на стаціонарному ПК';
+          btnEl.textContent = '⚠️ У цьому приватному сховищі ще немає даних';
         }
       }
     } catch (e) {
@@ -989,13 +1027,15 @@
 
   async function cloudSyncGet(paramsObj = {}) {
     if (paramsObj.action === 'get' || !paramsObj.action) {
-      try {
-        const directData = await directCloudSlotLoad();
-        if (directData) return directData;
-      } catch (_) {}
+      if (hasPrivateCloudVault()) {
+        try {
+          const directData = await directCloudSlotLoad();
+          if (directData) return directData;
+        } catch (_) {}
+      }
     }
     const baseUrl = (state.cloudSyncUrl || '').trim();
-    if (!baseUrl) throw new Error('No cloud sync URL configured');
+    if (!baseUrl) return null;
     const url = new URL(baseUrl);
     Object.keys(paramsObj).forEach(k => url.searchParams.set(k, paramsObj[k]));
     url.searchParams.set('_t', String(Date.now()));
@@ -1009,7 +1049,10 @@
   }
 
   async function cloudSyncPost(payloadObj) {
-    return await directCloudSlotSave(payloadObj);
+    if (hasPrivateCloudVault()) {
+      return await directCloudSlotSave(payloadObj);
+    }
+    return { ok: false, skipped: true };
   }
 
   // API / Storage Sync
@@ -1032,13 +1075,15 @@
     return res.json();
   }
 
-  // Dedicated cloud topic for Real Invested UAH (< 200 bytes, instant CORS-preflight-free POST)
-  async function saveRealInvestedUahToCloudSlot() {
+  // Dedicated encrypted cloud topic for Real Invested UAH (AES-256-GCM)
+  async function saveRealInvestedUahToCloudSlot(vaultCtxOverride) {
+    const ctx = vaultCtxOverride || await deriveVaultContext();
+    if (!ctx) return;
     const map = state.settings?.realInvestedUah || {};
     const updatedAt = state.settings?.realInvestedUahUpdatedAt || state.settings?.updatedAt || new Date().toISOString();
-    const enc = encodeEncryptedCloudString({ realInvestedUah: map, updatedAt });
     try {
-      await fetch(`${NTFY_VAULT_BASE_URL}_real_uah`, {
+      const enc = await encryptE2eeObject({ realInvestedUah: map, updatedAt }, ctx);
+      await fetch(`${ctx.topicBaseUrl}_real_uah`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({ ts: Date.now(), updatedAt, v: enc })
@@ -1046,11 +1091,13 @@
     } catch (_) {}
   }
 
-  async function loadRealInvestedUahFromCloudSlot() {
+  async function loadRealInvestedUahFromCloudSlot(vaultCtxOverride) {
+    const ctx = vaultCtxOverride || await deriveVaultContext();
+    if (!ctx) return null;
     try {
-      const msg = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_real_uah`);
+      const msg = await ntfyFetchLatestJson(`${ctx.topicBaseUrl}_real_uah`);
       if (msg && msg.v) {
-        const decoded = decodeEncryptedCloudString(msg.v);
+        const decoded = await decryptE2eeObject(msg.v, ctx);
         if (decoded && decoded.realInvestedUah && typeof decoded.realInvestedUah === 'object') {
           return decoded;
         }
@@ -1059,13 +1106,15 @@
     return null;
   }
 
-  // Dedicated cloud topic for Important Links (instant CORS-preflight-free cross-device sync)
-  async function saveImportantLinksToCloudSlot() {
+  // Dedicated encrypted cloud topic for Important Links (AES-256-GCM)
+  async function saveImportantLinksToCloudSlot(vaultCtxOverride) {
+    const ctx = vaultCtxOverride || await deriveVaultContext();
+    if (!ctx) return;
     const links = Array.isArray(state.settings?.importantLinks) ? state.settings.importantLinks : [];
     const updatedAt = state.settings?.importantLinksUpdatedAt || state.settings?.updatedAt || new Date().toISOString();
-    const enc = encodeEncryptedCloudString({ importantLinks: links, updatedAt });
     try {
-      await fetch(`${NTFY_VAULT_BASE_URL}_links`, {
+      const enc = await encryptE2eeObject({ importantLinks: links, updatedAt }, ctx);
+      await fetch(`${ctx.topicBaseUrl}_links`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify({ ts: Date.now(), updatedAt, v: enc })
@@ -1073,11 +1122,13 @@
     } catch (_) {}
   }
 
-  async function loadImportantLinksFromCloudSlot() {
+  async function loadImportantLinksFromCloudSlot(vaultCtxOverride) {
+    const ctx = vaultCtxOverride || await deriveVaultContext();
+    if (!ctx) return null;
     try {
-      const msg = await ntfyFetchLatestJson(`${NTFY_VAULT_BASE_URL}_links`);
+      const msg = await ntfyFetchLatestJson(`${ctx.topicBaseUrl}_links`);
       if (msg && msg.v) {
-        const decoded = decodeEncryptedCloudString(msg.v);
+        const decoded = await decryptE2eeObject(msg.v, ctx);
         if (decoded && Array.isArray(decoded.importantLinks)) {
           return decoded;
         }
@@ -1177,25 +1228,47 @@
     const localHasRealUserPositions = localPositions.length > 0 && !isDemoPortfolioData(localPositions);
 
     try {
-      let data;
-      const dedicatedRealUahPromise = !isGoogleAppsScript() ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null);
-      const dedicatedLinksPromise = !isGoogleAppsScript() ? loadImportantLinksFromCloudSlot() : Promise.resolve(null);
+      let data = null;
+      const canUseE2eeCloud = !isGoogleAppsScript() && hasPrivateCloudVault();
+      const dedicatedRealUahPromise = canUseE2eeCloud ? loadRealInvestedUahFromCloudSlot() : Promise.resolve(null);
+      const dedicatedLinksPromise = canUseE2eeCloud ? loadImportantLinksFromCloudSlot() : Promise.resolve(null);
       if (isGoogleAppsScript()) {
         data = await gasCall('gasGetPortfolio');
         state.cloudSynced = true;
         state.cloudSyncError = '';
-      } else if (isStaticHost() && state.cloudSyncUrl) {
-        data = await cloudSyncGet({ action: 'get' });
-        state.cloudSynced = true;
-        state.cloudSyncError = '';
+      } else if (isStaticHost()) {
+        if (isCloudSyncConfigured()) {
+          data = await cloudSyncGet({ action: 'get' });
+          state.cloudSynced = Boolean(hasPrivateCloudVault() || data);
+          state.cloudSyncError = '';
+        } else {
+          state.cloudSynced = false;
+          state.cloudSyncError = '';
+          if (localBackup) {
+            data = localBackup;
+          } else {
+            throw new Error('LOCAL_PRIVATE_UNCONFIGURED');
+          }
+        }
       } else {
         try {
           data = await apiFetch('/api/portfolio');
+          if (hasPrivateCloudVault()) {
+            const e2eeData = await directCloudSlotLoad();
+            if (e2eeData && Array.isArray(e2eeData.positions) && e2eeData.positions.length > 0) {
+              const e2eeTs = e2eeData.settings?.updatedAt || '';
+              const apiTs = data?.settings?.updatedAt || '';
+              if (!apiTs || (e2eeTs && e2eeTs > apiTs)) {
+                data = e2eeData;
+              }
+            }
+            state.cloudSynced = true;
+          }
         } catch (localErr) {
           if (localErr && localErr.message === 'Unauthorized') throw localErr;
-          if (state.cloudSyncUrl) {
+          if (isCloudSyncConfigured()) {
             data = await cloudSyncGet({ action: 'get' });
-            state.cloudSynced = true;
+            state.cloudSynced = Boolean(hasPrivateCloudVault() || data);
             state.cloudSyncError = '';
           } else {
             throw localErr;
@@ -1324,6 +1397,7 @@
   let isPullingCloudQuietly = false;
   async function syncLatestFromCloudQuietly() {
     if (isPullingCloudQuietly) return;
+    if (!isGoogleAppsScript() && !hasPrivateCloudVault()) return;
     // Do not overwrite while user has an unsaved edit timer running
     if (realUahSaveTimer || strategySaveTimer) return;
     isPullingCloudQuietly = true;
@@ -1394,6 +1468,9 @@
               importantLinksUpdatedAt: resolvedLinks.updatedAt
             };
             state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+            if (Array.isArray(state.settings.marketTickers) && state.settings.marketTickers.length > 0) {
+              safeSetItem(MARKET_TICKERS_LOCAL_KEY, JSON.stringify(state.settings.marketTickers));
+            }
           }
           if (remoteHasReal) {
             state.positions = remotePositions;
@@ -1422,10 +1499,10 @@
       settings: state.settings,
       positions: state.positions
     }));
-    if (!isGoogleAppsScript() && state.settings?.realInvestedUah && Object.keys(state.settings.realInvestedUah).length > 0) {
+    if (!isGoogleAppsScript() && hasPrivateCloudVault() && state.settings?.realInvestedUah && Object.keys(state.settings.realInvestedUah).length > 0) {
       saveRealInvestedUahToCloudSlot();
     }
-    if (!isGoogleAppsScript() && state.settings?.importantLinksUpdatedAt) {
+    if (!isGoogleAppsScript() && hasPrivateCloudVault() && state.settings?.importantLinksUpdatedAt) {
       saveImportantLinksToCloudSlot();
     }
     try {
@@ -1436,14 +1513,18 @@
         });
         state.cloudSynced = true;
         state.cloudSyncError = '';
-      } else if (isStaticHost() && state.cloudSyncUrl) {
-        await cloudSyncPost({
-          action: 'save',
-          settings: state.settings,
-          positions: state.positions
-        });
-        state.cloudSynced = true;
-        state.cloudSyncError = '';
+      } else if (isStaticHost()) {
+        if (hasPrivateCloudVault()) {
+          await cloudSyncPost({
+            action: 'save',
+            settings: state.settings,
+            positions: state.positions
+          });
+          state.cloudSynced = true;
+          state.cloudSyncError = '';
+        } else {
+          state.cloudSynced = false;
+        }
       } else {
         await apiFetch('/api/portfolio', {
           method: 'PUT',
@@ -1452,7 +1533,7 @@
             positions: state.positions
           })
         });
-        if (state.cloudSyncUrl) {
+        if (hasPrivateCloudVault()) {
           try {
             await cloudSyncPost({
               action: 'save',
@@ -2974,17 +3055,21 @@
     const cloudLabelEl = document.getElementById('topbar-cloud-label');
     const cloudBtnEl = document.getElementById('btn-topbar-cloud');
     const isShowingDemo = isDemoPortfolioData(state.positions);
+    const hasE2ee = hasPrivateCloudVault();
     if (cloudLabelEl) {
-      if (state.cloudSynced) {
-        cloudLabelEl.textContent = isShowingDemo ? '☁️ Google Диск (Демо-дані)' : '🟢 ☁️ Google Диск';
-        if (cloudBtnEl) cloudBtnEl.style.borderColor = isShowingDemo ? 'var(--warning)' : 'rgba(16, 185, 129, 0.45)';
+      if (isGoogleAppsScript()) {
+        cloudLabelEl.textContent = '🟢 ☁️ Google Диск';
+        if (cloudBtnEl) cloudBtnEl.style.borderColor = 'rgba(16, 185, 129, 0.45)';
+      } else if (hasE2ee) {
+        cloudLabelEl.textContent = state.cloudSynced ? '🟢 🔐 E2EE Хмара' : '🔐 E2EE Хмара';
+        if (cloudBtnEl) cloudBtnEl.style.borderColor = 'rgba(16, 185, 129, 0.5)';
       } else {
-        cloudLabelEl.textContent = '🟠 ☁️ Локальний режим';
+        cloudLabelEl.textContent = '🔒 Приватна хмара';
         if (cloudBtnEl) cloudBtnEl.style.borderColor = 'rgba(245, 158, 11, 0.5)';
       }
     }
 
-    // Show 1-Click Cloud Sync Banner for seamless cross-device sync (Desktop <-> Google Drive <-> Laptop)
+    // Show Zero-Knowledge Private Cloud Sync Banner when vault key is not yet configured on this device
     const heroEl = document.querySelector('.wealth-hero');
     let demoBanner = document.getElementById('demo-data-notice-banner');
     if (!demoBanner && heroEl && heroEl.parentNode) {
@@ -3026,19 +3111,19 @@
         `;
       } else if (isShowingDemo) {
         demoBanner.style.display = 'block';
-        demoBanner.style.background = 'rgba(245, 158, 11, 0.1)';
-        demoBanner.style.border = '1px solid rgba(245, 158, 11, 0.45)';
+        demoBanner.style.background = 'rgba(56, 189, 248, 0.08)';
+        demoBanner.style.border = '1px solid rgba(56, 189, 248, 0.35)';
         demoBanner.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="font-size:12.5px; line-height:1.45; max-width:680px;">
-              <strong style="color:#f59e0b; font-size:13px;">☁️ На цьому пристрої ще не завантажені ваші дані з Google Диска (показано демо-приклади)</strong>
+              <strong style="color:#38bdf8; font-size:13px;">🔐 Приватний режим — зараз показані демонстраційні дані</strong>
               <div style="color:var(--text-secondary); margin-top:3px;">
-                Натисніть <strong>«⬇️ Завантажити мої дані з Google Диска»</strong>, щоб в 1 клік підтягнути ваш портфель без копіювання файлів.
+                Без вашої особистої секретної фрази жодні приватні дані не завантажуються. Введіть свій ключ, щоб розшифрувати портфель (AES-256-GCM).
               </div>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-primary" id="btn-banner-oneclick-pull" style="font-size:12.5px; padding:7px 14px;">
-                ⬇️ Завантажити мої дані з Google Диска (в 1 клік)
+              <button type="button" class="btn btn-primary" id="btn-banner-open-vault" style="font-size:12.5px; padding:7px 14px;">
+                🔑 Увійти за секретним ключем
               </button>
               <button type="button" class="btn btn-danger" id="btn-banner-clear-demo" style="font-size:12px; padding:6px 11px;">
                 🗑 Прибрати демо-дані
@@ -3046,42 +3131,32 @@
             </div>
           </div>
         `;
-        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', (e) => {
-          triggerOneClickGoogleDrivePull(e.currentTarget);
-        });
+        demoBanner.querySelector('#btn-banner-open-vault')?.addEventListener('click', openCloudVaultModal);
         demoBanner.querySelector('#btn-banner-clear-demo')?.addEventListener('click', async () => {
           state.positions = [];
           await persistPortfolio();
           renderAll();
         });
-      } else if (!state.cloudSynced) {
+      } else if (!hasE2ee) {
         demoBanner.style.display = 'block';
-        demoBanner.style.background = 'rgba(56, 189, 248, 0.08)';
-        demoBanner.style.border = '1px solid rgba(56, 189, 248, 0.35)';
+        demoBanner.style.background = 'rgba(16, 185, 129, 0.08)';
+        demoBanner.style.border = '1px solid rgba(16, 185, 129, 0.35)';
         demoBanner.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div style="font-size:12.5px; line-height:1.45; max-width:680px;">
-              <strong style="color:var(--accent-primary); font-size:13px;">☁️ Швидка синхронізація між стаціонарним ПК та ноутбуком</strong>
+              <strong style="color:#10b981; font-size:13px;">🔐 Увімкніть приватну E2EE-синхронізацію (AES-256-GCM)</strong>
               <div style="color:var(--text-secondary); margin-top:2px;">
-                Натисніть <strong>«⬆️ Зберегти дані в хмару»</strong> на стаціонарному ПК, а потім <strong>«⬇️ Завантажити з хмари»</strong> на ноутбуці — усе відбудеться тут же без переходу на інші сторінки.
+                Ваші дані збережені локально на цьому пристрої. Задайте особисту секретну фразу, щоб зашифрувати портфель і «Важливі посилання» для синхронізації між ПК та телефоном — ніхто без фрази доступу не матиме.
               </div>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-primary" id="btn-banner-oneclick-push" style="font-size:12.5px; padding:7px 14px;">
-                ⬆️ Зберегти дані в хмару (в 1 клік)
-              </button>
-              <button type="button" class="btn btn-secondary" id="btn-banner-oneclick-pull" style="font-size:12px; padding:6px 12px;">
-                ⬇️ Завантажити з хмари
+              <button type="button" class="btn btn-primary" id="btn-banner-open-vault" style="font-size:12.5px; padding:7px 14px;">
+                🔐 Налаштувати секретний ключ
               </button>
             </div>
           </div>
         `;
-        demoBanner.querySelector('#btn-banner-oneclick-push')?.addEventListener('click', (e) => {
-          triggerOneClickGoogleDrivePush(e.currentTarget);
-        });
-        demoBanner.querySelector('#btn-banner-oneclick-pull')?.addEventListener('click', (e) => {
-          triggerOneClickGoogleDrivePull(e.currentTarget);
-        });
+        demoBanner.querySelector('#btn-banner-open-vault')?.addEventListener('click', openCloudVaultModal);
       } else {
         demoBanner.style.display = 'block';
         demoBanner.style.background = 'rgba(16, 185, 129, 0.08)';
@@ -9254,6 +9329,288 @@
     document.getElementById('modal-ticker-editor')?.classList.remove('open');
   }
 
+  function renderCloudVaultModal(statusText = '', statusKind = '') {
+    const bodyEl = document.getElementById('cloud-vault-modal-body');
+    if (!bodyEl) return;
+
+    const connected = hasPrivateCloudVault();
+    const isShowingDemo = isDemoPortfolioData(state.positions);
+    const linksCount = Array.isArray(state.settings?.importantLinks) ? state.settings.importantLinks.length : 0;
+
+    if (connected) {
+      const tagPreview = cachedVaultCtx?.topicTag
+        ? `mk2_${cachedVaultCtx.topicTag.slice(0, 4)}••••••••${cachedVaultCtx.topicTag.slice(-4)}`
+        : 'mk2_••••••••••••';
+      bodyEl.innerHTML = `
+        <div class="e2ee-banner">
+          <strong>🟢 Приватна хмара активна (AES-256-GCM)</strong><br/>
+          Усі ваші активи, історія покупок, котирування та «Важливі посилання» шифруються прямо на цьому пристрої перед відправкою. Без вашої секретної фрази ніхто не зможе знайти чи прочитати дані.
+        </div>
+
+        <div class="e2ee-meta-box">
+          <div class="e2ee-meta-row">
+            <span>Приватний слот:</span>
+            <strong class="mono">${escapeHtml(tagPreview)}</strong>
+          </div>
+          <div class="e2ee-meta-row">
+            <span>Шифрування:</span>
+            <strong class="mono" style="color:var(--positive);">PBKDF2 (100k) + AES-256-GCM</strong>
+          </div>
+          <div class="e2ee-meta-row">
+            <span>На цьому пристрої:</span>
+            <strong>${state.positions.length} поз. · ${linksCount} посилань</strong>
+          </div>
+        </div>
+
+        <div class="e2ee-actions-grid">
+          <button type="button" class="btn btn-primary" id="btn-e2ee-push-now" style="font-size:12.5px;">⬆️ Зашифрувати і зберегти в хмару</button>
+          <button type="button" class="btn btn-secondary" id="btn-e2ee-pull-now" style="font-size:12.5px;">⬇️ Завантажити з хмари</button>
+          <button type="button" class="btn btn-danger" id="btn-e2ee-disconnect" style="font-size:12px;">🚪 Відключити на цьому пристрої</button>
+        </div>
+
+        <div class="e2ee-status-msg${statusKind ? ` is-${statusKind}` : ''}" id="e2ee-status-msg">${escapeHtml(statusText)}</div>
+      `;
+
+      // Refresh tag preview asynchronously if cache wasn't populated yet
+      if (!cachedVaultCtx) {
+        deriveVaultContext().then(() => {
+          if (document.getElementById('modal-cloud-vault')?.classList.contains('open')) {
+            renderCloudVaultModal(statusText, statusKind);
+          }
+        }).catch(() => {});
+      }
+
+      const setMsg = (txt, kind) => {
+        const el = bodyEl.querySelector('#e2ee-status-msg');
+        if (!el) return;
+        el.textContent = txt;
+        el.className = `e2ee-status-msg is-${kind}`;
+      };
+
+      bodyEl.querySelector('#btn-e2ee-push-now')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        setMsg('⏳ Шифруємо дані (AES-256-GCM) та зберігаємо в приватну хмару...', 'info');
+        try {
+          state.settings.updatedAt = new Date().toISOString();
+          await Promise.all([
+            directCloudSlotSave({ settings: state.settings, positions: state.positions }),
+            saveRealInvestedUahToCloudSlot(),
+            saveImportantLinksToCloudSlot()
+          ]);
+          state.cloudSynced = true;
+          safeSetItem('kapital_backup_state', JSON.stringify({ settings: state.settings, positions: state.positions }));
+          renderAll();
+          setMsg(`✅ Успішно зашифровано та збережено в приватну хмару (${state.positions.length} поз., ${linksCount} посилань). Тепер введіть цю саму фразу на іншому пристрої!`, 'ok');
+        } catch (err) {
+          setMsg(`❌ Помилка збереження: ${err?.message || err}`, 'err');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      bodyEl.querySelector('#btn-e2ee-pull-now')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        setMsg('⏳ Шукаємо та розшифровуємо дані з вашого приватного слоту...', 'info');
+        try {
+          const [data, dedicatedRealUahObj, dedicatedLinksObj] = await Promise.all([
+            directCloudSlotLoad(),
+            loadRealInvestedUahFromCloudSlot(),
+            loadImportantLinksFromCloudSlot()
+          ]);
+          if (data && Array.isArray(data.positions)) {
+            state.positions = data.positions;
+            if (data.settings) {
+              const resolvedLinks = resolveLatestImportantLinks(
+                state.settings?.importantLinks,
+                state.settings?.importantLinksUpdatedAt || '',
+                dedicatedLinksObj?.importantLinks || data.settings.importantLinks,
+                dedicatedLinksObj?.updatedAt || data.settings.importantLinksUpdatedAt || data.settings.updatedAt || ''
+              );
+              state.settings = {
+                ...state.settings,
+                ...data.settings,
+                realInvestedUah: {
+                  ...(state.settings.realInvestedUah || {}),
+                  ...(data.settings.realInvestedUah || {}),
+                  ...(dedicatedRealUahObj?.realInvestedUah || {})
+                },
+                importantLinks: resolvedLinks.links,
+                importantLinksUpdatedAt: resolvedLinks.updatedAt
+              };
+              state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+              if (Array.isArray(state.settings.marketTickers) && state.settings.marketTickers.length > 0) {
+                safeSetItem(MARKET_TICKERS_LOCAL_KEY, JSON.stringify(state.settings.marketTickers));
+              }
+            }
+            state.cloudSynced = true;
+            safeSetItem('kapital_backup_state', JSON.stringify({ settings: state.settings, positions: state.positions }));
+            renderAll();
+            refreshBrowserQuotesQuietly();
+            setMsg(`✅ Розшифровано та завантажено: ${state.positions.length} поз., ${(state.settings.importantLinks || []).length} посилань.`, 'ok');
+          } else {
+            setMsg('⚠️ У приватному слоті за цим ключем ще немає збережених даних. Натисніть «⬆️ Зашифрувати і зберегти» на основному пристрої.', 'info');
+          }
+        } catch (err) {
+          setMsg(`❌ Не вдалося розшифрувати: ${err?.message || err}`, 'err');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      bodyEl.querySelector('#btn-e2ee-disconnect')?.addEventListener('click', () => {
+        if (!confirm('Відключити приватну хмару на цьому пристрої? Локальні дані залишаться у браузері, доки ви їх не очистите.')) return;
+        safeRemoveItem(E2EE_PASSPHRASE_STORAGE_KEY);
+        cachedVaultCtx = null;
+        state.cloudSynced = false;
+        renderAll();
+        renderCloudVaultModal('Приватну хмару відключено на цьому пристрої.', 'info');
+      });
+      return;
+    }
+
+    // Not connected yet: show setup / login form
+    bodyEl.innerHTML = `
+      <div class="e2ee-banner is-locked">
+        <strong>🛡️ Нульовий доступ для сторонніх (Zero-Knowledge)</strong><br/>
+        Секретна фраза зберігається <strong>лише локально на вашому пристрої</strong> і ніколи не потрапляє в код чи на GitHub. З неї генерується унікальна приватна адреса сховища та 256-бітний ключ <strong>AES-256-GCM</strong>.
+        <div style="margin-top:6px;">
+          ${isShowingDemo
+            ? '• Якщо ви вже налаштували ключ на ПК — введіть <strong>ту саму фразу</strong> тут, і ваш портфель підтягнеться автоматично.'
+            : `• На цьому пристрої є ваші локальні дані (<strong>${state.positions.length} поз., ${linksCount} посилань</strong>) — придумайте надійну фразу, і вони одразу зашифруються у вашу приватну хмару.`}
+        </div>
+      </div>
+
+      <form id="form-e2ee-connect" autocomplete="off">
+        <div class="form-group">
+          <label class="form-label" for="e2ee-passphrase-input">Особиста секретна фраза (мін. 6 символів, радимо 10+)</label>
+          <div class="e2ee-input-row">
+            <input type="password" class="form-input" id="e2ee-passphrase-input" placeholder="Напр. MySecret-Kapital-2026!" minlength="6" required />
+            <button type="button" class="btn btn-secondary" id="btn-e2ee-toggle-vis" title="Показати / приховати фразу" style="padding:8px 11px;">👁</button>
+          </div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+            Запам'ятайте або збережіть цю фразу в менеджері паролів (iCloud Keychain / 1Password) — відновити її без вас неможливо.
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-e2ee-submit" style="width:100%; margin-top:4px;">
+          🔐 Підключити та синхронізувати (AES-256-GCM)
+        </button>
+      </form>
+
+      <div class="e2ee-status-msg${statusKind ? ` is-${statusKind}` : ''}" id="e2ee-status-msg">${escapeHtml(statusText)}</div>
+    `;
+
+    const inputEl = bodyEl.querySelector('#e2ee-passphrase-input');
+    const toggleBtn = bodyEl.querySelector('#btn-e2ee-toggle-vis');
+    const msgEl = bodyEl.querySelector('#e2ee-status-msg');
+    const setMsg = (txt, kind) => {
+      if (!msgEl) return;
+      msgEl.textContent = txt;
+      msgEl.className = `e2ee-status-msg is-${kind}`;
+    };
+
+    toggleBtn?.addEventListener('click', () => {
+      if (!inputEl) return;
+      inputEl.type = inputEl.type === 'password' ? 'text' : 'password';
+    });
+
+    bodyEl.querySelector('#form-e2ee-connect')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pass = (inputEl?.value || '').trim();
+      if (pass.length < 6) {
+        setMsg('Фраза має містити щонайменше 6 символів.', 'err');
+        return;
+      }
+      const submitBtn = bodyEl.querySelector('#btn-e2ee-submit');
+      if (submitBtn) submitBtn.disabled = true;
+      setMsg('⏳ Генеруємо ключ AES-256-GCM та перевіряємо приватне сховище...', 'info');
+
+      try {
+        const ctx = await deriveVaultContext(pass);
+        safeSetItem(E2EE_PASSPHRASE_STORAGE_KEY, pass);
+        cachedVaultCtx = ctx;
+
+        // 1. Check if this private vault already holds data (e.g., logging in on iPhone after setting up PC)
+        const [remoteData, remoteRealUah, remoteLinks] = await Promise.all([
+          directCloudSlotLoad(ctx),
+          loadRealInvestedUahFromCloudSlot(ctx),
+          loadImportantLinksFromCloudSlot(ctx)
+        ]);
+
+        const remotePos = Array.isArray(remoteData?.positions) ? remoteData.positions : [];
+        const remoteHasReal = remotePos.length > 0 && !isDemoPortfolioData(remotePos);
+        const localHasReal = Array.isArray(state.positions) && state.positions.length > 0 && !isDemoPortfolioData(state.positions);
+        const remoteTs = remoteData?.settings?.updatedAt || '';
+        const localTs = state.settings?.updatedAt || '';
+
+        if (remoteHasReal && (!localHasReal || (remoteTs && (!localTs || remoteTs >= localTs)))) {
+          // Pull decrypted data from private vault!
+          state.positions = remotePos;
+          if (remoteData.settings) {
+            const resolvedLinks = resolveLatestImportantLinks(
+              state.settings?.importantLinks,
+              state.settings?.importantLinksUpdatedAt || '',
+              remoteLinks?.importantLinks || remoteData.settings.importantLinks,
+              remoteLinks?.updatedAt || remoteData.settings.importantLinksUpdatedAt || remoteTs
+            );
+            state.settings = {
+              ...state.settings,
+              ...remoteData.settings,
+              realInvestedUah: {
+                ...(state.settings.realInvestedUah || {}),
+                ...(remoteData.settings.realInvestedUah || {}),
+                ...(remoteRealUah?.realInvestedUah || {})
+              },
+              importantLinks: resolvedLinks.links,
+              importantLinksUpdatedAt: resolvedLinks.updatedAt
+            };
+            state.primaryCurrency = state.settings.primaryCurrency || 'USD';
+            if (Array.isArray(state.settings.marketTickers) && state.settings.marketTickers.length > 0) {
+              safeSetItem(MARKET_TICKERS_LOCAL_KEY, JSON.stringify(state.settings.marketTickers));
+            }
+          }
+          state.cloudSynced = true;
+          safeSetItem('kapital_backup_state', JSON.stringify({ settings: state.settings, positions: state.positions }));
+          renderAll();
+          refreshBrowserQuotesQuietly();
+          renderCloudVaultModal(`✅ Розшифровано та завантажено ваш портфель (${state.positions.length} поз., ${(state.settings.importantLinks || []).length} посилань)!`, 'ok');
+        } else if (localHasReal) {
+          // First device setup: encrypt and upload current local portfolio to brand-new private vault!
+          state.settings.updatedAt = new Date().toISOString();
+          await Promise.all([
+            directCloudSlotSave({ settings: state.settings, positions: state.positions }, ctx),
+            saveRealInvestedUahToCloudSlot(ctx),
+            saveImportantLinksToCloudSlot(ctx)
+          ]);
+          state.cloudSynced = true;
+          safeSetItem('kapital_backup_state', JSON.stringify({ settings: state.settings, positions: state.positions }));
+          renderAll();
+          renderCloudVaultModal(`✅ Ваш портфель (${state.positions.length} поз., ${(state.settings.importantLinks || []).length} посилань) зашифровано (AES-256-GCM) та збережено в приватну хмару!`, 'ok');
+        } else {
+          // Both remote and local have no real positions yet (fresh empty private vault)
+          state.cloudSynced = true;
+          renderAll();
+          renderCloudVaultModal('✅ Приватне сховище активовано! Усі нові активи й посилання будуть автоматично шифруватись (AES-256-GCM).', 'ok');
+        }
+      } catch (err) {
+        if (submitBtn) submitBtn.disabled = false;
+        setMsg(`❌ Помилка підключення: ${err?.message || err}`, 'err');
+      }
+    });
+  }
+
+  function openCloudVaultModal() {
+    const modal = document.getElementById('modal-cloud-vault');
+    if (!modal) return;
+    renderCloudVaultModal();
+    modal.classList.add('open');
+  }
+
+  function closeCloudVaultModal() {
+    document.getElementById('modal-cloud-vault')?.classList.remove('open');
+  }
+
   function openLoginModal() {
     document.getElementById('modal-login').classList.add('open');
   }
@@ -9283,10 +9640,18 @@
       if (e.target && e.target.id === 'modal-ticker-editor') closeTickerEditorModal();
     });
 
+    // Zero-Knowledge E2EE Private Cloud Vault modal bindings
+    document.getElementById('btn-close-cloud-vault')?.addEventListener('click', closeCloudVaultModal);
+    document.getElementById('btn-done-cloud-vault')?.addEventListener('click', closeCloudVaultModal);
+    document.getElementById('modal-cloud-vault')?.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'modal-cloud-vault') closeCloudVaultModal();
+    });
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closePassiveBreakdownModal();
         closeTickerEditorModal();
+        closeCloudVaultModal();
       }
     });
 
@@ -9413,7 +9778,7 @@
     document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
     document.getElementById('btn-edit-fx').addEventListener('click', openSettingsModal);
     const topbarCloudBtn = document.getElementById('btn-topbar-cloud');
-    if (topbarCloudBtn) topbarCloudBtn.addEventListener('click', openSettingsModal);
+    if (topbarCloudBtn) topbarCloudBtn.addEventListener('click', openCloudVaultModal);
     document.getElementById('btn-close-settings-modal').addEventListener('click', closeSettingsModal);
     document.getElementById('btn-cancel-settings').addEventListener('click', closeSettingsModal);
     document.getElementById('form-settings').addEventListener('submit', handleSaveSettings);

@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=51" />
+  <link rel="stylesheet" href="index.css?v=52" />
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
@@ -226,8 +226,8 @@
             🔒
           </button>
 
-          <button type="button" class="btn btn-secondary" id="btn-topbar-cloud" title="Налаштування хмарної синхронізації з Google Диском та параметрів портфеля">
-            <span id="topbar-cloud-label">☁️ Google Диск</span>
+          <button type="button" class="btn btn-secondary" id="btn-topbar-cloud" title="Приватна зашифрована хмарна синхронізація (AES-256-GCM)">
+            <span id="topbar-cloud-label">🔒 Приватна хмара</span>
           </button>
 
           <button type="button" class="btn btn-secondary" id="btn-refresh-quotes" title="Оновити ринкові ціни крипти, акцій та курсу валют">
@@ -590,6 +590,20 @@
     </div>
   </div>
 
+  <!-- Zero-Knowledge E2EE Private Cloud Vault Modal (AES-256-GCM) -->
+  <div class="modal-backdrop" id="modal-cloud-vault" role="dialog" aria-modal="true" aria-labelledby="modal-cloud-vault-title">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-cloud-vault-title">🔐 Приватна хмара (AES-256-GCM)</h2>
+        <button type="button" class="btn btn-ghost" id="btn-close-cloud-vault" aria-label="Закрити">✕</button>
+      </div>
+      <div id="cloud-vault-modal-body"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-done-cloud-vault">Закрити</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Login Lock Screen Modal (When requireAuth is enabled) -->
   <div class="modal-backdrop" id="modal-login" role="dialog" aria-modal="true" aria-labelledby="modal-login-title">
     <div class="modal-dialog" style="max-width: 400px;">
@@ -609,6 +623,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=51"></script>
+  <script src="app.js?v=52"></script>
 </body>
 </html>
