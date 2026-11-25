@@ -4199,7 +4199,7 @@
                   </div>
 
                   <div class="tabular" style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-muted);">
-                    <span>${pos.buyPriceUsd ? `Ціна: ${fmtUsd(pos.buyPriceUsd)} → <strong style="color:var(--text-secondary);">${fmtUsd(pos.livePriceUsd)}</strong>` : `Категорія: ${escapeHtml(CATEGORY_META[pos.category]?.shortName || pos.category)}`}</span>
+                    <span>${pos.buyPriceUsd ? `Сер. ціна: ${fmtUsd(pos.buyPriceUsd)} → <strong style="color:var(--text-secondary);">${fmtUsd(pos.livePriceUsd)}</strong>` : `Категорія: ${escapeHtml(CATEGORY_META[pos.category]?.shortName || pos.category)}`}</span>
                     <span style="color:${isPos24Up ? CMC_GREEN : CMC_RED};">24г: ${isPos24Up ? '+' : ''}${(pos.change24h || 0).toFixed(2)}%</span>
                   </div>
                 </div>
@@ -6519,12 +6519,16 @@
     const thead = document.getElementById('positions-table-head');
     const tbody = document.getElementById('positions-table-body');
 
+    const priceColHeader = (state.activeCategory === 'ovdp' || state.activeCategory === 'deposits')
+      ? 'Термін / Погашення'
+      : (state.activeCategory === 'cash' ? 'Статус / Валюта' : 'Сер. ціна / Ринок');
+
     thead.innerHTML = `
       <tr>
         <th>Актив / Деталі</th>
         <th>Категорія / Платформа</th>
         <th class="text-right">Кількість / Ставка</th>
-        <th class="text-right">Ціна купівлі → Поточна</th>
+        <th class="text-right">${priceColHeader}</th>
         <th class="text-right">Вартість (${isUsdPrimary ? '$ USD / ₴ UAH' : '₴ UAH / $ USD'})</th>
         <th class="text-right">Прибуток / Нараховано</th>
         <th class="text-right">Дії</th>
@@ -6572,8 +6576,17 @@
           <div class="dual-val-sub">Вкладено: ${fmtUsd(pos.investedUsd)}</div>
         `;
         priceComparisonHtml = `
-          <div class="dual-val-primary">${fmtUsd(pos.livePriceUsd)} <span style="font-size:11px; color:${chgColor};">(${chgSign}${pos.change24h.toFixed(2)}%)</span></div>
-          <div class="dual-val-sub">Купівля: ${fmtUsd(pos.buyPriceUsd)}</div>
+          <div class="pos-price-stack">
+            <div class="pos-price-row pos-price-avg" title="Ваша середня ціна купівлі за 1 шт. активу">
+              <span class="pos-price-tag pos-price-tag-avg">Сер. ціна</span>
+              <span class="pos-price-num pos-price-num-avg">${fmtUsd(pos.buyPriceUsd)}</span>
+            </div>
+            <div class="pos-price-row pos-price-live" title="Поточна ринкова ціна та зміна за 24 години">
+              <span class="pos-price-tag">Ринок</span>
+              <span class="pos-price-num">${fmtUsd(pos.livePriceUsd)}</span>
+              <span class="pos-price-24h" style="color:${chgColor};" title="Зміна на ринку за 24 години">(${chgSign}${pos.change24h.toFixed(2)}%)</span>
+            </div>
+          </div>
         `;
         const pnlClass = pos.pnlUsd >= 0 ? 'pill-positive' : 'pill-negative';
         const pnlPrimaryStr = isUsdPrimary ? fmtUsd(pos.pnlUsd, true) : fmtUah(pos.pnlUah, true);
@@ -7469,7 +7482,7 @@
           <input type="number" step="any" min="0.00000001" class="form-input tabular" id="f-quantity" value="${qtyVal}" required />
         </div>
         <div class="form-group">
-          <label class="form-label" for="f-buy-price">Ціна купівлі за 1 шт. ($ USD)</label>
+          <label class="form-label" for="f-buy-price">${existing ? 'Середня ціна купівлі за 1 шт. ($ USD)' : 'Ціна купівлі за 1 шт. ($ USD)'}</label>
           <input type="number" step="any" min="0" class="form-input tabular" id="f-buy-price" value="${buyVal}" required />
         </div>
         ${isCrypto ? `
