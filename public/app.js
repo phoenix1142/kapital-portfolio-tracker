@@ -3404,6 +3404,17 @@
       }
     }
 
+    // Show/hide Yearly Passive Income History & Dynamics section (on 'all', 'ovdp', 'deposits')
+    const passiveHistorySection = document.getElementById('passive-history-section');
+    if (passiveHistorySection) {
+      if (state.activeCategory === 'all' || state.activeCategory === 'ovdp' || state.activeCategory === 'deposits') {
+        passiveHistorySection.style.display = 'block';
+        renderPassiveIncomeHistorySection(evaluated, totalUah);
+      } else {
+        passiveHistorySection.style.display = 'none';
+      }
+    }
+
     // Show/hide Stocks Strategy & Monthly Rebalancing Calculator section
     let stocksStrategySection = document.getElementById('stocks-strategy-section');
     if (!stocksStrategySection && overviewSection && overviewSection.parentNode) {
@@ -8925,6 +8936,437 @@
     renderAll();
   }
 
+  // =========================================================================
+  // Yearly Passive Income History & Dynamics (Auto + Manual Past-Year Entries)
+  // =========================================================================
+  let passiveHistoryAddFormOpen = false;
+
+  function getPassiveHistoryManualEntries() {
+    const arr = state.settings && Array.isArray(state.settings.passiveIncomeHistory)
+      ? state.settings.passiveIncomeHistory
+      : [];
+    return arr.filter(it => it && Number(it.year) >= 2000 && Number(it.amount) > 0);
+  }
+
+  function savePassiveHistoryManualEntries(entries) {
+    if (!state.settings) state.settings = {};
+    state.settings.passiveIncomeHistory = entries;
+    persistPortfolio();
+  }
+
+  function computePositionPassiveForYearUah(pos, year) {
+    const rates = getEffectiveRates();
+    const now = new Date();
+    const curYear = now.getFullYear();
+    if (year > curYear) return { earnedUah: 0, projectedFullYearUah: 0 };
+
+    const yStart = new Date(year, 0, 1);
+    const yEndFull = new Date(year + 1, 0, 1);
+    const yEndEarned = year === curYear ? now : yEndFull;
+    const msPerDay = 86400000;
+
+    if (pos.category === 'ovdp' || pos.category === 'deposits') {
+      const curr = (pos.nativeCurrency || pos.currency || 'UAH').toUpperCase();
+      const principal = Number(pos.principalNative) || Number(pos.principalAmount) || 0;
+      const netRatePct = Number(pos.netRatePct) || Number(pos.annualRate) || 0;
+      if (principal <= 0 || netRatePct <= 0) return { earnedUah: 0, projectedFullYearUah: 0 };
+
+      const start = pos.startDate ? new Date(pos.startDate) : new Date(curYear, 0, 1);
+      const endStr = pos.category === 'ovdp' ? pos.maturityDate : pos.endDate;
+      const end = endStr ? new Date(endStr) : new Date(curYear + 1, 0, 1);
+
+      const earnFrom = Math.max(start.getTime(), yStart.getTime());
+      const earnTo = Math.min(end.getTime(), yEndEarned.getTime());
+      const earnedDays = Math.max(0, Math.round((earnTo - earnFrom) / msPerDay));
+      const earnedNative = principal * (netRatePct / 100) * (earnedDays / 365);
+
+      const projFrom = Math.max(start.getTime(), yStart.getTime());
+      const projTo = Math.min(end.getTime(), yEndFull.getTime());
+      const projDays = Math.max(0, Math.round((projTo - projFrom) / msPerDay));
+      const projNative = principal * (netRatePct / 100) * (projDays / 365);
+
+      return {
+        earnedUah: toUah(earnedNative, curr),
+        projectedFullYearUah: toUah(projNative, curr)
+      };
+    }
+
+    if (pos.category === 'crypto' && pos.isStaked && Number(pos.stakingApy) > 0) {
+      const qty = Number(pos.quantity) || 0;
+      const apy = Number(pos.stakingApy) || 0;
+      const livePriceUsd = Number(pos.livePriceUsd) || 0;
+      if (qty <= 0 || livePriceUsd <= 0) return { earnedUah: 0, projectedFullYearUah: 0 };
+
+      const startStr = pos.stakingStartDate || pos.createdAt;
+      const start = startStr ? new Date(startStr) : now;
+      const earnFrom = Math.max(start.getTime(), yStart.getTime());
+      const earnTo = yEndEarned.getTime();
+      const earnedDays = Math.max(0, Math.round((earnTo - earnFrom) / msPerDay));
+
+      const projFrom = Math.max(start.getTime(), yStart.getTime());
+      const projTo = yEndFull.getTime();
+      const projDays = Math.max(0, Math.round((projTo - projFrom) / msPerDay));
+
+      const dailyRate = (apy / 100) / 365;
+      const calcCoins = (days) => {
+        if (days <= 0) return 0;
+        if (pos.stakingCompound) {
+          const daysBefore = Math.max(0, Math.round((earnFrom - start.getTime()) / msPerDay));
+          const baseCoins = qty * Math.pow(1 + dailyRate, daysBefore);
+          return baseCoins * (Math.pow(1 + dailyRate, days) - 1);
+        }
+        return qty * (apy / 100) * (days / 365);
+      };
+
+      const earnedUah = calcCoins(earnedDays) * livePriceUsd * rates.USD_UAH;
+      const projectedFullYearUah = calcCoins(projDays) * livePriceUsd * rates.USD_UAH;
+      return { earnedUah, projectedFullYearUah };
+    }
+
+    return { earnedUah: 0, projectedFullYearUah: 0 };
+  }
+
+  function buildYearlyPassiveHistory(evaluated) {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const manualEntries = getPassiveHistoryManualEntries();
+
+    // Determine earliest year from active passive positions & manual records
+    let minYear = curYear - 1;
+    evaluated.forEach(p => {
+      if (p.category === 'ovdp' || p.category === 'deposits') {
+        if (p.startDate) {
+          const y = new Date(p.startDate).getFullYear();
+          if (y >= 2018 && y < minYear) minYear = y;
+        }
+      } else if (p.category === 'crypto' && p.isStaked && p.stakingApy > 0) {
+        const s = p.stakingStartDate || p.createdAt;
+        if (s) {
+          const y = new Date(s).getFullYear();
+          if (y >= 2018 && y < minYear) minYear = y;
+        }
+      }
+    });
+    manualEntries.forEach(m => {
+      const y = Number(m.year);
+      if (y >= 2018 && y < minYear) minYear = y;
+    });
+
+    const years = [];
+    for (let y = minYear; y <= curYear; y++) {
+      let autoOvdpUah = 0;
+      let autoDepUah = 0;
+      let autoCryptoUah = 0;
+      let projAutoTotalUah = 0;
+
+      evaluated.forEach(p => {
+        const r = computePositionPassiveForYearUah(p, y);
+        if (r.earnedUah > 0) {
+          if (p.category === 'ovdp') autoOvdpUah += r.earnedUah;
+          else if (p.category === 'deposits') autoDepUah += r.earnedUah;
+          else if (p.category === 'crypto') autoCryptoUah += r.earnedUah;
+        }
+        projAutoTotalUah += r.projectedFullYearUah;
+      });
+
+      let manOvdpUah = 0;
+      let manDepUah = 0;
+      let manCryptoUah = 0;
+      let manOtherUah = 0;
+      const yearManuals = manualEntries.filter(m => Number(m.year) === y);
+      yearManuals.forEach(m => {
+        const uahVal = toUah(Number(m.amount) || 0, (m.currency || 'USD').toUpperCase());
+        if (m.source === 'ovdp') manOvdpUah += uahVal;
+        else if (m.source === 'deposits') manDepUah += uahVal;
+        else if (m.source === 'crypto') manCryptoUah += uahVal;
+        else manOtherUah += uahVal;
+      });
+
+      const ovdpUah = autoOvdpUah + manOvdpUah;
+      const depositsUah = autoDepUah + manDepUah;
+      const cryptoUah = autoCryptoUah + manCryptoUah;
+      const otherUah = manOtherUah;
+      const autoTotalUah = autoOvdpUah + autoDepUah + autoCryptoUah;
+      const manualTotalUah = manOvdpUah + manDepUah + manCryptoUah + manOtherUah;
+      const earnedTotalUah = ovdpUah + depositsUah + cryptoUah + otherUah;
+      const projectedTotalUah = y === curYear
+        ? Math.max(earnedTotalUah, projAutoTotalUah + manualTotalUah)
+        : earnedTotalUah;
+
+      years.push({
+        year: y,
+        isCurrent: y === curYear,
+        ovdpUah,
+        depositsUah,
+        cryptoUah,
+        otherUah,
+        autoTotalUah,
+        manualTotalUah,
+        earnedTotalUah,
+        projectedTotalUah,
+        manuals: yearManuals,
+        yoyPct: null
+      });
+    }
+
+    // Compute YoY % growth (for current year compare full-year projection vs previous year if previous > 0, or earned vs previous)
+    for (let i = 1; i < years.length; i++) {
+      const prev = years[i - 1].earnedTotalUah;
+      const cur = years[i].isCurrent ? years[i].projectedTotalUah : years[i].earnedTotalUah;
+      if (prev > 1) {
+        years[i].yoyPct = ((cur - prev) / prev) * 100;
+      }
+    }
+
+    return years;
+  }
+
+  function renderPassiveIncomeHistorySection(evaluated, totalCapitalUah) {
+    const sectionEl = document.getElementById('passive-history-section');
+    if (!sectionEl) return;
+
+    const rates = getEffectiveRates();
+    const isHidden = Boolean(state.hideTotalBalance);
+    const MASK = '••••••';
+    const curYear = new Date().getFullYear();
+
+    const years = buildYearlyPassiveHistory(evaluated);
+    const totalAllTimeUah = years.reduce((s, y) => s + y.earnedTotalUah, 0);
+    const curYearObj = years[years.length - 1] || { year: curYear, earnedTotalUah: 0, projectedTotalUah: 0, yoyPct: null };
+    const prevYearObj = years.length >= 2 ? years[years.length - 2] : null;
+    const totalAnnualRunRateUah = evaluated.reduce((s, p) => s + (Number(p.annualPassiveUah) || 0), 0);
+    const yieldOnCapitalPct = totalCapitalUah > 0 ? (totalAnnualRunRateUah / totalCapitalUah) * 100 : 0;
+
+    const fmtP = (uahV, withSign = false) => {
+      if (isHidden) return MASK;
+      return state.primaryCurrency === 'UAH'
+        ? fmtUah(uahV, withSign)
+        : fmtUsd(uahV / rates.USD_UAH, withSign);
+    };
+    const fmtS = (uahV) => {
+      if (isHidden) return '••••';
+      return state.primaryCurrency === 'UAH'
+        ? fmtUsd(uahV / rates.USD_UAH)
+        : fmtUah(uahV);
+    };
+
+    const maxBarUah = Math.max(1, ...years.map(y => Math.max(y.earnedTotalUah, y.projectedTotalUah)));
+
+    const barsHtml = years.map(y => {
+      const earnedPct = Math.max(0, (y.earnedTotalUah / maxBarUah) * 100);
+      const extraProjUah = y.isCurrent ? Math.max(0, y.projectedTotalUah - y.earnedTotalUah) : 0;
+      const extraProjPct = (extraProjUah / maxBarUah) * 100;
+
+      const totalE = Math.max(1e-6, y.earnedTotalUah);
+      const segOvdp = (y.ovdpUah / totalE) * 100;
+      const segDep = (y.depositsUah / totalE) * 100;
+      const segCrypto = (y.cryptoUah / totalE) * 100;
+      const segOther = (y.otherUah / totalE) * 100;
+
+      const yoyBadge = y.yoyPct !== null
+        ? `<span class="ph-bar-yoy ${y.yoyPct >= 0 ? 'is-up' : 'is-down'}" title="${y.isCurrent ? 'Прогноз року до минулого року' : 'Динаміка до попереднього року'}">${y.yoyPct >= 0 ? '+' : ''}${y.yoyPct.toFixed(0)}%</span>`
+        : '';
+
+      const tooltipLines = [
+        `${y.year} р.: ${fmtP(y.earnedTotalUah, true)}`,
+        y.isCurrent && extraProjUah > 1 ? `Прогноз до кінця ${y.year}: ${fmtP(y.projectedTotalUah, true)}` : '',
+        y.ovdpUah > 0.1 ? `ОВДП: ${fmtP(y.ovdpUah)}` : '',
+        y.depositsUah > 0.1 ? `Депозити: ${fmtP(y.depositsUah)}` : '',
+        y.cryptoUah > 0.1 ? `Стейкінг: ${fmtP(y.cryptoUah)}` : '',
+        y.otherUah > 0.1 ? `Інше: ${fmtP(y.otherUah)}` : ''
+      ].filter(Boolean).join(' · ');
+
+      const totalBarPct = earnedPct + extraProjPct;
+      const bodyHeightPct = Math.max(y.earnedTotalUah > 0 || extraProjUah > 0 ? 6 : 2, totalBarPct * 0.72);
+      const projSharePct = totalBarPct > 1e-6 ? (extraProjPct / totalBarPct) * 100 : 0;
+      const earnedSharePct = totalBarPct > 1e-6 ? (earnedPct / totalBarPct) * 100 : 0;
+
+      return `
+        <div class="ph-bar-col" title="${escapeHtml(tooltipLines)}">
+          <div class="ph-bar-stack-wrap">
+            ${yoyBadge}
+            <div class="ph-bar-top-val">${y.earnedTotalUah > 0.01 ? fmtP(y.earnedTotalUah) : '—'}</div>
+            <div class="ph-bar-body" style="height:${bodyHeightPct.toFixed(1)}%;">
+              ${extraProjPct > 0.5 ? `<div class="ph-bar-projected" style="height:${projSharePct.toFixed(1)}%;" title="Очікувано до кінця ${y.year} р.: +${fmtP(extraProjUah)}"></div>` : ''}
+              <div class="ph-bar-earned${extraProjPct > 0.5 ? ' has-projected' : ''}" style="height:${earnedSharePct.toFixed(1)}%;">
+                ${segOvdp > 0.2 ? `<div class="ph-seg-ovdp" style="height:${segOvdp.toFixed(1)}%;"></div>` : ''}
+                ${segDep > 0.2 ? `<div class="ph-seg-deposits" style="height:${segDep.toFixed(1)}%;"></div>` : ''}
+                ${segCrypto > 0.2 ? `<div class="ph-seg-crypto" style="height:${segCrypto.toFixed(1)}%;"></div>` : ''}
+                ${segOther > 0.2 ? `<div class="ph-seg-other" style="height:${segOther.toFixed(1)}%;"></div>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="ph-bar-year${y.isCurrent ? ' is-current' : ''}">${y.year}${y.isCurrent ? '*' : ''}</div>
+        </div>
+      `;
+    }).join('');
+
+    const sourceNames = { ovdp: 'ОВДП', deposits: 'Депозити', crypto: 'Стейкінг', other: 'Інше' };
+
+    const yearRowsHtml = [...years].reverse().map(y => {
+      const yoyStr = y.yoyPct !== null
+        ? `<span class="ph-bar-yoy ${y.yoyPct >= 0 ? 'is-up' : 'is-down'}">${y.yoyPct >= 0 ? '▲ +' : '▼ '}${y.yoyPct.toFixed(1)}% YoY</span>`
+        : '';
+      const breakdownParts = [];
+      if (y.ovdpUah > 0.1) breakdownParts.push(`ОВДП: ${fmtP(y.ovdpUah)}`);
+      if (y.depositsUah > 0.1) breakdownParts.push(`Депозити: ${fmtP(y.depositsUah)}`);
+      if (y.cryptoUah > 0.1) breakdownParts.push(`Стейкінг: ${fmtP(y.cryptoUah)}`);
+      if (y.otherUah > 0.1) breakdownParts.push(`Інше: ${fmtP(y.otherUah)}`);
+
+      const manualChips = y.manuals.length > 0
+        ? `<div class="ph-manual-chips">${y.manuals.map(m => `
+            <span class="ph-manual-chip" title="${escapeHtml(m.note || 'Внесено вручну')}">
+              <span>✍️ ${escapeHtml(sourceNames[m.source] || 'Архів')}: ${isHidden ? MASK : fmtCurr(Number(m.amount), m.currency || 'USD')}${m.note ? ` (${escapeHtml(m.note)})` : ''}</span>
+              <button type="button" class="ph-manual-del" data-ph-del="${escapeHtml(m.id)}" title="Видалити запис">✕</button>
+            </span>
+          `).join('')}</div>`
+        : '';
+
+      return `
+        <div class="ph-year-row">
+          <div class="ph-year-row-top">
+            <div class="ph-year-title">
+              <span>${y.year} р.</span>
+              ${y.isCurrent ? `<span class="pill-badge pill-positive" style="font-size:10px; padding:1px 6px;">Поточний</span>` : ''}
+              ${yoyStr}
+            </div>
+            <div class="ph-year-amount">${y.earnedTotalUah > 0.01 ? fmtP(y.earnedTotalUah, true) : fmtP(0)}</div>
+          </div>
+          <div class="ph-year-meta">
+            <span>${breakdownParts.length > 0 ? breakdownParts.join(' · ') : 'Ще немає записів за цей рік'}</span>
+            <span>${y.isCurrent && y.projectedTotalUah > y.earnedTotalUah + 1 ? `Прогноз року: ${fmtP(y.projectedTotalUah)}` : fmtS(y.earnedTotalUah)}</span>
+          </div>
+          ${manualChips}
+        </div>
+      `;
+    }).join('');
+
+    const yoyHeadline = curYearObj.yoyPct !== null && prevYearObj
+      ? `${curYearObj.yoyPct >= 0 ? '+' : ''}${curYearObj.yoyPct.toFixed(1)}% до ${prevYearObj.year} р.`
+      : `${yieldOnCapitalPct.toFixed(2)}% річних на капітал`;
+    const yoySub = curYearObj.yoyPct !== null && prevYearObj
+      ? `Дохідність капіталу: ${yieldOnCapitalPct.toFixed(2)}% річних`
+      : `Додайте архівні роки (напр. ${curYear - 1}), щоб бачити ріст YoY`;
+
+    sectionEl.innerHTML = `
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">📊 Історія пасивного доходу по роках</div>
+          <div class="panel-subtitle">Динаміка заробітку на ваш капітал: авторозрахунок активних інструментів + закриті виплати за минулі роки</div>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-ph-toggle-add" style="font-size:12px; padding:6px 12px;">
+          ${passiveHistoryAddFormOpen ? '✕ Сховати форму' : '+ Додати запис за рік'}
+        </button>
+      </div>
+
+      ${passiveHistoryAddFormOpen ? `
+        <form class="ph-add-panel" id="form-ph-add" autocomplete="off">
+          <div style="font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:8px;">
+            ✍️ Додати отриманий пасивний дохід за рік (закриті ОВДП, погашені депозити, дивіденди тощо)
+          </div>
+          <div class="ph-add-grid">
+            <input type="number" class="form-input tabular" id="ph-in-year" min="2015" max="${curYear}" value="${curYear - 1}" required placeholder="Рік" title="Рік отримання доходу" />
+            <input type="number" step="any" min="0.01" class="form-input tabular" id="ph-in-amount" required placeholder="Сума (напр. 450)" />
+            <select class="form-select" id="ph-in-curr" aria-label="Валюта">
+              <option value="USD" ${state.primaryCurrency === 'USD' ? 'selected' : ''}>$ USD</option>
+              <option value="UAH" ${state.primaryCurrency === 'UAH' ? 'selected' : ''}>₴ UAH</option>
+            </select>
+            <select class="form-select" id="ph-in-source" aria-label="Джерело">
+              <option value="ovdp">🛡️ ОВДП</option>
+              <option value="deposits">🏦 Депозити</option>
+              <option value="crypto">⚡ Стейкінг</option>
+              <option value="other">💵 Дивіденди / Інше</option>
+            </select>
+            <input type="text" class="form-input" id="ph-in-note" maxlength="60" placeholder="Коментар (напр. Погашені ОВДП 2025)" />
+            <button type="submit" class="btn btn-primary" style="font-size:12px; padding:8px 14px; white-space:nowrap;">Зберегти</button>
+          </div>
+        </form>
+      ` : ''}
+
+      <div class="ph-kpi-grid">
+        <div class="ph-kpi-card is-accent">
+          <div class="ph-kpi-label">Усього зароблено пасивно</div>
+          <div class="ph-kpi-val">${fmtP(totalAllTimeUah, true)}</div>
+          <div class="ph-kpi-sub">${fmtS(totalAllTimeUah)} · за ${years.length} р.</div>
+        </div>
+        <div class="ph-kpi-card">
+          <div class="ph-kpi-label">За ${curYear} рік (факт / прогноз)</div>
+          <div class="ph-kpi-val">${fmtP(curYearObj.earnedTotalUah, true)}</div>
+          <div class="ph-kpi-sub">Прогноз до кінця ${curYear}: ${fmtP(curYearObj.projectedTotalUah)}</div>
+        </div>
+        <div class="ph-kpi-card">
+          <div class="ph-kpi-label">Динаміка / Дохідність капіталу</div>
+          <div class="ph-kpi-val" style="color:${curYearObj.yoyPct !== null ? (curYearObj.yoyPct >= 0 ? 'var(--positive)' : 'var(--negative)') : 'var(--accent-primary)'};">${yoyHeadline}</div>
+          <div class="ph-kpi-sub">${yoySub}</div>
+        </div>
+      </div>
+
+      <div class="ph-main-grid">
+        <div class="ph-chart-card">
+          <div class="ph-bars-stage">
+            ${barsHtml}
+          </div>
+          <div class="ph-legend">
+            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-ovdp"></span>ОВДП</span>
+            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-deposits"></span>Депозити</span>
+            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-crypto"></span>Стейкінг</span>
+            <span class="ph-legend-item"><span class="ph-legend-dot ph-seg-other"></span>Інше / Архів</span>
+            <span class="ph-legend-item"><span class="ph-legend-dot is-proj"></span>Прогноз до кінця ${curYear}*</span>
+          </div>
+        </div>
+
+        <div class="ph-table-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <strong style="font-size:12.5px; color:var(--text-primary);">📅 Підсумок по роках</strong>
+            <span style="font-size:11px; color:var(--text-muted);">Авто + ручні записи</span>
+          </div>
+          <div class="ph-year-rows">
+            ${yearRowsHtml}
+          </div>
+        </div>
+      </div>
+    `;
+
+    sectionEl.querySelector('#btn-ph-toggle-add')?.addEventListener('click', () => {
+      passiveHistoryAddFormOpen = !passiveHistoryAddFormOpen;
+      renderPassiveIncomeHistorySection(evaluated, totalCapitalUah);
+      if (passiveHistoryAddFormOpen) sectionEl.querySelector('#ph-in-amount')?.focus();
+    });
+
+    sectionEl.querySelector('#form-ph-add')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const year = parseInt(sectionEl.querySelector('#ph-in-year')?.value, 10);
+      const amount = parseFloat(sectionEl.querySelector('#ph-in-amount')?.value);
+      const currency = sectionEl.querySelector('#ph-in-curr')?.value === 'UAH' ? 'UAH' : 'USD';
+      const source = sectionEl.querySelector('#ph-in-source')?.value || 'other';
+      const note = (sectionEl.querySelector('#ph-in-note')?.value || '').trim();
+      if (!Number.isFinite(year) || year < 2015 || year > curYear + 1 || !Number.isFinite(amount) || amount <= 0) return;
+
+      const list = getPassiveHistoryManualEntries();
+      list.push({
+        id: `ph_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        year,
+        amount,
+        currency,
+        source,
+        note,
+        createdAt: new Date().toISOString()
+      });
+      savePassiveHistoryManualEntries(list);
+      passiveHistoryAddFormOpen = false;
+      renderAll();
+    });
+
+    sectionEl.querySelectorAll('[data-ph-del]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.phDel;
+        const next = getPassiveHistoryManualEntries().filter(m => m.id !== id);
+        savePassiveHistoryManualEntries(next);
+        renderAll();
+      });
+    });
+  }
+
   let currentPassiveModalMode = 'ytd';
 
   function renderPassiveBreakdownModal(mode) {
@@ -9093,12 +9535,27 @@
       <div class="pb-list">
         ${rowsHtml}
       </div>
+      <div style="margin-top:10px; display:flex; justify-content:flex-end;">
+        <button type="button" class="btn btn-ghost" id="btn-pb-jump-yearly" style="font-size:12px; color:var(--accent-primary);">
+          📊 Перейти до історії по роках →
+        </button>
+      </div>
     `;
 
     bodyEl.querySelectorAll('[data-pb-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
         renderPassiveBreakdownModal(btn.dataset.pbTab);
       });
+    });
+
+    bodyEl.querySelector('#btn-pb-jump-yearly')?.addEventListener('click', () => {
+      closePassiveBreakdownModal();
+      if (state.activeCategory !== 'all' && state.activeCategory !== 'ovdp' && state.activeCategory !== 'deposits') {
+        setActiveCategory('all');
+      }
+      setTimeout(() => {
+        document.getElementById('passive-history-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
     });
   }
 
