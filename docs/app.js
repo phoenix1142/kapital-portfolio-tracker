@@ -368,7 +368,9 @@
         stakingApy,
         stakingCompound,
         stakingElapsedDays,
+        ytdDays: isStaked && stakingApy > 0 ? Math.max(0, Math.round((Date.now() - Math.max((pos.stakingStartDate || pos.createdAt ? new Date(pos.stakingStartDate || pos.createdAt).getTime() : Date.now()), new Date(new Date().getFullYear(), 0, 1).getTime())) / 86400000)) : 0,
         stakingRewardCoins,
+        stakingYtdCoins,
         stakingRewardUsd,
         stakingRewardUah,
         stakingAnnualCoins,
@@ -411,6 +413,7 @@
         fullTermNative: stats.fullTermInterest,
         netRatePct: stats.netRatePct,
         elapsedDays: stats.elapsedDays,
+        ytdDays: stats.ytdDays,
         totalDays: stats.totalDays,
         progressPct: stats.progressPct,
         investedUah,
@@ -450,6 +453,7 @@
         fullTermNative: stats.fullTermInterest,
         netRatePct: stats.netRatePct,
         elapsedDays: stats.elapsedDays,
+        ytdDays: stats.ytdDays,
         totalDays: stats.totalDays,
         progressPct: stats.progressPct,
         investedUah,
@@ -8536,12 +8540,215 @@
     renderAll();
   }
 
+  let currentPassiveModalMode = 'ytd';
+
+  function renderPassiveBreakdownModal(mode) {
+    currentPassiveModalMode = ['ytd', 'day', 'month', 'year'].includes(mode) ? mode : 'ytd';
+    const bodyEl = document.getElementById('passive-breakdown-body');
+    const titleEl = document.getElementById('modal-passive-title');
+    if (!bodyEl) return;
+
+    const rates = getEffectiveRates();
+    const isHidden = Boolean(state.hideTotalBalance);
+    const MASK = '••••••';
+    const yearNum = new Date().getFullYear();
+
+    const evaluated = state.positions.map(evaluatePosition);
+    const isDedicatedUtilityView = state.activeCategory === 'invested_uah' || state.activeCategory === 'important_links';
+    const scopedPositions = (state.activeCategory === 'all' || isDedicatedUtilityView)
+      ? evaluated
+      : evaluated.filter(p => p.category === state.activeCategory);
+
+    const MODE_META = {
+      ytd: {
+        tabLabel: `З початку ${yearNum}`,
+        heading: `💰 Пасивний дохід з початку ${yearNum} р.`,
+        caption: `Фактично нарахований пасивний дохід з 1 січня ${yearNum} р. по сьогодні по кожному активу`
+      },
+      day: {
+        tabLabel: 'За день',
+        heading: '💰 Пасивний дохід за 1 день',
+        caption: 'Середньоденний темп пасивного доходу (річна дохідність кожного активу ÷ 365)'
+      },
+      month: {
+        tabLabel: 'За місяць',
+        heading: '💰 Пасивний дохід за місяць',
+        caption: 'Орієнтовний щомісячний пасивний дохід (річна дохідність кожного активу ÷ 12)'
+      },
+      year: {
+        tabLabel: 'За рік',
+        heading: '💰 Пасивний дохід за рік',
+        caption: 'Прогнозований річний пасивний дохід від усіх активних ОВДП, депозитів і стейкінгу'
+      }
+    };
+    const meta = MODE_META[currentPassiveModalMode];
+    if (titleEl) titleEl.textContent = meta.heading;
+
+    const getAmountUah = (p) => {
+      if (currentPassiveModalMode === 'ytd') return Number(p.ytdPassiveUah) || 0;
+      if (currentPassiveModalMode === 'day') return (Number(p.annualPassiveUah) || 0) / 365;
+      if (currentPassiveModalMode === 'month') return (Number(p.annualPassiveUah) || 0) / 12;
+      return Number(p.annualPassiveUah) || 0;
+    };
+
+    const fmtPair = (uahVal) => {
+      const usdVal = uahVal / rates.USD_UAH;
+      if (state.primaryCurrency === 'UAH') {
+        return { primary: fmtUah(uahVal, true), secondary: fmtUsd(usdVal) };
+      }
+      return { primary: fmtUsd(usdVal, true), secondary: fmtUah(uahVal) };
+    };
+
+    // Filter only passive-income-generating positions (OVDP, deposits, or staked crypto)
+    const passiveItems = scopedPositions
+      .filter(p => p.category === 'ovdp' || p.category === 'deposits' || (p.category === 'crypto' && p.isStaked && p.stakingApy > 0))
+      .map(p => ({ pos: p, amountUah: getAmountUah(p) }))
+      .filter(item => item.amountUah > 0.0001 || (currentPassiveModalMode === 'ytd' && (item.pos.annualPassiveUah || 0) > 0))
+      .sort((a, b) => b.amountUah - a.amountUah);
+
+    const totalUah = passiveItems.reduce((acc, it) => acc + it.amountUah, 0);
+    const totalPair = fmtPair(totalUah);
+
+    // Per-category totals
+    const catTotals = { ovdp: 0, deposits: 0, crypto: 0 };
+    passiveItems.forEach(it => {
+      if (catTotals[it.pos.category] !== undefined) catTotals[it.pos.category] += it.amountUah;
+    });
+    const catMetaMap = {
+      ovdp: { icon: '🛡️', label: 'ОВДП', badge: 'ОВДП', badgeCls: 'pb-badge-ovdp' },
+      deposits: { icon: '🏦', label: 'Депозити', badge: 'ДЕП', badgeCls: 'pb-badge-deposits' },
+      crypto: { icon: '⚡', label: 'Стейкінг', badge: 'STK', badgeCls: 'pb-badge-crypto' }
+    };
+
+    const catChipsHtml = ['ovdp', 'deposits', 'crypto']
+      .filter(k => catTotals[k] > 0.0001)
+      .map(k => {
+        const sharePct = totalUah > 0 ? (catTotals[k] / totalUah) * 100 : 0;
+        const amtStr = isHidden ? MASK : fmtPair(catTotals[k]).primary;
+        return `<span class="pb-cat-chip">${catMetaMap[k].icon} ${catMetaMap[k].label}: <strong>${amtStr}</strong> <span style="color:var(--text-muted);">(${sharePct.toFixed(0)}%)</span></span>`;
+      }).join('');
+
+    const buildItemMetaText = (p) => {
+      if (p.category === 'ovdp') {
+        const base = `${p.annualRate}% річних · 0% податку · ${p.nativeCurrency}`;
+        if (currentPassiveModalMode === 'ytd') {
+          return `${base} · ${p.ytdDays || 0} дн. у ${yearNum} р.`;
+        }
+        return `${base} · Тіло: ${isHidden ? MASK : fmtCurr(p.principalNative, p.nativeCurrency)}`;
+      }
+      if (p.category === 'deposits') {
+        const rateStr = p.applyTax ? `${p.annualRate}% (чистими ${Number(p.netRatePct || 0).toFixed(2)}%)` : `${p.annualRate}% без податку`;
+        const bankStr = p.bank ? `${p.bank} · ` : '';
+        if (currentPassiveModalMode === 'ytd') {
+          return `${bankStr}${rateStr} · ${p.ytdDays || 0} дн. у ${yearNum} р.`;
+        }
+        return `${bankStr}${rateStr} · Вклад: ${isHidden ? MASK : fmtCurr(p.principalNative, p.nativeCurrency)}`;
+      }
+      // Staked crypto
+      const modeLbl = p.stakingCompound ? 'APY реінвест' : 'APR';
+      const platStr = p.platform ? `${p.platform} · ` : '';
+      if (currentPassiveModalMode === 'ytd') {
+        const coinsStr = Number(p.stakingYtdCoins || 0).toFixed(5).replace(/\.?0+$/, '') || '0';
+        return `${platStr}${p.stakingApy}% (${modeLbl}) · ${isHidden ? MASK : `+${coinsStr} ${p.ticker}`} · ${p.ytdDays || 0} дн.`;
+      }
+      const periodCoins = currentPassiveModalMode === 'day'
+        ? (p.stakingAnnualCoins || 0) / 365
+        : (currentPassiveModalMode === 'month' ? (p.stakingAnnualCoins || 0) / 12 : (p.stakingAnnualCoins || 0));
+      const coinsStr = Number(periodCoins).toFixed(5).replace(/\.?0+$/, '') || '0';
+      return `${platStr}${p.stakingApy}% (${modeLbl}) · ${isHidden ? MASK : `+${coinsStr} ${p.ticker}`} (з ${isHidden ? MASK : `${p.quantity} ${p.ticker}`})`;
+    };
+
+    const rowsHtml = passiveItems.length > 0
+      ? passiveItems.map(({ pos: p, amountUah }) => {
+          const sharePct = totalUah > 0 ? (amountUah / totalUah) * 100 : 0;
+          const pair = fmtPair(amountUah);
+          const cm = catMetaMap[p.category] || catMetaMap.ovdp;
+          const badgeText = p.category === 'crypto' ? escapeHtml(p.ticker || 'STK') : cm.badge;
+          return `
+            <div class="pb-item">
+              <div class="pb-item-top">
+                <div class="pb-item-left">
+                  <span class="pb-item-badge ${cm.badgeCls}">${badgeText}</span>
+                  <div style="min-width:0;">
+                    <div class="pb-item-title">${escapeHtml(p.displayName)}</div>
+                    <div class="pb-item-meta">${escapeHtml(buildItemMetaText(p))}</div>
+                  </div>
+                </div>
+                <div class="pb-item-right">
+                  <div class="pb-item-amount">${isHidden ? MASK : pair.primary}</div>
+                  <div class="pb-item-sub">${isHidden ? '••••' : pair.secondary} · ${sharePct.toFixed(1)}%</div>
+                </div>
+              </div>
+              <div class="pb-bar-track">
+                <div class="pb-bar-fill" style="width:${Math.max(2, Math.min(100, sharePct)).toFixed(1)}%;"></div>
+              </div>
+            </div>
+          `;
+        }).join('')
+      : `<div style="text-align:center; padding: 26px 12px; color: var(--text-muted); font-size: 13px;">
+           Наразі немає активних інструментів пасивного доходу.<br/>Додайте <strong>ОВДП</strong>, <strong>депозит</strong> або увімкніть <strong>стейкінг</strong> для криптовалюти.
+         </div>`;
+
+    const tabsHtml = ['ytd', 'day', 'month', 'year'].map(m => `
+      <button type="button" class="pb-tab-btn${currentPassiveModalMode === m ? ' active' : ''}" data-pb-tab="${m}">${MODE_META[m].tabLabel}</button>
+    `).join('');
+
+    bodyEl.innerHTML = `
+      <div class="pb-tabs" role="tablist" aria-label="Період деталізації пасивного доходу">
+        ${tabsHtml}
+      </div>
+      <div class="pb-summary-box">
+        <div class="pb-summary-top">
+          <div class="pb-summary-val">${isHidden ? MASK : totalPair.primary}</div>
+          <div class="pb-summary-sub">${isHidden ? MASK : totalPair.secondary}</div>
+        </div>
+        <div class="pb-summary-caption">${meta.caption}</div>
+      </div>
+      ${catChipsHtml ? `<div class="pb-cat-chips">${catChipsHtml}</div>` : ''}
+      <div class="pb-list">
+        ${rowsHtml}
+      </div>
+    `;
+
+    bodyEl.querySelectorAll('[data-pb-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        renderPassiveBreakdownModal(btn.dataset.pbTab);
+      });
+    });
+  }
+
+  function openPassiveBreakdownModal(mode) {
+    const modal = document.getElementById('modal-passive-breakdown');
+    if (!modal) return;
+    renderPassiveBreakdownModal(mode || 'ytd');
+    modal.classList.add('open');
+  }
+
+  function closePassiveBreakdownModal() {
+    document.getElementById('modal-passive-breakdown')?.classList.remove('open');
+  }
+
   function openLoginModal() {
     document.getElementById('modal-login').classList.add('open');
   }
 
   // Wire up Event Listeners
   function initEvents() {
+    // Passive income breakdown modal triggers (YTD bar + Day / Month / Year tiles)
+    document.querySelectorAll('[data-passive-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openPassiveBreakdownModal(btn.dataset.passiveMode);
+      });
+    });
+    document.getElementById('btn-close-passive-modal')?.addEventListener('click', closePassiveBreakdownModal);
+    document.getElementById('btn-done-passive-modal')?.addEventListener('click', closePassiveBreakdownModal);
+    document.getElementById('modal-passive-breakdown')?.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'modal-passive-breakdown') closePassiveBreakdownModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closePassiveBreakdownModal();
+    });
+
     // Theme toggle (syncs PWA status bar theme-color on iOS & Android too)
     const applyTheme = (theme) => {
       const next = theme === 'light' ? 'light' : 'dark';

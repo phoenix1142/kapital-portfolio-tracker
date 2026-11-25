@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="index.css?v=45" />
+  <link rel="stylesheet" href="index.css?v=46" />
   <script>
     try {
       var _lk = JSON.parse(localStorage.getItem('kapital_biometric_lock_v1') || 'null');
@@ -285,29 +285,30 @@
 
           <div class="wealth-stat-block wealth-passive-block">
             <div class="metric-eyebrow">Пасивний дохід (ОВДП + Депозити + Стейкінг)</div>
-            <div class="passive-ytd-bar" id="hero-ytd-bar" title="Фактично зароблений пасивний дохід від початку року по сьогодні">
+            <button type="button" class="passive-ytd-bar passive-clickable" id="hero-ytd-bar" data-passive-mode="ytd" title="Натисніть, щоб побачити, що саме принесло цей дохід з початку року">
               <span class="passive-ytd-label" id="hero-ytd-label">Зароблено з початку року</span>
               <span class="passive-ytd-values">
                 <strong class="passive-ytd-val" id="hero-yield-accrued">+$0.00</strong>
                 <span class="passive-ytd-sub" id="hero-yield-accrued-sub">0 ₴</span>
+                <span class="passive-click-hint" aria-hidden="true">↗</span>
               </span>
-            </div>
+            </button>
             <div class="passive-income-grid">
-              <div class="passive-income-tile" title="Орієнтовний пасивний дохід за 1 день (річний прогноз ÷ 365)">
-                <span class="passive-tile-label">За день</span>
+              <button type="button" class="passive-income-tile passive-clickable" data-passive-mode="day" title="Натисніть для деталізації доходу за день">
+                <span class="passive-tile-head"><span class="passive-tile-label">За день</span><span class="passive-click-hint" aria-hidden="true">↗</span></span>
                 <span class="passive-tile-val" id="hero-daily-passive">+$0.00</span>
                 <span class="passive-tile-sub" id="hero-daily-passive-sub">0 ₴</span>
-              </div>
-              <div class="passive-income-tile" title="Середньомісячний пасивний дохід (річний прогноз ÷ 12)">
-                <span class="passive-tile-label">За місяць</span>
+              </button>
+              <button type="button" class="passive-income-tile passive-clickable" data-passive-mode="month" title="Натисніть для деталізації доходу за місяць">
+                <span class="passive-tile-head"><span class="passive-tile-label">За місяць</span><span class="passive-click-hint" aria-hidden="true">↗</span></span>
                 <span class="passive-tile-val" id="hero-monthly-passive">+$0.00</span>
                 <span class="passive-tile-sub" id="hero-monthly-passive-sub">0 ₴</span>
-              </div>
-              <div class="passive-income-tile" title="Прогнозований річний пасивний дохід (ОВДП + чисті відсотки депозитів + стейкінг)">
-                <span class="passive-tile-label">За рік</span>
+              </button>
+              <button type="button" class="passive-income-tile passive-clickable" data-passive-mode="year" title="Натисніть для деталізації доходу за рік">
+                <span class="passive-tile-head"><span class="passive-tile-label">За рік</span><span class="passive-click-hint" aria-hidden="true">↗</span></span>
                 <span class="passive-tile-val" id="hero-annual-passive">+$0.00</span>
                 <span class="passive-tile-sub" id="hero-annual-passive-sub">0 ₴</span>
-              </div>
+              </button>
             </div>
             <div class="passive-income-sources" id="hero-passive-sources"></div>
           </div>
@@ -560,6 +561,20 @@
     </div>
   </div>
 
+  <!-- Passive Income Detailed Breakdown Modal -->
+  <div class="modal-backdrop" id="modal-passive-breakdown" role="dialog" aria-modal="true" aria-labelledby="modal-passive-title">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-passive-title">💰 Деталізація пасивного доходу</h2>
+        <button type="button" class="btn btn-ghost" id="btn-close-passive-modal" aria-label="Закрити">✕</button>
+      </div>
+      <div id="passive-breakdown-body"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-done-passive-modal">Закрити</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Login Lock Screen Modal (When requireAuth is enabled) -->
   <div class="modal-backdrop" id="modal-login" role="dialog" aria-modal="true" aria-labelledby="modal-login-title">
     <div class="modal-dialog" style="max-width: 400px;">
@@ -579,6 +594,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=45"></script>
+  <script src="app.js?v=46"></script>
 </body>
 </html>
