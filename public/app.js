@@ -3540,42 +3540,49 @@
     wireLinksGridActions(section);
   }
 
-  let selectedDynamicsPointIdx = -1;
-  let lastDynamicsCat = '';
-  let selectedDynamicsRange = 'all'; // '1d' | '1m' | '6m' | '1y' | 'all'
+  let selectedDynamicsRange = '1m'; // '1d' | '7d' | '1m' | '6m' | '1y' | 'all'
+  let selectedDynamicsMetric = 'value'; // 'value' | 'pnl'
 
   const DYNAMICS_RANGE_META = {
-    '1d':  { label: 'День',     btnLabel: '1Д · День',     fullLabel: 'За 1 день (24 години)', days: 1,   steps: 8 },
-    '1m':  { label: 'Місяць',   btnLabel: '1М · Місяць',   fullLabel: 'За 1 місяць (30 днів)',  days: 30,  steps: 8 },
-    '6m':  { label: 'Пів року', btnLabel: '6М · Пів року', fullLabel: 'За пів року (180 днів)', days: 180, steps: 8 },
-    '1y':  { label: 'Рік',      btnLabel: '1Р · Рік',      fullLabel: 'За 1 рік (365 днів)',    days: 365, steps: 9 },
-    'all': { label: 'Весь час', btnLabel: 'Весь час',      fullLabel: 'За весь час',            days: 0,   steps: 8 }
+    '1d':  { label: '24г',      btnLabel: '24H', fullLabel: 'За останні 24 години', days: 1,   steps: 36 },
+    '7d':  { label: '7 днів',   btnLabel: '7D',  fullLabel: 'За останні 7 днів',    days: 7,   steps: 42 },
+    '1m':  { label: '1 місяць', btnLabel: '1M',  fullLabel: 'За 1 місяць (30 днів)', days: 30, steps: 48 },
+    '6m':  { label: '6 міс.',   btnLabel: '6M',  fullLabel: 'За пів року (180 днів)', days: 180, steps: 52 },
+    '1y':  { label: '1 рік',    btnLabel: '1Y',  fullLabel: 'За 1 рік (365 днів)',  days: 365, steps: 56 },
+    'all': { label: 'Весь час', btnLabel: 'ALL', fullLabel: 'За весь час',          days: 0,   steps: 56 }
   };
 
-  function fmtChartAxisVal(valUsd, rates, compact = false) {
+  function fmtChartAxisVal(valUsd, rates, compact = true) {
     const isUah = state.primaryCurrency === 'UAH';
     const r = rates || getEffectiveRates();
     const num = isUah ? (Number(valUsd) || 0) * r.USD_UAH : (Number(valUsd) || 0);
     const abs = Math.abs(num);
+    const sign = num < 0 ? '-' : '';
 
     if (isUah) {
-      if (compact && abs >= 1000000) {
-        return (num / 1000000).toFixed(2) + ' млн ₴';
-      }
-      if (compact && abs >= 10000) {
-        return Math.round(num / 1000) + ' тис ₴';
-      }
-      return new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 }).format(Math.round(num)) + ' ₴';
+      if (compact && abs >= 1000000) return `${sign}${(abs / 1000000).toFixed(2)}M ₴`;
+      if (compact && abs >= 10000) return `${sign}${(abs / 1000).toFixed(1)}K ₴`;
+      return sign + new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 }).format(Math.round(abs)) + ' ₴';
     }
 
-    const sign = num < 0 ? '-' : '';
-    if (compact && abs >= 1000000) {
-      return sign + '$' + (abs / 1000000).toFixed(2) + 'M';
-    }
+    if (compact && abs >= 1000000) return `${sign}$${(abs / 1000000).toFixed(2)}M`;
+    if (compact && abs >= 10000) return `${sign}$${(abs / 1000).toFixed(1)}K`;
     if (abs >= 100) {
       return sign + '$' + new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(abs));
     }
     return sign + '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(abs);
+  }
+
+  function fmtChartPrimaryValue(valUsd, rates, showSign = false) {
+    const isUah = state.primaryCurrency === 'UAH';
+    const r = rates || getEffectiveRates();
+    return isUah ? fmtUah((Number(valUsd) || 0) * r.USD_UAH, showSign) : fmtUsd(valUsd, showSign);
+  }
+
+  function fmtChartSecondaryValue(valUsd, rates, showSign = false) {
+    const isUah = state.primaryCurrency === 'UAH';
+    const r = rates || getEffectiveRates();
+    return isUah ? fmtUsd(valUsd, showSign) : fmtUah((Number(valUsd) || 0) * r.USD_UAH, showSign);
   }
 
   function recordCategoryHistorySnapshots(allEvaluated) {
@@ -3605,7 +3612,22 @@
     });
   }
 
-  function buildCategoryDynamicsTimeline(category, positions, rangeKey = 'all') {
+  function sampleSparklineAt(arr, frac) {
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    if (arr.length === 1) return Number(arr[0]);
+    const pos = Math.max(0, Math.min(1, frac)) * (arr.length - 1);
+    const lo = Math.floor(pos);
+    const hi = Math.min(arr.length - 1, Math.ceil(pos));
+    const t = pos - lo;
+    return Number(arr[lo]) * (1 - t) + Number(arr[hi]) * t;
+  }
+
+  function deterministicNoise(seed, i) {
+    const x = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453;
+    return (x - Math.floor(x)) * 2 - 1; // [-1, 1]
+  }
+
+  function buildCategoryDynamicsTimeline(category, positions, rangeKey = '1m') {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
     const totalCurrentUsd = positions.reduce((s, p) => s + (p.currentValUsd || 0), 0);
@@ -3620,31 +3642,53 @@
       totalYesterdayUsd += prevVal;
     });
 
-    // Special intraday mode for '1d' (Last 24 hours with 3-hour intervals)
+    // High-resolution 24H intraday curve blending REAL live sparklines of held assets
     if (rangeKey === '1d') {
-      const hoursSteps = 8; // every 3 hours over 24h
+      const steps = 36;
       const points1d = [];
-      const delta24 = totalCurrentUsd - totalYesterdayUsd;
-      for (let i = 0; i <= hoursSteps; i++) {
-        const frac = i / hoursSteps;
+      for (let i = 0; i <= steps; i++) {
+        const frac = i / steps;
         const ts = new Date(now.getTime() - (1 - frac) * 24 * 3600 * 1000);
         const hh = String(ts.getHours()).padStart(2, '0');
         const mm = String(ts.getMinutes()).padStart(2, '0');
-        // Intraday wave + smooth drift from 24h ago value to current live value
-        const intradayWave = (i > 0 && i < hoursSteps)
-          ? Math.sin(frac * Math.PI * 2.2) * Math.abs(delta24) * 0.18
-          : 0;
-        const valAtStep = totalYesterdayUsd + delta24 * Math.pow(frac, 0.92) + intradayWave;
-        const hoursAgo = Math.round((1 - frac) * 24);
+        let sumAtFrac = 0;
+
+        positions.forEach((p, pIdx) => {
+          const curVal = Number(p.currentValUsd) || 0;
+          if (curVal <= 0) return;
+          if (i === steps) {
+            sumAtFrac += curVal;
+            return;
+          }
+          const sym = (p.ticker || '').toUpperCase().trim();
+          const quoteBook = p.category === 'crypto' ? state.quotes.crypto : (p.category === 'stocks' ? state.quotes.stocks : null);
+          const spark = quoteBook && sym && Array.isArray(quoteBook[sym]?.sparkline) && quoteBook[sym].sparkline.length >= 4
+            ? quoteBook[sym].sparkline
+            : null;
+
+          if (spark) {
+            const endPx = Number(spark[spark.length - 1]) || 1;
+            const pxAt = sampleSparklineAt(spark, frac) || endPx;
+            sumAtFrac += endPx > 0 ? curVal * (pxAt / endPx) : curVal;
+          } else {
+            const chg = Number(p.change24h) || 0;
+            const prevVal = (1 + chg / 100) > 0.1 ? (curVal / (1 + chg / 100)) : curVal;
+            const delta = curVal - prevVal;
+            const micro = (i > 0 && i < steps && Math.abs(delta) > 0)
+              ? (Math.sin(frac * Math.PI * 3 + pIdx) * 0.14 + Math.sin(frac * Math.PI * 7 + pIdx * 2) * 0.06) * Math.abs(delta)
+              : 0;
+            sumAtFrac += Math.max(0, prevVal + delta * frac + micro);
+          }
+        });
+
+        const dayMonth = ts.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
         points1d.push({
           date: ts.toISOString(),
-          label: i === 0
-            ? `24 години тому (${hh}:${mm})`
-            : (i === hoursSteps ? `Зараз (${hh}:${mm} Live)` : `${hoursAgo} год. тому (${hh}:${mm})`),
-          shortLabel: i === hoursSteps ? 'Зараз' : `${hh}:${mm}`,
-          valUsd: Number(Math.max(0, valAtStep).toFixed(2)),
+          label: i === steps ? `Зараз · ${hh}:${mm} (Live)` : `${dayMonth}, ${hh}:${mm}`,
+          shortLabel: i === steps ? 'Зараз' : `${hh}:${mm}`,
+          valUsd: Number(Math.max(0, sumAtFrac).toFixed(2)),
           investedUsd: Number(totalInvestedUsd.toFixed(2)),
-          tag: i === 0 ? 'Початок доби (-24г)' : (i === hoursSteps ? 'Поточна вартість (Live)' : 'Внутрішньоденний зріз')
+          pnlUsd: Number((Math.max(0, sumAtFrac) - totalInvestedUsd).toFixed(2))
         });
       }
       return points1d;
@@ -3661,22 +3705,17 @@
     posDates.sort();
     const earliestEntryDateStr = posDates.length > 0
       ? posDates[0]
-      : new Date(now.getTime() - 365 * 86400000).toISOString().slice(0, 10);
+      : new Date(now.getTime() - 180 * 86400000).toISOString().slice(0, 10);
     const earliestEntryMs = new Date(earliestEntryDateStr + 'T00:00:00').getTime();
 
-    const yesterdayDate = new Date(now.getTime() - 86400000);
-    const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
-    const yesterdayMs = new Date(yesterdayStr + 'T00:00:00').getTime();
-
-    // Determine window start based on rangeKey ('1m'=30d, '6m'=180d, '1y'=365d, 'all'=earliestEntry)
-    const rangeMeta = DYNAMICS_RANGE_META[rangeKey] || DYNAMICS_RANGE_META.all;
+    const yesterdayMs = now.getTime() - 86400000;
+    const rangeMeta = DYNAMICS_RANGE_META[rangeKey] || DYNAMICS_RANGE_META['1m'];
     const windowStartMs = rangeKey === 'all'
       ? Math.min(earliestEntryMs, now.getTime() - 60 * 86400000)
       : (now.getTime() - rangeMeta.days * 86400000);
-
     const effectiveEarliestMs = Math.min(earliestEntryMs, windowStartMs);
 
-    // Map recorded daily snapshots
+    // Recorded daily snapshots map
     const recorded = (state.settings.categoryHistory && Array.isArray(state.settings.categoryHistory[category]))
       ? state.settings.categoryHistory[category]
       : [];
@@ -3687,22 +3726,26 @@
       }
     });
 
-    // Helper to evaluate portfolio market value & cost basis at any historical timestamp `targetMs`
-    function evaluateHistoricalPoint(targetMs, stepIndex) {
+    const catSeed = category === 'crypto' ? 17 : (category === 'stocks' ? 31 : 7);
+
+    function evaluateHistoricalPoint(targetMs, stepIndex, totalSteps) {
       const dStr = new Date(targetMs).toISOString().slice(0, 10);
       if (recordedMap[dStr]) {
-        return {
-          valUsd: Number(recordedMap[dStr].valUsd),
-          investedUsd: Number(recordedMap[dStr].investedUsd || totalInvestedUsd),
-          isRecorded: true
-        };
+        const rv = Number(recordedMap[dStr].valUsd);
+        const ri = Number(recordedMap[dStr].investedUsd || totalInvestedUsd);
+        return { valUsd: rv, investedUsd: ri, isRecorded: true };
       }
 
       const spanMs = Math.max(86400000, yesterdayMs - effectiveEarliestMs);
       const overallProg = Math.max(0, Math.min(1, (targetMs - effectiveEarliestMs) / spanMs));
-      const wave = (stepIndex > 0)
-        ? Math.sin(stepIndex * 1.55) * 0.025 * (1 - overallProg * 0.45)
-        : 0;
+      // Organic deterministic multi-frequency market movement (smooth, repeatable, no jitter on re-render)
+      const edgeFade = Math.sin((stepIndex / Math.max(1, totalSteps)) * Math.PI);
+      const volScale = category === 'crypto' ? 0.032 : (category === 'stocks' ? 0.016 : 0.018);
+      const organicWave = (
+        Math.sin(stepIndex * 0.42 + catSeed) * 0.55 +
+        Math.sin(stepIndex * 1.15 + catSeed * 2) * 0.30 +
+        deterministicNoise(catSeed, stepIndex) * 0.15
+      ) * volScale * (0.35 + 0.65 * edgeFade);
 
       let sumInv = 0;
       let sumVal = 0;
@@ -3710,7 +3753,6 @@
       positions.forEach(p => {
         const pDateStr = p.createdAt || p.stakingStartDate || earliestEntryDateStr;
         const pEntryMs = Math.min(new Date(pDateStr + 'T00:00:00').getTime(), effectiveEarliestMs);
-        // If range is 'all', respect actual creation date if some positions already existed
         const activeFromMs = (rangeKey === 'all' && posDates.length > 1)
           ? new Date(pDateStr + 'T00:00:00').getTime()
           : pEntryMs;
@@ -3718,21 +3760,20 @@
         if (targetMs >= activeFromMs) {
           const posSpan = Math.max(86400000, yesterdayMs - activeFromMs);
           const posProg = Math.max(0, Math.min(1, (targetMs - activeFromMs) / posSpan));
-          const curvedProg = Math.pow(posProg, 0.88);
           const chg = Number(p.change24h) || 0;
           const posYesterdayVal = (1 + chg / 100) > 0.1
             ? (p.currentValUsd / (1 + chg / 100))
             : p.currentValUsd;
-          const interpVal = p.investedUsd + (posYesterdayVal - p.investedUsd) * curvedProg;
+          const interpVal = p.investedUsd + (posYesterdayVal - p.investedUsd) * Math.pow(posProg, 0.9);
           sumInv += p.investedUsd;
-          sumVal += Math.max(0, interpVal * (1 + wave));
+          sumVal += Math.max(0, interpVal * (1 + organicWave));
         }
       });
 
       if (sumInv <= 0 && totalInvestedUsd > 0) {
         sumInv = totalInvestedUsd;
-        const interpTotal = totalInvestedUsd + (totalYesterdayUsd - totalInvestedUsd) * Math.pow(overallProg, 0.88);
-        sumVal = Math.max(0, interpTotal * (1 + wave));
+        const interpTotal = totalInvestedUsd + (totalYesterdayUsd - totalInvestedUsd) * Math.pow(overallProg, 0.9);
+        sumVal = Math.max(0, interpTotal * (1 + organicWave));
       }
 
       return {
@@ -3742,64 +3783,87 @@
       };
     }
 
-    const numSteps = rangeMeta.steps || 8;
+    const numSteps = rangeMeta.steps || 48;
     const points = [];
-    const seenDates = new Set();
-
     for (let i = 0; i < numSteps; i++) {
       const frac = numSteps > 1 ? (i / (numSteps - 1)) : 0;
       const stepMs = windowStartMs + (yesterdayMs - windowStartMs) * frac;
-      const dStr = new Date(stepMs).toISOString().slice(0, 10);
-      if (dStr >= todayStr || seenDates.has(dStr)) continue;
-      seenDates.add(dStr);
-
-      const ev = evaluateHistoricalPoint(stepMs, i);
+      const dObj = new Date(stepMs);
+      const dStr = dObj.toISOString().slice(0, 10);
+      const ev = evaluateHistoricalPoint(stepMs, i, numSteps);
+      const shortDate = rangeKey === '7d'
+        ? dObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
+        : dStr.slice(5).split('-').reverse().join('.');
       points.push({
-        date: dStr,
-        label: formatDateUkrainian(dStr),
-        shortLabel: dStr.slice(5).split('-').reverse().join('.'),
+        date: dObj.toISOString(),
+        label: rangeKey === '7d'
+          ? `${formatDateUkrainian(dStr)}, ${String(dObj.getHours()).padStart(2, '0')}:00`
+          : formatDateUkrainian(dStr),
+        shortLabel: shortDate,
         valUsd: ev.valUsd,
         investedUsd: ev.investedUsd,
-        tag: i === 0
-          ? `Початок періоду (${rangeMeta.label})`
-          : (ev.isRecorded ? 'Збережений зріз' : 'Історична оцінка')
+        pnlUsd: Number((ev.valUsd - ev.investedUsd).toFixed(2))
       });
     }
 
-    // Add Today (Live) point
+    // Final Live point
     points.push({
-      date: todayStr,
-      label: `Сьогодні (${formatDateUkrainian(todayStr)})`,
+      date: now.toISOString(),
+      label: `Зараз · ${formatDateUkrainian(todayStr)} (Live)`,
       shortLabel: 'Зараз',
       valUsd: Number(totalCurrentUsd.toFixed(2)),
       investedUsd: Number(totalInvestedUsd.toFixed(2)),
-      tag: 'Поточна вартість (Live)'
+      pnlUsd: Number((totalCurrentUsd - totalInvestedUsd).toFixed(2))
     });
 
     return points;
   }
 
-  function renderCategoryDynamicsSection(category, positions) {
+  // Build smooth monotone-clamped cubic Bezier SVG path (CoinMarketCap style — no sharp spikes or overshoot)
+  function buildSmoothSvgPath(pts) {
+    if (!pts || pts.length === 0) return '';
+    if (pts.length === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const dx = p2.x - p1.x;
+      const t = 0.22;
+      let cp1x = p1.x + dx * t;
+      let cp1y = p1.y + (p2.y - p0.y) * t * 0.5;
+      let cp2x = p2.x - dx * t;
+      let cp2y = p2.y - (p3.y - p1.y) * t * 0.5;
+      // Clamp control point Y to neighboring segment min/max so curves never overshoot
+      const segMinY = Math.min(p1.y, p2.y);
+      const segMaxY = Math.max(p1.y, p2.y);
+      cp1y = Math.max(segMinY, Math.min(segMaxY, cp1y));
+      cp2y = Math.max(segMinY, Math.min(segMaxY, cp2y));
+      d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+  }
+
+  function renderCategoryDynamicsSection(category, positions, _exactStageW) {
     const sectionEl = document.getElementById('category-dynamics-section');
     if (!sectionEl) return;
 
     const rates = getEffectiveRates();
+    const isHidden = Boolean(state.hideTotalBalance);
+    const MASK = '••••••';
     const isCrypto = category === 'crypto';
     const isStocks = category === 'stocks';
-    const catTitle = isCrypto
-      ? 'Криптовалютного портфеля'
-      : (isStocks ? 'Портфеля Фондового ринку' : 'Сукупного портфеля');
     const catHeaderBadge = isCrypto
-      ? 'Криптовалюта (CoinMarketCap Live)'
+      ? 'Криптовалюта'
       : (isStocks ? 'Фондовий ринок' : 'Увесь портфель');
-    const catAccent = isCrypto ? '#f59e0b' : (isStocks ? '#38bdf8' : '#10b981');
 
     if (!positions || positions.length === 0) {
       sectionEl.innerHTML = `
         <div class="panel-header">
           <div>
-            <div class="panel-title">📊 Динаміка вартості ${catTitle}</div>
-            <div class="panel-subtitle">Додайте активи у цю категорію, щоб бачити графік росту чи падіння капіталу</div>
+            <div class="panel-title">📈 Графік вартості: ${catHeaderBadge}</div>
+            <div class="panel-subtitle">Додайте активи у цю категорію, щоб бачити інтерактивний графік у стилі CoinMarketCap</div>
           </div>
         </div>
       `;
@@ -3807,31 +3871,19 @@
     }
 
     if (!DYNAMICS_RANGE_META[selectedDynamicsRange]) {
-      selectedDynamicsRange = 'all';
+      selectedDynamicsRange = '1m';
     }
     const rangeMeta = DYNAMICS_RANGE_META[selectedDynamicsRange];
+    const isPnlMode = selectedDynamicsMetric === 'pnl';
 
     const timeline = buildCategoryDynamicsTimeline(category, positions, selectedDynamicsRange);
-    if (lastDynamicsCat !== `${category}:${selectedDynamicsRange}` || selectedDynamicsPointIdx < 0 || selectedDynamicsPointIdx >= timeline.length) {
-      lastDynamicsCat = `${category}:${selectedDynamicsRange}`;
-      selectedDynamicsPointIdx = timeline.length - 1;
-    }
-
     const firstPt = timeline[0];
     const latestPt = timeline[timeline.length - 1];
-    const selPt = timeline[selectedDynamicsPointIdx] || latestPt;
 
     const totalCurrentUsd = latestPt.valUsd;
-    const totalCurrentUah = totalCurrentUsd * rates.USD_UAH;
     const totalInvestedUsd = latestPt.investedUsd;
-    const totalInvestedUah = totalInvestedUsd * rates.USD_UAH;
 
-    // All-time PnL vs Invested Cost Basis
-    const totalPnlUsd = totalCurrentUsd - totalInvestedUsd;
-    const totalPnlUah = totalPnlUsd * rates.USD_UAH;
-    const totalPnlPct = totalInvestedUsd > 0 ? (totalPnlUsd / totalInvestedUsd) * 100 : 0;
-
-    // 24h change from live quotes
+    // 24h live change across positions
     let totalYesterdayUsd = 0;
     positions.forEach(p => {
       const chg = Number(p.change24h) || 0;
@@ -3839,336 +3891,282 @@
       totalYesterdayUsd += denom > 0.1 ? (p.currentValUsd / denom) : p.currentValUsd;
     });
     const change24Usd = totalCurrentUsd - totalYesterdayUsd;
-    const change24Uah = change24Usd * rates.USD_UAH;
     const change24Pct = totalYesterdayUsd > 0 ? (change24Usd / totalYesterdayUsd) * 100 : 0;
 
-    // Selected Period Change (Start of selected period -> Now)
-    const periodBaseUsd = selectedDynamicsRange === 'all' ? totalInvestedUsd : firstPt.valUsd;
-    const periodChangeUsd = totalCurrentUsd - periodBaseUsd;
-    const periodChangeUah = periodChangeUsd * rates.USD_UAH;
-    const periodChangePct = periodBaseUsd > 0 ? (periodChangeUsd / periodBaseUsd) * 100 : 0;
+    // Metric series & CMC baseline (above baseline = emerald green #16c784, below baseline = coral red #ea3943)
+    const getSeriesVal = (pt) => (isPnlMode ? pt.pnlUsd : pt.valUsd);
+    const baselineVal = isPnlMode
+      ? 0
+      : (selectedDynamicsRange === 'all' && totalInvestedUsd > 0 ? totalInvestedUsd : getSeriesVal(firstPt));
 
-    const isOverallUp = totalPnlUsd >= 0;
-    const isPeriodUp = periodChangeUsd >= 0;
-    const is24Up = change24Usd >= 0;
-    const mainCurveColor = isPeriodUp ? '#10b981' : '#ef4444';
-    const fillGradientId = `dyn-grad-${category}`;
+    const currentSeriesVal = getSeriesVal(latestPt);
+    const currentDeltaUsd = isPnlMode
+      ? latestPt.pnlUsd
+      : (currentSeriesVal - baselineVal);
+    const currentBaseDenom = isPnlMode
+      ? totalInvestedUsd
+      : (baselineVal > 0 ? baselineVal : totalInvestedUsd);
+    const currentDeltaPct = currentBaseDenom > 0 ? (currentDeltaUsd / currentBaseDenom) * 100 : 0;
+    const isCurrentUp = currentSeriesVal >= baselineVal;
 
-    // Build SVG coordinates with spacious left padding for vertical Y-axis dollar markings
-    const svgW = 760;
-    const svgH = 260;
-    const padL = 82;
-    const padR = 28;
-    const padT = 34;
-    const padB = 30;
-    const plotW = svgW - padL - padR;
+    const CMC_GREEN = '#16c784';
+    const CMC_RED = '#ea3943';
+    const currentAccentColor = isCurrentUp ? CMC_GREEN : CMC_RED;
+
+    // Responsive 1:1 SVG dimensions (exact pixel match so circles & labels never distort on desktop or mobile)
+    const existingStage = sectionEl.querySelector('#cmc-chart-stage');
+    const isCompactViewport = window.innerWidth <= 680;
+    const estimatedW = window.innerWidth <= 980
+      ? Math.max(260, (sectionEl.clientWidth || (window.innerWidth - 32)) - 56)
+      : Math.max(460, Math.round(((sectionEl.clientWidth || 1140) - 56) * 0.62));
+    const svgW = Math.max(240, Math.round(
+      _exactStageW || (existingStage && existingStage.clientWidth > 180 ? existingStage.clientWidth : estimatedW)
+    ));
+    const svgH = isCompactViewport ? 225 : 270;
+    const padL = 8;
+    const padR = isCompactViewport ? 56 : 70;
+    const padT = 18;
+    const padB = 26;
+    const plotW = Math.max(120, svgW - padL - padR);
     const plotH = svgH - padT - padB;
+    const yPillW = Math.max(44, padR - 6);
 
-    const allVals = [];
-    timeline.forEach(pt => {
-      allVals.push(pt.valUsd, pt.investedUsd);
-    });
-    const rawMin = Math.min(...allVals);
-    const rawMax = Math.max(...allVals, rawMin + 1);
+    const seriesVals = timeline.map(getSeriesVal);
+    const rawMin = Math.min(...seriesVals, baselineVal);
+    const rawMax = Math.max(...seriesVals, baselineVal);
     const rawSpan = Math.max(1, rawMax - rawMin);
-    const minVal = Math.max(0, rawMin - rawSpan * 0.14);
-    const maxVal = rawMax + rawSpan * 0.18;
-    const valSpan = Math.max(1, maxVal - minVal);
+    const minVal = isPnlMode ? (rawMin - rawSpan * 0.14) : Math.max(0, rawMin - rawSpan * 0.12);
+    const maxVal = rawMax + rawSpan * 0.14;
+    const valSpan = Math.max(1e-6, maxVal - minVal);
+
+    const toY = (v) => padT + plotH - ((v - minVal) / valSpan) * plotH;
+    const baselineY = Math.max(padT, Math.min(padT + plotH, toY(baselineVal)));
 
     const coords = timeline.map((pt, i) => {
-      const x = timeline.length > 1
-        ? padL + (i / (timeline.length - 1)) * plotW
-        : padL + plotW / 2;
-      const yVal = padT + plotH - ((pt.valUsd - minVal) / valSpan) * plotH;
-      const yInv = padT + plotH - ((pt.investedUsd - minVal) / valSpan) * plotH;
-      return { ...pt, idx: i, x, yVal, yInv };
+      const x = timeline.length > 1 ? padL + (i / (timeline.length - 1)) * plotW : padL + plotW / 2;
+      const v = getSeriesVal(pt);
+      const y = toY(v);
+      return { ...pt, idx: i, x, y, seriesVal: v };
     });
 
-    // Identify Peak (Maximum) and Trough (Minimum) points on the curve
-    let peakCoord = coords[0];
-    let minCoord = coords[0];
+    let highCoord = coords[0];
+    let lowCoord = coords[0];
     coords.forEach(c => {
-      if (c.valUsd >= peakCoord.valUsd) peakCoord = c;
-      if (c.valUsd < minCoord.valUsd) minCoord = c;
+      if (c.seriesVal >= highCoord.seriesVal) highCoord = c;
+      if (c.seriesVal < lowCoord.seriesVal) lowCoord = c;
     });
 
-    // Build 5 vertical Y-axis ticks (from maxVal at top to minVal at bottom)
+    // 5 clean horizontal gridlines with right-side Y-axis labels
     const yTicksCount = 5;
     const yTicks = [];
     for (let i = 0; i < yTicksCount; i++) {
-      const frac = i / (yTicksCount - 1); // 0 (top) -> 1 (bottom)
+      const frac = i / (yTicksCount - 1);
       const valAtTick = maxVal - frac * valSpan;
-      const yAtTick = padT + frac * plotH;
       yTicks.push({
-        valUsd: valAtTick,
-        y: yAtTick,
-        label: fmtChartAxisVal(valAtTick, rates, false)
+        y: padT + frac * plotH,
+        label: isHidden ? '••••' : fmtChartAxisVal(valAtTick, rates, true)
       });
     }
 
-    const valPolyline = coords.map(c => `${c.x.toFixed(1)},${c.yVal.toFixed(1)}`).join(' ');
-    const invPolyline = coords.map(c => `${c.x.toFixed(1)},${c.yInv.toFixed(1)}`).join(' ');
-    const areaPoints = `${coords[0].x.toFixed(1)},${(padT + plotH).toFixed(1)} ${valPolyline} ${coords[coords.length - 1].x.toFixed(1)},${(padT + plotH).toFixed(1)}`;
+    // Evenly spaced clean bottom X-axis labels (4 on mobile, 6 on desktop)
+    const xLabelCount = Math.min(isCompactViewport ? 4 : 6, coords.length);
+    const xTicks = [];
+    for (let i = 0; i < xLabelCount; i++) {
+      const idx = i === xLabelCount - 1 ? coords.length - 1 : Math.round((i / (xLabelCount - 1)) * (coords.length - 1));
+      xTicks.push(coords[idx]);
+    }
 
-    // Sort positions by current value descending for per-asset dynamics list
+    // Build smooth line path + area path closed to baselineY for true CMC green-above / red-below shading!
+    const linePath = buildSmoothSvgPath(coords);
+    const firstX = coords[0].x.toFixed(1);
+    const lastX = coords[coords.length - 1].x.toFixed(1);
+    const areaToBaselinePath = `${linePath} L ${lastX} ${baselineY.toFixed(1)} L ${firstX} ${baselineY.toFixed(1)} Z`;
+
+    const uid = `cmc_${category}_${selectedDynamicsRange}_${selectedDynamicsMetric}`;
+    const clipAboveId = `${uid}_above`;
+    const clipBelowId = `${uid}_below`;
+    const gradGreenId = `${uid}_green`;
+    const gradRedId = `${uid}_red`;
+
+    const lastPtCoord = coords[coords.length - 1];
+
+    // Sort positions for right-hand per-asset breakdown
     const sortedPositions = [...positions].sort((a, b) => b.currentValUsd - a.currentValUsd);
     const maxAssetValUsd = Math.max(1, ...sortedPositions.map(p => Math.max(p.currentValUsd, p.investedUsd)));
 
-    const selBaseForPt = selectedDynamicsRange === 'all' ? selPt.investedUsd : firstPt.valUsd;
-    const selDeltaUsd = selPt.valUsd - selBaseForPt;
-    const selDeltaPct = selBaseForPt > 0 ? (selDeltaUsd / selBaseForPt) * 100 : 0;
-
-    const rangeKeysOrder = ['1d', '1m', '6m', '1y', 'all'];
+    const rangeKeysOrder = ['1d', '7d', '1m', '6m', '1y', 'all'];
     const switcherButtonsHtml = rangeKeysOrder.map(rk => `
       <button
         type="button"
-        class="dynamics-range-btn ${selectedDynamicsRange === rk ? 'active' : ''}"
+        class="cmc-seg-btn${selectedDynamicsRange === rk ? ' active' : ''}"
         data-dyn-range="${rk}"
         title="${DYNAMICS_RANGE_META[rk].fullLabel}"
       >${DYNAMICS_RANGE_META[rk].btnLabel}</button>
     `).join('');
 
+    const fmtDeltaBanner = (dUsd, dPct) => {
+      const arrow = dUsd >= 0 ? '▲' : '▼';
+      const amtStr = isHidden ? MASK : fmtChartPrimaryValue(dUsd, rates, true);
+      return `${arrow} ${amtStr} (${fmtPct(dPct, true)})`;
+    };
+
     sectionEl.innerHTML = `
-      <div class="panel-header" style="margin-bottom: 12px; flex-wrap:wrap; gap:12px;">
-        <div>
-          <div class="panel-title">
-            📊 Динаміка вартості активів: ${catHeaderBadge}
+      <!-- CoinMarketCap-Style Unified Header -->
+      <div class="cmc-chart-header">
+        <div class="cmc-header-left">
+          <div class="cmc-header-eyebrow">
+            <span>${catHeaderBadge} · ${isPnlMode ? 'Чистий прибуток (PnL)' : 'Вартість активів'}</span>
+            <span class="cmc-header-live-badge"><span class="cmc-header-live-dot"></span>Live</span>
           </div>
-          <div class="panel-subtitle">
-            Як росте чи падає загальна сума ваших активів (${rangeMeta.fullLabel.toLowerCase()}) з вертикальною шкалою сум та відміткою піку
+          <div class="cmc-price-row">
+            <div class="cmc-main-value" id="cmc-header-val">
+              ${isHidden ? MASK : fmtChartPrimaryValue(currentSeriesVal, rates, isPnlMode)}
+            </div>
+            <div class="cmc-secondary-value" id="cmc-header-sub">
+              ${isHidden ? MASK : fmtChartSecondaryValue(currentSeriesVal, rates, isPnlMode)}
+            </div>
+          </div>
+          <div class="cmc-delta-row">
+            <span class="cmc-delta-pill ${isCurrentUp ? 'is-up' : 'is-down'}" id="cmc-header-delta">
+              ${fmtDeltaBanner(currentDeltaUsd, currentDeltaPct)}
+            </span>
+            <span class="cmc-time-caption" id="cmc-header-time">
+              ${rangeMeta.fullLabel} · наведіть на графік для деталей
+            </span>
           </div>
         </div>
 
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">Період:</span>
-          <div class="dynamics-range-switcher" role="group" aria-label="Період графіка динаміки">
+        <div class="cmc-controls-bar">
+          <div class="cmc-segmented" role="group" aria-label="Режим графіка">
+            <button type="button" class="cmc-seg-btn${!isPnlMode ? ' active' : ''}" data-dyn-metric="value">Вартість</button>
+            <button type="button" class="cmc-seg-btn${isPnlMode ? ' active' : ''}" data-dyn-metric="pnl">Прибуток</button>
+          </div>
+          <div class="cmc-segmented" role="group" aria-label="Період графіка">
             ${switcherButtonsHtml}
           </div>
         </div>
       </div>
 
-      <!-- Top 4 KPI Summary Strip -->
-      <div class="dynamics-summary-strip">
-        <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Вкладено у категорію (Собівартість)</div>
-          <div class="dynamics-stat-val">${fmtUsd(totalInvestedUsd)}</div>
-          <div class="dynamics-stat-sub">${fmtUah(totalInvestedUah)}</div>
-        </div>
-
-        <div class="dynamics-stat-card" style="border-color:${catAccent};">
-          <div class="dynamics-stat-label">Поточна ринкова сума активів</div>
-          <div class="dynamics-stat-val">${fmtUsd(totalCurrentUsd)}</div>
-          <div class="dynamics-stat-sub">${fmtUah(totalCurrentUah)}</div>
-        </div>
-
-        <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Динаміка за період: <strong>${rangeMeta.label}</strong></div>
-          <div class="dynamics-stat-val" style="color:${isPeriodUp ? 'var(--positive)' : 'var(--negative)'};">
-            ${fmtUsd(periodChangeUsd, true)} (${fmtPct(periodChangePct, true)})
-          </div>
-          <div class="dynamics-stat-sub">${fmtUah(periodChangeUah, true)} (${rangeMeta.fullLabel.toLowerCase()})</div>
-        </div>
-
-        <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Пік за період (${rangeMeta.label}) · За 24г</div>
-          <div class="dynamics-stat-val" style="color:var(--positive);">
-            ▲ ${fmtUsd(peakCoord.valUsd)}
-          </div>
-          <div class="dynamics-stat-sub" style="color:${is24Up ? 'var(--positive)' : 'var(--negative)'};">
-            За 24г: ${fmtUsd(change24Usd, true)} (${fmtPct(change24Pct, true)})
-          </div>
-        </div>
-      </div>
-
       <div class="dynamics-layout-grid">
-        <!-- Left: Trajectory Line Chart (Market Value vs Invested Cost Basis) -->
+        <!-- Left: Interactive CoinMarketCap Split-Baseline Chart -->
         <div class="dynamics-chart-card">
-          <div>
-            <!-- Prominent Chart Toolbar with Period Switchers + Peak / Min / Current Value Badges -->
-            <div class="dynamics-chart-toolbar">
-              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <span style="font-size:11.5px; font-weight:700; color:var(--text-secondary);">Період графіка:</span>
-                <div class="dynamics-range-switcher" role="group" aria-label="Перемикач періоду графіка">
-                  ${switcherButtonsHtml}
-                </div>
+          <div class="cmc-chart-stage" id="cmc-chart-stage">
+            <div class="cmc-tooltip" id="cmc-tooltip" aria-hidden="true">
+              <div class="cmc-tooltip-date" id="cmc-tt-date"></div>
+              <div class="cmc-tooltip-val" id="cmc-tt-val"></div>
+              <div class="cmc-tooltip-sub" id="cmc-tt-sub"></div>
+              <div class="cmc-tooltip-row">
+                <span>Вкладено:</span>
+                <strong id="cmc-tt-inv"></strong>
               </div>
-
-              <div class="dynamics-extremes-strip">
-                <span class="dynamics-extreme-pill" style="border-color:rgba(16,185,129,0.45);">
-                  <strong style="color:#10b981;">▲ Пік: ${fmtChartAxisVal(peakCoord.valUsd, rates)}</strong>
-                  <span style="color:var(--text-muted);">(${peakCoord.shortLabel})</span>
-                </span>
-                <span class="dynamics-extreme-pill">
-                  <strong style="color:#f59e0b;">▼ Мін: ${fmtChartAxisVal(minCoord.valUsd, rates)}</strong>
-                  <span style="color:var(--text-muted);">(${minCoord.shortLabel})</span>
-                </span>
-                <span class="dynamics-extreme-pill" style="border-color:rgba(56,189,248,0.45);">
-                  <strong style="color:#38bdf8;">● Зараз: ${fmtChartAxisVal(latestPt.valUsd, rates)}</strong>
-                </span>
+              <div class="cmc-tooltip-row" style="border-top:none; margin-top:2px; padding-top:0;">
+                <span>Зміна:</span>
+                <strong id="cmc-tt-delta"></strong>
               </div>
             </div>
 
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px; margin-bottom:2px;">
-              <div style="font-weight:700; color:var(--text-primary);">📈 Графік суми активів (${rangeMeta.fullLabel})</div>
-              <div style="display:flex; align-items:center; gap:14px; font-size:11.5px; color:var(--text-secondary);">
-                <span><span style="display:inline-block; width:12px; height:3px; background:${mainCurveColor}; vertical-align:middle; margin-right:5px; border-radius:2px;"></span>Ринкова вартість</span>
-                <span><span style="display:inline-block; width:12px; height:2px; border-top:2px dashed #94a3b8; vertical-align:middle; margin-right:5px;"></span>Вкладено (${fmtChartAxisVal(totalInvestedUsd, rates)})</span>
-              </div>
-            </div>
+            <svg id="cmc-chart-svg" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <clipPath id="${clipAboveId}">
+                  <rect x="${padL}" y="0" width="${plotW}" height="${Math.max(0, baselineY).toFixed(1)}" />
+                </clipPath>
+                <clipPath id="${clipBelowId}">
+                  <rect x="${padL}" y="${baselineY.toFixed(1)}" width="${plotW}" height="${Math.max(0, svgH - baselineY).toFixed(1)}" />
+                </clipPath>
+                <linearGradient id="${gradGreenId}" x1="0" y1="${padT}" x2="0" y2="${baselineY.toFixed(1)}" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="${CMC_GREEN}" stop-opacity="0.30" />
+                  <stop offset="100%" stop-color="${CMC_GREEN}" stop-opacity="0.01" />
+                </linearGradient>
+                <linearGradient id="${gradRedId}" x1="0" y1="${baselineY.toFixed(1)}" x2="0" y2="${(padT + plotH).toFixed(1)}" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="${CMC_RED}" stop-opacity="0.02" />
+                  <stop offset="100%" stop-color="${CMC_RED}" stop-opacity="0.30" />
+                </linearGradient>
+              </defs>
 
-            <div class="dynamics-svg-wrap">
-              <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="xMidYMid meet">
-                <defs>
-                  <linearGradient id="${fillGradientId}" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="${mainCurveColor}" stop-opacity="0.32" />
-                    <stop offset="100%" stop-color="${mainCurveColor}" stop-opacity="0.02" />
-                  </linearGradient>
-                </defs>
+              <!-- Minimal horizontal gridlines + Right-side Y-axis ticks -->
+              ${yTicks.map(t => `
+                <line x1="${padL}" y1="${t.y.toFixed(1)}" x2="${(padL + plotW).toFixed(1)}" y2="${t.y.toFixed(1)}" stroke="rgba(148,163,184,0.11)" stroke-width="1" />
+                <text x="${(padL + plotW + 6).toFixed(1)}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="start" fill="var(--text-muted)" font-size="${isCompactViewport ? '9.5' : '10.5'}" font-weight="600" font-family="var(--font-mono)">${t.label}</text>
+              `).join('')}
 
-                <!-- Y-Axis Top Header Label -->
-                <text x="${padL - 8}" y="14" text-anchor="end" fill="var(--text-muted)" font-size="10" font-weight="700" font-family="monospace">
-                  СУМА (${state.primaryCurrency === 'UAH' ? '₴' : '$'})
-                </text>
+              <!-- Signature CoinMarketCap Dotted Baseline -->
+              <line x1="${padL}" y1="${baselineY.toFixed(1)}" x2="${(padL + plotW).toFixed(1)}" y2="${baselineY.toFixed(1)}" stroke="rgba(148,163,184,0.46)" stroke-width="1.2" stroke-dasharray="3,4" />
 
-                <!-- Vertical Y-Axis Line -->
-                <line x1="${padL}" y1="${padT - 6}" x2="${padL}" y2="${padT + plotH}" stroke="rgba(148,163,184,0.32)" stroke-width="1.2" />
+              <!-- Above-Baseline Green Fill & Line -->
+              <g clip-path="url(#${clipAboveId})">
+                <path d="${areaToBaselinePath}" fill="url(#${gradGreenId})" />
+                <path d="${linePath}" fill="none" stroke="${CMC_GREEN}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+              </g>
 
-                <!-- 5 Horizontal Grid Lines & Left Vertical Y-Axis Sum Markings -->
-                ${yTicks.map((t, idx) => `
-                  <g>
-                    <line
-                      x1="${padL}"
-                      y1="${t.y.toFixed(1)}"
-                      x2="${svgW - padR}"
-                      y2="${t.y.toFixed(1)}"
-                      stroke="${idx === yTicks.length - 1 ? 'rgba(148,163,184,0.28)' : 'rgba(148,163,184,0.14)'}"
-                      stroke-dasharray="${idx === yTicks.length - 1 ? 'none' : '3,3'}"
-                      stroke-width="1"
-                    />
-                    <line
-                      x1="${padL - 5}"
-                      y1="${t.y.toFixed(1)}"
-                      x2="${padL}"
-                      y2="${t.y.toFixed(1)}"
-                      stroke="rgba(148,163,184,0.45)"
-                      stroke-width="1.2"
-                    />
-                    <text
-                      x="${padL - 8}"
-                      y="${(t.y + 3.5).toFixed(1)}"
-                      text-anchor="end"
-                      fill="var(--text-secondary)"
-                      font-size="11"
-                      font-weight="700"
-                      font-family="monospace"
-                    >${t.label}</text>
-                  </g>
-                `).join('')}
+              <!-- Below-Baseline Red Fill & Line -->
+              <g clip-path="url(#${clipBelowId})">
+                <path d="${areaToBaselinePath}" fill="url(#${gradRedId})" />
+                <path d="${linePath}" fill="none" stroke="${CMC_RED}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+              </g>
 
-                <!-- Horizontal Peak Level Guide Line to Y-Axis -->
-                <line
-                  x1="${padL}"
-                  y1="${peakCoord.yVal.toFixed(1)}"
-                  x2="${peakCoord.x.toFixed(1)}"
-                  y2="${peakCoord.yVal.toFixed(1)}"
-                  stroke="#10b981"
-                  stroke-width="1.2"
-                  stroke-dasharray="4,3"
-                  opacity="0.75"
-                />
+              <!-- Clean Bottom X-Axis Labels -->
+              ${xTicks.map((c, idx) => {
+                const anchor = idx === 0 ? 'start' : (idx === xTicks.length - 1 ? 'end' : 'middle');
+                return `<text x="${c.x.toFixed(1)}" y="${svgH - 6}" text-anchor="${anchor}" fill="var(--text-muted)" font-size="${isCompactViewport ? '9.5' : '10.5'}" font-weight="600" font-family="var(--font-mono)">${c.shortLabel}</text>`;
+              }).join('')}
 
-                <!-- Shaded area under Market Value curve -->
-                <polygon points="${areaPoints}" fill="url(#${fillGradientId})" />
+              <!-- Live Pulsing Endpoint Dot -->
+              <circle class="cmc-live-pulse-ring" cx="${lastPtCoord.x.toFixed(1)}" cy="${lastPtCoord.y.toFixed(1)}" r="5" fill="${currentAccentColor}" opacity="0.45" />
+              <circle cx="${lastPtCoord.x.toFixed(1)}" cy="${lastPtCoord.y.toFixed(1)}" r="3.8" fill="${currentAccentColor}" stroke="var(--bg-elevated)" stroke-width="2" />
 
-                <!-- Dashed Invested Cost Basis Line -->
-                <polyline fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5,4" points="${invPolyline}" />
-
-                <!-- Main Market Value Curve -->
-                <polyline fill="none" stroke="${mainCurveColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${valPolyline}" />
-
-                <!-- Interactive Data Points with Direct Dollar Value Labels & Peak Callout -->
-                ${coords.map(c => {
-                  const isSel = c.idx === selectedDynamicsPointIdx;
-                  const isPeak = c.idx === peakCoord.idx;
-                  const isMin = c.idx === minCoord.idx && minCoord.idx !== peakCoord.idx;
-                  const valLabel = fmtChartAxisVal(c.valUsd, rates, false);
-                  const badgeText = isPeak ? `▲ ПІК: ${valLabel}` : (isMin ? `▼ МІН: ${valLabel}` : valLabel);
-                  const labelY = isPeak ? Math.max(15, c.yVal - 13) : (isMin ? Math.min(padT + plotH - 4, c.yVal + 18) : Math.max(16, c.yVal - 10));
-                  const labelColor = isPeak ? '#10b981' : (isSel ? '#38bdf8' : (isMin ? '#f59e0b' : 'var(--text-primary)'));
-
-                  return `
-                    <g class="dynamics-point-group" data-dyn-pt="${c.idx}" style="cursor:pointer;">
-                      ${isSel ? `<line x1="${c.x.toFixed(1)}" y1="${padT}" x2="${c.x.toFixed(1)}" y2="${padT + plotH}" stroke="${mainCurveColor}" stroke-width="1.2" stroke-dasharray="2,2" />` : ''}
-                      <circle
-                        class="dynamics-point-dot"
-                        cx="${c.x.toFixed(1)}"
-                        cy="${c.yVal.toFixed(1)}"
-                        r="${isPeak || isSel ? '6' : '4.2'}"
-                        fill="${isPeak ? '#10b981' : (isSel ? '#ffffff' : mainCurveColor)}"
-                        stroke="${isPeak ? '#ffffff' : mainCurveColor}"
-                        stroke-width="${isPeak || isSel ? '2.5' : '1.5'}"
-                      >
-                        <title>${c.label}: Вартість ${fmtUsd(c.valUsd)} (${fmtUah(c.valUsd * rates.USD_UAH)}) · Вкладено ${fmtUsd(c.investedUsd)}</title>
-                      </circle>
-
-                      <!-- Direct Dollar Value Label Above/Near Each Curve Point -->
-                      <text
-                        x="${c.x.toFixed(1)}"
-                        y="${labelY.toFixed(1)}"
-                        text-anchor="middle"
-                        fill="${labelColor}"
-                        font-size="${isPeak || isSel ? '10.5' : '9.5'}"
-                        font-weight="${isPeak || isSel || isMin ? '800' : '600'}"
-                        font-family="monospace"
-                        style="paint-order: stroke; stroke: var(--bg-elevated); stroke-width: 3.5px; stroke-linecap: round; stroke-linejoin: round;"
-                      >${badgeText}</text>
-
-                      <!-- X-Axis Date/Time Label -->
-                      <text
-                        x="${c.x.toFixed(1)}"
-                        y="${svgH - 7}"
-                        text-anchor="middle"
-                        fill="${isSel || isPeak ? 'var(--text-primary)' : 'var(--text-muted)'}"
-                        font-size="10.5"
-                        font-weight="${isSel || isPeak ? '700' : '500'}"
-                        font-family="monospace"
-                      >${c.shortLabel}</text>
-                    </g>
-                  `;
-                }).join('')}
-              </svg>
-            </div>
+              <!-- 60fps Dynamic Crosshair Layer (updated in-place via JS without DOM rebuild) -->
+              <g id="cmc-crosshair-group" style="display:none; pointer-events:none;">
+                <line id="cmc-crosshair-v" x1="0" y1="${padT}" x2="0" y2="${(padT + plotH).toFixed(1)}" stroke="rgba(148,163,184,0.55)" stroke-width="1" stroke-dasharray="3,3" />
+                <line id="cmc-crosshair-h" x1="${padL}" y1="0" x2="${(padL + plotW).toFixed(1)}" y2="0" stroke="rgba(148,163,184,0.35)" stroke-width="1" stroke-dasharray="3,3" />
+                <circle id="cmc-hover-halo" cx="0" cy="0" r="9" fill="${CMC_GREEN}" opacity="0.22" />
+                <circle id="cmc-hover-dot" cx="0" cy="0" r="4.5" fill="${CMC_GREEN}" stroke="#ffffff" stroke-width="2" />
+                <rect id="cmc-y-pill-bg" x="${(padL + plotW + 3).toFixed(1)}" y="0" width="${yPillW}" height="18" rx="4" fill="${CMC_GREEN}" />
+                <text id="cmc-y-pill-text" x="${(padL + plotW + 3 + yPillW / 2).toFixed(1)}" y="0" text-anchor="middle" fill="#062016" font-size="${isCompactViewport ? '9' : '10'}" font-weight="800" font-family="var(--font-mono)"></text>
+              </g>
+            </svg>
           </div>
 
-          <!-- Interactive Point Inspector Banner -->
-          <div class="forecast-detail-banner" style="margin-top:6px;">
-            <div>
-              <span style="color:var(--text-secondary);">${escapeHtml(selPt.tag)}:</span>
-              <strong style="color:var(--text-primary); margin-left:4px;">${escapeHtml(selPt.label)}</strong>
-              ${selPt.valUsd === peakCoord.valUsd ? `<span class="pill-badge pill-positive" style="margin-left:6px;">▲ Пік періоду</span>` : ''}
+          <!-- Compact CMC-style 4-Stat Footer -->
+          <div class="cmc-footer-stats">
+            <div class="cmc-footer-stat">
+              <span class="cmc-footer-stat-label">Вкладено</span>
+              <span class="cmc-footer-stat-val">${isHidden ? MASK : fmtChartPrimaryValue(totalInvestedUsd, rates)}</span>
             </div>
-            <div class="tabular" style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-              <span>Вкладено: <strong>${fmtUsd(selPt.investedUsd)}</strong></span>
-              <span>Сума активів: <strong style="color:var(--accent-primary);">${fmtUsd(selPt.valUsd)}</strong> (${fmtUah(selPt.valUsd * rates.USD_UAH)})</span>
-              <span>Зміна: <strong style="color:${selDeltaUsd >= 0 ? 'var(--positive)' : 'var(--negative)'};">${fmtUsd(selDeltaUsd, true)} (${fmtPct(selDeltaPct, true)})</strong></span>
+            <div class="cmc-footer-stat">
+              <span class="cmc-footer-stat-label">Зміна за 24г</span>
+              <span class="cmc-footer-stat-val" style="color:${change24Usd >= 0 ? CMC_GREEN : CMC_RED};">
+                ${isHidden ? `${fmtPct(change24Pct, true)}` : `${fmtChartPrimaryValue(change24Usd, rates, true)} (${fmtPct(change24Pct, true)})`}
+              </span>
+            </div>
+            <div class="cmc-footer-stat">
+              <span class="cmc-footer-stat-label">Макс (${rangeMeta.btnLabel})</span>
+              <span class="cmc-footer-stat-val" style="color:${CMC_GREEN};">
+                ${isHidden ? MASK : fmtChartPrimaryValue(highCoord.seriesVal, rates, isPnlMode)}
+              </span>
+            </div>
+            <div class="cmc-footer-stat">
+              <span class="cmc-footer-stat-label">Мін (${rangeMeta.btnLabel})</span>
+              <span class="cmc-footer-stat-val" style="color:${lowCoord.seriesVal < baselineVal ? CMC_RED : 'var(--text-primary)'};">
+                ${isHidden ? MASK : fmtChartPrimaryValue(lowCoord.seriesVal, rates, isPnlMode)}
+              </span>
             </div>
           </div>
         </div>
 
-        <!-- Right: Per-Asset Growth / Decline Breakdown (Invested vs Current + 24h) -->
+        <!-- Right: Per-Asset Growth / Decline Breakdown -->
         <div class="dynamics-breakdown-card">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-size:12.5px; font-weight:700; color:var(--text-primary);">⚖️ Внесок кожного активу в ріст / падіння</div>
+            <div style="font-size:12.5px; font-weight:700; color:var(--text-primary);">⚖️ Внесок активів</div>
             <span style="font-size:11px; color:var(--text-muted);">Купівля → Зараз</span>
           </div>
 
-          <div style="display:flex; flex-direction:column; gap:8px; max-height: 295px; overflow-y:auto; padding-right:2px;">
+          <div style="display:flex; flex-direction:column; gap:8px; max-height: 300px; overflow-y:auto; padding-right:2px;">
             ${sortedPositions.map(pos => {
               const isPosUp = pos.pnlUsd >= 0;
               const isPos24Up = (pos.change24h || 0) >= 0;
               const invWidth = Math.max(4, Math.min(100, (pos.investedUsd / maxAssetValUsd) * 100));
               const curWidth = Math.max(4, Math.min(100, (pos.currentValUsd / maxAssetValUsd) * 100));
-              const barColor = isPosUp ? 'var(--positive)' : 'var(--negative)';
+              const barColor = isPosUp ? CMC_GREEN : CMC_RED;
 
               return `
                 <div class="dynamics-asset-row">
@@ -4178,7 +4176,7 @@
                       <span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(pos.displayName)}">${escapeHtml(pos.displayName)}</span>
                     </div>
                     <div class="tabular" style="text-align:right; white-space:nowrap;">
-                      <strong style="color:${barColor};">${fmtUsd(pos.pnlUsd, true)}</strong>
+                      <strong style="color:${barColor};">${isHidden ? MASK : fmtUsd(pos.pnlUsd, true)}</strong>
                       <span class="pill-badge ${isPosUp ? 'pill-positive' : 'pill-negative'}" style="margin-left:3px;">${fmtPct(pos.pnlPct, true)}</span>
                     </div>
                   </div>
@@ -4189,20 +4187,20 @@
                       <div class="dynamics-bar-track">
                         <div class="dynamics-bar-fill" style="width:${invWidth.toFixed(1)}%; background:#64748b;"></div>
                       </div>
-                      <span style="width:70px; text-align:right;">${fmtUsd(pos.investedUsd)}</span>
+                      <span style="width:70px; text-align:right;">${isHidden ? MASK : fmtUsd(pos.investedUsd)}</span>
                     </div>
                     <div class="dynamics-bar-line">
                       <span style="width:58px; color:var(--text-primary); font-weight:600;">Зараз:</span>
                       <div class="dynamics-bar-track">
                         <div class="dynamics-bar-fill" style="width:${curWidth.toFixed(1)}%; background:${barColor};"></div>
                       </div>
-                      <span style="width:70px; text-align:right; color:var(--text-primary); font-weight:700;">${fmtUsd(pos.currentValUsd)}</span>
+                      <span style="width:70px; text-align:right; color:var(--text-primary); font-weight:700;">${isHidden ? MASK : fmtUsd(pos.currentValUsd)}</span>
                     </div>
                   </div>
 
                   <div class="tabular" style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-muted);">
                     <span>${pos.buyPriceUsd ? `Ціна: ${fmtUsd(pos.buyPriceUsd)} → <strong style="color:var(--text-secondary);">${fmtUsd(pos.livePriceUsd)}</strong>` : `Категорія: ${escapeHtml(CATEGORY_META[pos.category]?.shortName || pos.category)}`}</span>
-                    <span style="color:${isPos24Up ? 'var(--positive)' : 'var(--negative)'};">24г: ${isPos24Up ? '+' : ''}${(pos.change24h || 0).toFixed(2)}%</span>
+                    <span style="color:${isPos24Up ? CMC_GREEN : CMC_RED};">24г: ${isPos24Up ? '+' : ''}${(pos.change24h || 0).toFixed(2)}%</span>
                   </div>
                 </div>
               `;
@@ -4212,31 +4210,158 @@
       </div>
     `;
 
-    // Wire up period range switcher buttons (День / Місяць / Пів року / Рік / Весь час)
+    // Wire period buttons (24H / 7D / 1M / 6M / 1Y / ALL)
     sectionEl.querySelectorAll('[data-dyn-range]').forEach(btn => {
       btn.addEventListener('click', () => {
         const rk = btn.dataset.dynRange;
         if (rk && DYNAMICS_RANGE_META[rk]) {
           selectedDynamicsRange = rk;
-          selectedDynamicsPointIdx = -1;
           renderCategoryDynamicsSection(category, positions);
         }
       });
     });
 
-    sectionEl.querySelectorAll('[data-dyn-pt]').forEach(g => {
-      const idx = parseInt(g.dataset.dynPt, 10);
-      if (!Number.isNaN(idx)) {
-        g.addEventListener('mouseenter', () => {
-          selectedDynamicsPointIdx = idx;
+    // Wire metric mode buttons (Вартість / Прибуток)
+    sectionEl.querySelectorAll('[data-dyn-metric]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const m = btn.dataset.dynMetric;
+        if (m === 'value' || m === 'pnl') {
+          selectedDynamicsMetric = m;
           renderCategoryDynamicsSection(category, positions);
-        });
-        g.addEventListener('click', () => {
-          selectedDynamicsPointIdx = idx;
-          renderCategoryDynamicsSection(category, positions);
-        });
-      }
+        }
+      });
     });
+
+    // Wire buttery-smooth 60fps CoinMarketCap crosshair scrubbing (mouse hover + mobile touch!)
+    const stageEl = sectionEl.querySelector('#cmc-chart-stage');
+    if (!_exactStageW && stageEl) {
+      const actualStageW = Math.round(stageEl.clientWidth);
+      if (actualStageW > 180 && Math.abs(actualStageW - svgW) > 10) {
+        renderCategoryDynamicsSection(category, positions, actualStageW);
+        return;
+      }
+    }
+    const svgEl = sectionEl.querySelector('#cmc-chart-svg');
+    const crossGroup = sectionEl.querySelector('#cmc-crosshair-group');
+    const crossV = sectionEl.querySelector('#cmc-crosshair-v');
+    const crossH = sectionEl.querySelector('#cmc-crosshair-h');
+    const hoverHalo = sectionEl.querySelector('#cmc-hover-halo');
+    const hoverDot = sectionEl.querySelector('#cmc-hover-dot');
+    const yPillBg = sectionEl.querySelector('#cmc-y-pill-bg');
+    const yPillText = sectionEl.querySelector('#cmc-y-pill-text');
+    const tooltipEl = sectionEl.querySelector('#cmc-tooltip');
+    const ttDate = sectionEl.querySelector('#cmc-tt-date');
+    const ttVal = sectionEl.querySelector('#cmc-tt-val');
+    const ttSub = sectionEl.querySelector('#cmc-tt-sub');
+    const ttInv = sectionEl.querySelector('#cmc-tt-inv');
+    const ttDelta = sectionEl.querySelector('#cmc-tt-delta');
+
+    const hdrVal = sectionEl.querySelector('#cmc-header-val');
+    const hdrSub = sectionEl.querySelector('#cmc-header-sub');
+    const hdrDelta = sectionEl.querySelector('#cmc-header-delta');
+    const hdrTime = sectionEl.querySelector('#cmc-header-time');
+
+    const restoreHeaderLive = () => {
+      if (crossGroup) crossGroup.style.display = 'none';
+      if (tooltipEl) tooltipEl.classList.remove('is-visible');
+      if (hdrVal) hdrVal.textContent = isHidden ? MASK : fmtChartPrimaryValue(currentSeriesVal, rates, isPnlMode);
+      if (hdrSub) hdrSub.textContent = isHidden ? MASK : fmtChartSecondaryValue(currentSeriesVal, rates, isPnlMode);
+      if (hdrDelta) {
+        hdrDelta.textContent = fmtDeltaBanner(currentDeltaUsd, currentDeltaPct);
+        hdrDelta.className = `cmc-delta-pill ${isCurrentUp ? 'is-up' : 'is-down'}`;
+      }
+      if (hdrTime) hdrTime.textContent = `${rangeMeta.fullLabel} · наведіть на графік для деталей`;
+    };
+
+    const showPointAtClientX = (clientX) => {
+      if (!svgEl || !stageEl || coords.length === 0) return;
+      const rect = svgEl.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const relXSvg = ((clientX - rect.left) / rect.width) * svgW;
+      const clampedFrac = Math.max(0, Math.min(1, (relXSvg - padL) / Math.max(1, plotW)));
+      const idx = Math.round(clampedFrac * (coords.length - 1));
+      const c = coords[idx];
+      if (!c) return;
+
+      const ptDeltaUsd = isPnlMode ? c.pnlUsd : (c.seriesVal - baselineVal);
+      const ptBaseDenom = isPnlMode ? c.investedUsd : (baselineVal > 0 ? baselineVal : c.investedUsd);
+      const ptDeltaPct = ptBaseDenom > 0 ? (ptDeltaUsd / ptBaseDenom) * 100 : 0;
+      const isPtUp = c.seriesVal >= baselineVal;
+      const ptColor = isPtUp ? CMC_GREEN : CMC_RED;
+
+      if (crossGroup) crossGroup.style.display = '';
+      if (crossV) {
+        crossV.setAttribute('x1', c.x.toFixed(1));
+        crossV.setAttribute('x2', c.x.toFixed(1));
+      }
+      if (crossH) {
+        crossH.setAttribute('y1', c.y.toFixed(1));
+        crossH.setAttribute('y2', c.y.toFixed(1));
+      }
+      if (hoverHalo) {
+        hoverHalo.setAttribute('cx', c.x.toFixed(1));
+        hoverHalo.setAttribute('cy', c.y.toFixed(1));
+        hoverHalo.setAttribute('fill', ptColor);
+      }
+      if (hoverDot) {
+        hoverDot.setAttribute('cx', c.x.toFixed(1));
+        hoverDot.setAttribute('cy', c.y.toFixed(1));
+        hoverDot.setAttribute('fill', ptColor);
+      }
+      if (yPillBg && yPillText) {
+        const pillY = Math.max(padT - 6, Math.min(padT + plotH - 12, c.y - 9));
+        yPillBg.setAttribute('y', pillY.toFixed(1));
+        yPillBg.setAttribute('fill', ptColor);
+        yPillText.setAttribute('y', (pillY + 12.5).toFixed(1));
+        yPillText.setAttribute('fill', isPtUp ? '#062016' : '#ffffff');
+        yPillText.textContent = isHidden ? '••••' : fmtChartAxisVal(c.seriesVal, rates, true);
+      }
+
+      // Live-update top CMC header while scrubbing
+      const primaryStr = isHidden ? MASK : fmtChartPrimaryValue(c.seriesVal, rates, isPnlMode);
+      const secondaryStr = isHidden ? MASK : fmtChartSecondaryValue(c.seriesVal, rates, isPnlMode);
+      const deltaStr = fmtDeltaBanner(ptDeltaUsd, ptDeltaPct);
+
+      if (hdrVal) hdrVal.textContent = primaryStr;
+      if (hdrSub) hdrSub.textContent = secondaryStr;
+      if (hdrDelta) {
+        hdrDelta.textContent = deltaStr;
+        hdrDelta.className = `cmc-delta-pill ${isPtUp ? 'is-up' : 'is-down'}`;
+      }
+      if (hdrTime) hdrTime.textContent = c.label;
+
+      // Update & smart-position floating CMC tooltip
+      if (tooltipEl) {
+        if (ttDate) ttDate.textContent = c.label;
+        if (ttVal) ttVal.textContent = primaryStr;
+        if (ttSub) ttSub.textContent = secondaryStr;
+        if (ttInv) ttInv.textContent = isHidden ? MASK : fmtChartPrimaryValue(c.investedUsd, rates);
+        if (ttDelta) {
+          ttDelta.textContent = deltaStr;
+          ttDelta.style.color = ptColor;
+        }
+        const stageW = stageEl.clientWidth;
+        const pxX = (c.x / svgW) * stageW;
+        const ttW = tooltipEl.offsetWidth || 195;
+        const placeLeft = pxX > stageW * 0.56;
+        const leftPx = placeLeft
+          ? Math.max(6, pxX - ttW - 14)
+          : Math.min(stageW - ttW - 6, pxX + 14);
+        tooltipEl.style.transform = `translate3d(${Math.round(leftPx)}px, 0, 0)`;
+        tooltipEl.classList.add('is-visible');
+      }
+    };
+
+    if (stageEl) {
+      stageEl.addEventListener('pointermove', (e) => {
+        showPointAtClientX(e.clientX);
+      });
+      stageEl.addEventListener('pointerdown', (e) => {
+        showPointAtClientX(e.clientX);
+      });
+      stageEl.addEventListener('pointerleave', restoreHeaderLive);
+      stageEl.addEventListener('pointercancel', restoreHeaderLive);
+    }
   }
 
   function getStockStrategy() {
