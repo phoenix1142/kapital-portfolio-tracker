@@ -2936,6 +2936,126 @@ html[data-theme="light"] .forecast-goal-pin.is-hold .forecast-goal-pin-tag {
   border-color: var(--accent-primary);
 }
 
+.hist-op-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+.hist-op-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.hist-op-btn:hover {
+  color: var(--text-primary);
+}
+
+.hist-op-btn.active {
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.hist-op-btn.is-buy.active {
+  color: var(--positive);
+}
+
+.hist-op-btn.is-sell.active {
+  color: var(--negative);
+}
+
+.hist-op-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.hist-op-badge.is-buy {
+  background: rgba(16, 185, 129, 0.13);
+  color: var(--positive);
+}
+
+.hist-op-badge.is-sell {
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--negative);
+}
+
+.hist-curr-tag {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  vertical-align: middle;
+}
+
+.hist-row-sell {
+  background: rgba(239, 68, 68, 0.03);
+}
+
+.hist-sale-panel {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.hist-sale-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .hist-sale-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .hist-sale-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hist-sale-grid > * {
+    grid-column: 1 / -1 !important;
+  }
+  .hist-op-switch {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .hist-op-btn {
+    flex: 1 1 auto;
+    text-align: center;
+    font-size: 11px;
+    padding: 5px 4px;
+  }
+}
+
 .dynamics-summary-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -13193,10 +13313,13 @@ html.balance-hidden #hero-annual-passive {
     });
   }
 
-  // Purchase & Top-Up History Management
+  // Purchase & Operations (Buy / Sell) History Management
   let historyCategoryFilter = 'all';
   let historyAssetFilter = 'all';
-  let historySortMode = 'date_desc'; // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'category_asc' | 'asset_asc'
+  let historyOpTypeFilter = 'all'; // 'all' | 'buy' | 'sell'
+  let historySortMode = 'date_desc'; // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'category_asc' | 'category_desc' | 'asset_asc' | 'asset_desc' | 'asset_total_desc'
+  let historySaleFormOpen = false;
+  let historySalePreselectPosId = '';
 
   function ensurePurchaseHistorySeeded() {
     if (!Array.isArray(state.settings.purchaseHistory)) {
@@ -13218,6 +13341,7 @@ html.balance-hidden #hero-annual-passive {
         if (qty <= 0) return;
         state.settings.purchaseHistory.push({
           id: 'ph-seed-' + pos.id,
+          opType: 'buy',
           date: pos.createdAt || pos.stakingStartDate || todayStr,
           category: cat,
           posId: pos.id,
@@ -13241,6 +13365,7 @@ html.balance-hidden #hero-annual-passive {
         const totUsd = Number(toUsd(nativeAmt, curr).toFixed(2));
         state.settings.purchaseHistory.push({
           id: 'ph-seed-' + pos.id,
+          opType: 'buy',
           date: pos.startDate || pos.createdAt || todayStr,
           category: cat,
           posId: pos.id,
@@ -13273,10 +13398,11 @@ html.balance-hidden #hero-annual-passive {
     }
     state.settings.purchaseHistory.unshift({
       id: 'ph-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      opType: 'buy',
       ...entry
     });
-    if (state.settings.purchaseHistory.length > 120) {
-      state.settings.purchaseHistory = state.settings.purchaseHistory.slice(0, 120);
+    if (state.settings.purchaseHistory.length > 300) {
+      state.settings.purchaseHistory = state.settings.purchaseHistory.slice(0, 300);
     }
   }
 
@@ -13287,12 +13413,13 @@ html.balance-hidden #hero-annual-passive {
     const rates = getEffectiveRates();
     const isUsdPrimary = state.primaryCurrency === 'USD';
     const allHistory = Array.isArray(state.settings.purchaseHistory) ? state.settings.purchaseHistory : [];
+    const getOpType = (h) => (h && h.opType === 'sell' ? 'sell' : 'buy');
 
     // Update sidebar history count badge
     const histBadge = document.getElementById('badge-count-history');
     if (histBadge) histBadge.textContent = allHistory.length;
 
-    // Count purchases per category
+    // Count operations per category
     const catCounts = { all: allHistory.length, crypto: 0, stocks: 0, ovdp: 0, deposits: 0, cash: 0 };
     allHistory.forEach(item => {
       if (item && catCounts[item.category] !== undefined) {
@@ -13310,19 +13437,49 @@ html.balance-hidden #hero-annual-passive {
       }
     });
 
-    // Unified asset identity resolver (prevents splitting old ticker-only and posId-linked records)
+    // Unified asset identity resolver:
+    // - ALL ОВДП (UAH, USD, EUR) are unified into ONE single type ('type:ovdp') so selecting ОВДП returns every UAH & USD bond entry!
+    // - Crypto & Stocks unify by ticker ('tk:crypto:BTC', 'tk:stocks:VOO') across wallets/brokers.
+    // - Deposits & Cash link to position ID or fallback name/currency.
     const getHistoryAssetMeta = (h) => {
       const linked = (h.posId && posById[h.posId]) || posByCatTicker[`${h.category}:${(h.ticker || '').toUpperCase()}`] || null;
+      if (h.category === 'ovdp') {
+        return {
+          linked,
+          key: 'type:ovdp',
+          shortLabel: 'ОВДП',
+          fullLabel: '🛡️ ОВДП (усі валюти · UAH / USD)',
+          sortKey: 'овдп'
+        };
+      }
+      if (h.category === 'crypto' || h.category === 'stocks') {
+        const shortTicker = (linked?.ticker || h.ticker || '').toUpperCase().trim();
+        const displayName = (linked?.displayName || h.name || shortTicker || 'Актив').trim();
+        const key = shortTicker
+          ? `tk:${h.category}:${shortTicker}`
+          : (linked ? `pos:${linked.id}` : `tk:${h.category}:${displayName.toUpperCase()}`);
+        const shortLabel = shortTicker || (displayName.length > 18 ? displayName.slice(0, 17) + '…' : displayName);
+        const fullLabel = shortTicker && displayName.toUpperCase() !== shortTicker.toUpperCase()
+          ? `${shortTicker} — ${displayName}`
+          : displayName;
+        return {
+          linked,
+          key,
+          shortLabel,
+          fullLabel,
+          sortKey: (shortTicker || displayName).toLowerCase()
+        };
+      }
       const key = linked
         ? `pos:${linked.id}`
         : `tk:${h.category}:${(h.ticker || h.name || '').toUpperCase()}`;
       const shortTicker = (linked?.ticker || h.ticker || '').trim();
       const displayName = (linked?.displayName || h.name || shortTicker || 'Актив').trim();
-      const shortLabel = shortTicker || (displayName.length > 18 ? displayName.slice(0, 17) + '…' : displayName);
+      const shortLabel = displayName.length > 18 ? displayName.slice(0, 17) + '…' : displayName;
       const fullLabel = shortTicker && displayName.toUpperCase() !== shortTicker.toUpperCase()
         ? `${shortTicker} — ${displayName}`
         : displayName;
-      const sortKey = (shortTicker || displayName).toLowerCase();
+      const sortKey = (displayName || shortTicker).toLowerCase();
       return { linked, key, shortLabel, fullLabel, sortKey };
     };
 
@@ -13331,13 +13488,14 @@ html.balance-hidden #hero-annual-passive {
       ? allHistory
       : allHistory.filter(h => h && h.category === historyCategoryFilter);
 
-    // Build distinct sorted assets list (with purchase count & total USD per asset) for current category filter
+    // Build distinct sorted assets list (with buy/sell counts & total volume per asset) for current category filter
     const assetOptionsMap = new Map();
     catFiltered.forEach(h => {
       if (!h) return;
       const m = getHistoryAssetMeta(h);
       const existing = assetOptionsMap.get(m.key);
       const amtUsd = Number(h.totalUsd) || 0;
+      const isSell = getOpType(h) === 'sell';
       if (!existing) {
         assetOptionsMap.set(m.key, {
           key: m.key,
@@ -13346,10 +13504,14 @@ html.balance-hidden #hero-annual-passive {
           sortKey: m.sortKey,
           category: h.category,
           count: 1,
+          buyCount: isSell ? 0 : 1,
+          sellCount: isSell ? 1 : 0,
           totalUsd: amtUsd
         });
       } else {
         existing.count += 1;
+        if (isSell) existing.sellCount += 1;
+        else existing.buyCount += 1;
         existing.totalUsd += amtUsd;
       }
     });
@@ -13363,9 +13525,21 @@ html.balance-hidden #hero-annual-passive {
     }
 
     // Filter by specific asset if selected
-    const filtered = historyAssetFilter === 'all'
+    const assetFiltered = historyAssetFilter === 'all'
       ? catFiltered
       : catFiltered.filter(h => h && getHistoryAssetMeta(h).key === historyAssetFilter);
+
+    // Count buy/sell within selected category + asset scope
+    const opCounts = {
+      all: assetFiltered.length,
+      buy: assetFiltered.filter(h => getOpType(h) === 'buy').length,
+      sell: assetFiltered.filter(h => getOpType(h) === 'sell').length
+    };
+
+    // Filter by operation type (all / buy / sell)
+    const filtered = historyOpTypeFilter === 'all'
+      ? assetFiltered
+      : assetFiltered.filter(h => getOpType(h) === historyOpTypeFilter);
 
     // Sort filtered history
     const sorted = [...filtered].sort((a, b) => {
@@ -13426,10 +13600,15 @@ html.balance-hidden #hero-annual-passive {
     const thCat = getSortHeaderMeta('category');
     const thAmt = getSortHeaderMeta('amount');
 
-    // Compute totals for current filtered purchases
-    const totalPurchasedUsd = sorted.reduce((s, h) => s + (Number(h.totalUsd) || 0), 0);
-    const totalPurchasedUah = totalPurchasedUsd * rates.USD_UAH;
-    const avgPurchaseUsd = sorted.length > 0 ? totalPurchasedUsd / sorted.length : 0;
+    // Compute Buy / Sell totals for current filtered records
+    const buyRows = sorted.filter(h => getOpType(h) === 'buy');
+    const sellRows = sorted.filter(h => getOpType(h) === 'sell');
+    const totalBoughtUsd = buyRows.reduce((s, h) => s + (Number(h.totalUsd) || 0), 0);
+    const totalBoughtUah = totalBoughtUsd * rates.USD_UAH;
+    const totalSoldUsd = sellRows.reduce((s, h) => s + (Number(h.totalUsd) || 0), 0);
+    const totalSoldUah = totalSoldUsd * rates.USD_UAH;
+    const totalRealizedPnlUsd = sellRows.reduce((s, h) => s + (Number(h.realizedPnlUsd) || 0), 0);
+    const avgOpUsd = sorted.length > 0 ? ((totalBoughtUsd + totalSoldUsd) / sorted.length) : 0;
 
     const catPillsOrder = [
       { key: 'all', label: 'Усі категорії', color: 'var(--accent-primary)' },
@@ -13440,24 +13619,83 @@ html.balance-hidden #hero-annual-passive {
       { key: 'cash', label: 'Готівка', color: 'var(--cat-cash)' }
     ];
 
+    // Build Sale Form inline panel if open
+    const todayStr = getLocalDateStr();
+    const salePositionsList = (allEvaluated || []).map(p => {
+      const catLbl = CATEGORY_META[p.category]?.shortName || p.category;
+      const qtyHint = (p.category === 'crypto' || p.category === 'stocks')
+        ? `${p.quantity} шт.`
+        : (p.category === 'ovdp' ? `${p.bondsCount || 1} шт. · ${p.nativeCurrency}` : `${fmtCurr(p.principalNative || p.amount || 0, p.nativeCurrency || 'USD')}`);
+      return {
+        id: p.id,
+        category: p.category,
+        label: `[${catLbl}] ${p.ticker ? p.ticker + ' — ' : ''}${p.displayName} (${qtyHint})`
+      };
+    });
+
+    const activeAssetMeta = historyAssetFilter !== 'all' ? assetOptionsMap.get(historyAssetFilter) : null;
+
     sectionEl.innerHTML = `
       <div class="panel-header" style="flex-wrap:wrap; gap:12px; margin-bottom:12px;">
         <div>
-          <div class="panel-title">📜 Історія покупок та поповнень активів</div>
+          <div class="panel-title">📜 Історія покупок та продажів активів</div>
           <div class="panel-subtitle">
-            Усі ваші покупки з фільтрацією та сортуванням за активом, датою, сумою і категорією. Нові покупки автоматично перераховують середню ціну.
+            Оберіть конкретний актив (усі гривневі та валютні ОВДП об’єднані в один тип) — бачите всі його покупки, продажі та сумарний результат.
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" id="btn-history-toggle-sale" style="font-size:12.5px; padding:7px 13px; border-color:rgba(239,68,68,0.4); color:var(--negative);">
+            ${historySaleFormOpen ? '✕ Сховати форму' : '− Зафіксувати продаж'}
+          </button>
           <button type="button" class="btn btn-primary" id="btn-history-add-purchase" style="font-size:12.5px; padding:7px 14px;">
-            + Додати покупку до активу
+            + Додати покупку
           </button>
         </div>
       </div>
 
-      <!-- Category Filter Pills + Asset Filter + Sort Selector -->
-      <div class="dynamics-chart-toolbar" style="margin-bottom:${sortedAssetOptions.length > 1 ? '8px' : '12px'};">
-        <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;" role="group" aria-label="Фільтр категорії історії покупок">
+      ${historySaleFormOpen ? `
+        <form class="hist-sale-panel" id="form-hist-sale" autocomplete="off">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <div style="font-size:12.5px; font-weight:700; color:var(--text-primary);">
+              💸 Зафіксувати продаж активу або погашення ОВДП / депозиту
+            </div>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-secondary); cursor:pointer;">
+              <input type="checkbox" id="hist-sale-deduct" checked />
+              <span>Списати з балансу активу в портфелі</span>
+            </label>
+          </div>
+          <div class="hist-sale-grid">
+            <select class="form-select" id="hist-sale-target" aria-label="Актив для продажу" style="grid-column: span 2;">
+              ${salePositionsList.map(sp => `
+                <option value="${escapeHtml(sp.id)}" ${historySalePreselectPosId === sp.id ? 'selected' : ''}>${escapeHtml(sp.label)}</option>
+              `).join('')}
+              <option value="custom_ovdp" ${historySalePreselectPosId === 'custom_ovdp' ? 'selected' : ''}>🛡️ Архівні / закриті ОВДП (UAH або USD)</option>
+              <option value="custom_crypto" ${historySalePreselectPosId === 'custom_crypto' ? 'selected' : ''}>₿ Інша / архівна криптовалюта</option>
+              <option value="custom_stocks" ${historySalePreselectPosId === 'custom_stocks' ? 'selected' : ''}>📈 Інша / архівна акція або ETF</option>
+              <option value="custom_deposits" ${historySalePreselectPosId === 'custom_deposits' ? 'selected' : ''}>🏦 Закритий депозит</option>
+              <option value="custom_cash" ${historySalePreselectPosId === 'custom_cash' ? 'selected' : ''}>💵 Зняття / витрата готівки</option>
+            </select>
+            <input type="date" class="form-input tabular" id="hist-sale-date" value="${todayStr}" required title="Дата продажу або погашення" />
+            <input type="text" class="form-input" id="hist-sale-custom-name" placeholder="Тікер або назва (напр. BTC / ОВДП)" style="display:none;" />
+            <input type="number" step="any" min="0.00000001" class="form-input tabular" id="hist-sale-qty" placeholder="Кількість (шт.)" required />
+            <input type="number" step="any" min="0" class="form-input tabular" id="hist-sale-price" placeholder="Ціна продажу ($ за 1 шт.)" required />
+            <select class="form-select" id="hist-sale-curr" aria-label="Валюта" style="display:none;">
+              <option value="UAH">₴ UAH</option>
+              <option value="USD">$ USD</option>
+              <option value="EUR">€ EUR</option>
+            </select>
+            <input type="text" class="form-input" id="hist-sale-note" maxlength="70" placeholder="Коментар (напр. Часткова фіксація / Погашення)" />
+            <button type="submit" class="btn btn-primary" style="background:var(--negative); border-color:var(--negative); font-size:12px; padding:7px 14px; white-space:nowrap;">
+              Зафіксувати продаж
+            </button>
+          </div>
+          <div id="hist-sale-preview" style="font-size:11.5px; color:var(--text-muted); margin-top:7px;"></div>
+        </form>
+      ` : ''}
+
+      <!-- Category Filter Pills + Operation Type Filter + Asset Filter + Sort Selector -->
+      <div class="dynamics-chart-toolbar" style="margin-bottom:${sortedAssetOptions.length > 0 ? '8px' : '12px'};">
+        <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;" role="group" aria-label="Фільтр категорії історії">
           ${catPillsOrder.map(cp => {
             const isAct = historyCategoryFilter === cp.key;
             return `
@@ -13472,38 +13710,46 @@ html.balance-hidden #hero-annual-passive {
         </div>
 
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <select class="form-select" id="history-asset-filter" style="font-size:12px; padding:5px 10px; width:auto; min-width:185px;" title="Фільтр за конкретним активом">
+          <!-- Operation Type Switcher: All / Buys / Sells -->
+          <div class="hist-op-switch" role="group" aria-label="Тип операції">
+            <button type="button" class="hist-op-btn ${historyOpTypeFilter === 'all' ? 'active' : ''}" data-hist-op="all">Усі (${opCounts.all})</button>
+            <button type="button" class="hist-op-btn is-buy ${historyOpTypeFilter === 'buy' ? 'active' : ''}" data-hist-op="buy">🟢 Покупки (${opCounts.buy})</button>
+            <button type="button" class="hist-op-btn is-sell ${historyOpTypeFilter === 'sell' ? 'active' : ''}" data-hist-op="sell">🔴 Продажі (${opCounts.sell})</button>
+          </div>
+
+          <select class="form-select" id="history-asset-filter" style="font-size:12px; padding:5px 10px; width:auto; min-width:195px;" title="Обрати конкретний актив">
             <option value="all">🎯 Усі активи (${catFiltered.length})</option>
             ${sortedAssetOptions.map(opt => `
               <option value="${escapeHtml(opt.key)}" ${historyAssetFilter === opt.key ? 'selected' : ''}>${escapeHtml(opt.label)} (${opt.count})</option>
             `).join('')}
           </select>
 
-          <select class="form-select" id="history-sort-mode" style="font-size:12px; padding:5px 10px; width:auto; min-width:225px;" title="Сортування історії покупок">
+          <select class="form-select" id="history-sort-mode" style="font-size:12px; padding:5px 10px; width:auto; min-width:220px;" title="Сортування історії операцій">
             <option value="date_desc" ${historySortMode === 'date_desc' ? 'selected' : ''}>📅 Дата (спочатку нові ↓)</option>
             <option value="date_asc" ${historySortMode === 'date_asc' ? 'selected' : ''}>📅 Дата (спочатку старі ↑)</option>
             <option value="asset_asc" ${historySortMode === 'asset_asc' ? 'selected' : ''}>🔤 Актив / тікер (А–Я ↑)</option>
             <option value="asset_desc" ${historySortMode === 'asset_desc' ? 'selected' : ''}>🔤 Актив / тікер (Я–А ↓)</option>
-            <option value="asset_total_desc" ${historySortMode === 'asset_total_desc' ? 'selected' : ''}>📊 Актив (за сумою вкладень ↓)</option>
-            <option value="amount_desc" ${historySortMode === 'amount_desc' ? 'selected' : ''}>💰 Сума покупки (найбільша ↓)</option>
-            <option value="amount_asc" ${historySortMode === 'amount_asc' ? 'selected' : ''}>💰 Сума покупки (найменша ↑)</option>
+            <option value="asset_total_desc" ${historySortMode === 'asset_total_desc' ? 'selected' : ''}>📊 Актив (за сумою операцій ↓)</option>
+            <option value="amount_desc" ${historySortMode === 'amount_desc' ? 'selected' : ''}>💰 Сума (найбільша ↓)</option>
+            <option value="amount_asc" ${historySortMode === 'amount_asc' ? 'selected' : ''}>💰 Сума (найменша ↑)</option>
             <option value="category_asc" ${historySortMode === 'category_asc' ? 'selected' : ''}>🗂️ Категорія (А–Я ↑)</option>
             <option value="category_desc" ${historySortMode === 'category_desc' ? 'selected' : ''}>🗂️ Категорія (Я–А ↓)</option>
           </select>
         </div>
       </div>
 
-      ${sortedAssetOptions.length > 1 ? `
-        <!-- Quick Clickable Asset Filter Chips -->
-        <div class="history-asset-chips" role="group" aria-label="Швидкий фільтр за активом">
+      ${sortedAssetOptions.length > 0 ? `
+        <!-- Quick Clickable Asset Filter Chips (UAH & USD OVDP unified into one 'ОВДП' chip!) -->
+        <div class="history-asset-chips" role="group" aria-label="Швидкий вибір конкретного активу">
           <button type="button" class="history-asset-chip ${historyAssetFilter === 'all' ? 'active' : ''}" data-hist-asset-chip="all">
             Усі активи <span class="history-asset-chip-cnt">${catFiltered.length}</span>
           </button>
           ${sortedAssetOptions.map(opt => {
             const catClr = CATEGORY_META[opt.category]?.color || 'var(--accent-primary)';
             const isAct = historyAssetFilter === opt.key;
+            const breakdownTitle = `${opt.label} · Покупок: ${opt.buyCount}, Продажів: ${opt.sellCount}`;
             return `
-              <button type="button" class="history-asset-chip ${isAct ? 'active' : ''}" data-hist-asset-chip="${escapeHtml(opt.key)}" title="${escapeHtml(opt.label)} · ${opt.count} опер.">
+              <button type="button" class="history-asset-chip ${isAct ? 'active' : ''}" data-hist-asset-chip="${escapeHtml(opt.key)}" title="${escapeHtml(breakdownTitle)}">
                 <span class="history-asset-chip-dot" style="background:${catClr};"></span>
                 <span>${escapeHtml(opt.shortLabel)}</span>
                 <span class="history-asset-chip-cnt">${opt.count}</span>
@@ -13513,36 +13759,47 @@ html.balance-hidden #hero-annual-passive {
         </div>
       ` : ''}
 
-      <!-- Summary KPI Strip for Filtered Purchases -->
+      <!-- Summary KPI Strip for Selected Asset / Filter -->
       <div class="dynamics-summary-strip" style="margin-bottom:12px;">
         <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Кількість покупок (за фільтром)</div>
+          <div class="dynamics-stat-label">${activeAssetMeta ? `Операції: ${escapeHtml(activeAssetMeta.shortLabel)}` : 'Операції (за фільтром)'}</div>
           <div class="dynamics-stat-val">${sorted.length} опер.</div>
-          <div class="dynamics-stat-sub">Усього в історії: ${allHistory.length} записів</div>
+          <div class="dynamics-stat-sub">🟢 Куп.: ${buyRows.length} · 🔴 Прод.: ${sellRows.length}</div>
         </div>
         <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Загальна сума покупок</div>
-          <div class="dynamics-stat-val">${isUsdPrimary ? fmtUsd(totalPurchasedUsd) : fmtUah(totalPurchasedUah)}</div>
-          <div class="dynamics-stat-sub">${isUsdPrimary ? fmtUah(totalPurchasedUah) : fmtUsd(totalPurchasedUsd)}</div>
+          <div class="dynamics-stat-label">Куплено (Покупки)</div>
+          <div class="dynamics-stat-val" style="color:var(--positive);">${isUsdPrimary ? fmtUsd(totalBoughtUsd) : fmtUah(totalBoughtUah)}</div>
+          <div class="dynamics-stat-sub">${isUsdPrimary ? fmtUah(totalBoughtUah) : fmtUsd(totalBoughtUsd)}</div>
         </div>
         <div class="dynamics-stat-card">
-          <div class="dynamics-stat-label">Середній чек однієї покупки</div>
-          <div class="dynamics-stat-val">${isUsdPrimary ? fmtUsd(avgPurchaseUsd) : fmtUah(avgPurchaseUsd * rates.USD_UAH)}</div>
-          <div class="dynamics-stat-sub">${isUsdPrimary ? fmtUah(avgPurchaseUsd * rates.USD_UAH) : fmtUsd(avgPurchaseUsd)}</div>
+          <div class="dynamics-stat-label">Продано / Погашено</div>
+          <div class="dynamics-stat-val" style="color:${totalSoldUsd > 0 ? 'var(--negative)' : 'var(--text-primary)'};">${isUsdPrimary ? fmtUsd(totalSoldUsd) : fmtUah(totalSoldUah)}</div>
+          <div class="dynamics-stat-sub">${sellRows.length > 0 && Math.abs(totalRealizedPnlUsd) > 0.01
+            ? `Фін. результат: <strong style="color:${totalRealizedPnlUsd >= 0 ? 'var(--positive)' : 'var(--negative)'};">${fmtUsd(totalRealizedPnlUsd, true)}</strong>`
+            : (isUsdPrimary ? fmtUah(totalSoldUah) : fmtUsd(totalSoldUsd))}</div>
+        </div>
+        <div class="dynamics-stat-card">
+          <div class="dynamics-stat-label">${totalSoldUsd > 0 ? 'Чистий баланс (Куп − Прод)' : 'Середній чек операції'}</div>
+          <div class="dynamics-stat-val">${totalSoldUsd > 0
+            ? (isUsdPrimary ? fmtUsd(totalBoughtUsd - totalSoldUsd) : fmtUah((totalBoughtUsd - totalSoldUsd) * rates.USD_UAH))
+            : (isUsdPrimary ? fmtUsd(avgOpUsd) : fmtUah(avgOpUsd * rates.USD_UAH))}</div>
+          <div class="dynamics-stat-sub">${totalSoldUsd > 0
+            ? (isUsdPrimary ? fmtUah((totalBoughtUsd - totalSoldUsd) * rates.USD_UAH) : fmtUsd(totalBoughtUsd - totalSoldUsd))
+            : (isUsdPrimary ? fmtUah(avgOpUsd * rates.USD_UAH) : fmtUsd(avgOpUsd))}</div>
         </div>
       </div>
 
-      <!-- Purchase History Table -->
+      <!-- Purchase & Sales History Table -->
       <div class="table-container">
         <table class="positions-table">
           <thead>
             <tr>
-              <th class="hist-sort-th ${thDate.active ? 'is-sorted' : ''}" data-hist-sort-col="date">Дата покупки <span class="hist-sort-arrow">${thDate.arrow}</span></th>
-              <th class="hist-sort-th ${thAsset.active ? 'is-sorted' : ''}" data-hist-sort-col="asset">Актив (Куди зараховано) <span class="hist-sort-arrow">${thAsset.arrow}</span></th>
+              <th class="hist-sort-th ${thDate.active ? 'is-sorted' : ''}" data-hist-sort-col="date">Дата / Тип <span class="hist-sort-arrow">${thDate.arrow}</span></th>
+              <th class="hist-sort-th ${thAsset.active ? 'is-sorted' : ''}" data-hist-sort-col="asset">Актив <span class="hist-sort-arrow">${thAsset.arrow}</span></th>
               <th class="hist-sort-th ${thCat.active ? 'is-sorted' : ''}" data-hist-sort-col="category">Категорія / Платформа <span class="hist-sort-arrow">${thCat.arrow}</span></th>
-              <th class="text-right">Куплена кількість</th>
-              <th class="text-right">Ціна покупки → Зараз</th>
-              <th class="text-right hist-sort-th ${thAmt.active ? 'is-sorted' : ''}" data-hist-sort-col="amount">Сума покупки <span class="hist-sort-arrow">${thAmt.arrow}</span></th>
+              <th class="text-right">Кількість</th>
+              <th class="text-right">Ціна / Результат</th>
+              <th class="text-right hist-sort-th ${thAmt.active ? 'is-sorted' : ''}" data-hist-sort-col="amount">Сума операції <span class="hist-sort-arrow">${thAmt.arrow}</span></th>
               <th class="text-right">Дії</th>
             </tr>
           </thead>
@@ -13550,35 +13807,53 @@ html.balance-hidden #hero-annual-passive {
             ${sorted.length === 0 ? `
               <tr>
                 <td colspan="7" style="text-align:center; padding:28px 16px; color:var(--text-muted);">
-                  У цій категорії ще немає записів про покупки. Натисніть <strong>«+ Додати покупку до активу»</strong> або кнопку <strong>«➕»</strong> біля потрібного активу у таблиці вище.
+                  За обраним фільтром записів немає. Натисніть <strong>«+ Додати покупку»</strong> або <strong>«− Зафіксувати продаж»</strong>.
                 </td>
               </tr>
             ` : sorted.map(item => {
               const catInfo = CATEGORY_META[item.category] || CATEGORY_META.all;
               const assetMeta = getHistoryAssetMeta(item);
               const linkedPos = assetMeta.linked;
+              const isSell = getOpType(item) === 'sell';
               const isMarket = item.category === 'crypto' || item.category === 'stocks';
-              const buyPriceUsd = Number(item.priceUsd) || 0;
+              const priceUsd = Number(item.priceUsd) || 0;
               const qty = Number(item.quantity) || 0;
-              const totUsd = Number(item.totalUsd) || (qty * buyPriceUsd);
+              const totUsd = Number(item.totalUsd) || (qty * priceUsd);
               const totUah = totUsd * rates.USD_UAH;
+              const curr = (item.currency || (isMarket ? 'USD' : 'UAH')).toUpperCase();
 
               let lotPerformanceHtml = '';
-              if (isMarket && linkedPos && linkedPos.livePriceUsd > 0 && buyPriceUsd > 0) {
+              if (isSell) {
+                if (isMarket) {
+                  const pnlUsd = Number(item.realizedPnlUsd);
+                  const hasPnl = Number.isFinite(pnlUsd) && Math.abs(pnlUsd) > 0.005;
+                  lotPerformanceHtml = `
+                    <div class="dual-val-primary">${fmtUsd(priceUsd)}</div>
+                    <div class="dual-val-sub">${hasPnl
+                      ? `Результат: <span style="color:${pnlUsd >= 0 ? 'var(--positive)' : 'var(--negative)'}; font-weight:700;">${fmtUsd(pnlUsd, true)}</span>`
+                      : 'Ціна продажу за 1 шт.'}</div>
+                  `;
+                } else {
+                  const natAmt = Number(item.nativeAmount) || totUsd;
+                  lotPerformanceHtml = `
+                    <div class="dual-val-primary">${fmtCurr(natAmt, curr)}</div>
+                    <div class="dual-val-sub">Погашення / вивід (${escapeHtml(curr)})</div>
+                  `;
+                }
+              } else if (isMarket && linkedPos && linkedPos.livePriceUsd > 0 && priceUsd > 0) {
                 const liveP = linkedPos.livePriceUsd;
-                const lotDiffPct = ((liveP - buyPriceUsd) / buyPriceUsd) * 100;
+                const lotDiffPct = ((liveP - priceUsd) / priceUsd) * 100;
                 const isLotUp = lotDiffPct >= 0;
                 lotPerformanceHtml = `
-                  <div class="dual-val-primary">${fmtUsd(buyPriceUsd)}</div>
+                  <div class="dual-val-primary">${fmtUsd(priceUsd)}</div>
                   <div class="dual-val-sub">Зараз: ${fmtUsd(liveP)} <span style="color:${isLotUp ? 'var(--positive)' : 'var(--negative)'}; font-weight:700;">(${fmtPct(lotDiffPct, true)})</span></div>
                 `;
               } else if (isMarket) {
                 lotPerformanceHtml = `
-                  <div class="dual-val-primary">${fmtUsd(buyPriceUsd)}</div>
+                  <div class="dual-val-primary">${fmtUsd(priceUsd)}</div>
                   <div class="dual-val-sub">За 1 шт.</div>
                 `;
               } else {
-                const curr = item.currency || 'UAH';
                 const natAmt = Number(item.nativeAmount) || totUsd;
                 lotPerformanceHtml = `
                   <div class="dual-val-primary">${fmtCurr(natAmt, curr)}</div>
@@ -13587,18 +13862,32 @@ html.balance-hidden #hero-annual-passive {
               }
 
               const linkedStatusHtml = linkedPos
-                ? `<span style="color:var(--positive); font-size:11px;">🔗 В активі: разом ${linkedPos.quantity ?? linkedPos.bondsCount ?? ''} шт. (сер. ${fmtUsd(linkedPos.buyPriceUsd || 0)})</span>`
+                ? `<span style="color:var(--positive); font-size:11px;">🔗 В активі: разом ${linkedPos.quantity ?? linkedPos.bondsCount ?? ''} шт.${isMarket ? ` (сер. ${fmtUsd(linkedPos.buyPriceUsd || 0)})` : ''}</span>`
                 : `<span style="color:var(--text-muted); font-size:11px;">Архівний запис</span>`;
 
+              const qtySign = isSell ? '−' : '+';
               const qtyDisplay = isMarket
-                ? `+${qty} шт.`
-                : (item.category === 'ovdp' ? `+${qty} облігацій` : 'Поповнення');
+                ? `${qtySign}${qty} шт.`
+                : (item.category === 'ovdp'
+                  ? `${qtySign}${qty} обліг.`
+                  : (isSell ? 'Зняття / продаж' : 'Поповнення'));
+
+              const ovdpCurrTag = item.category === 'ovdp'
+                ? `<span class="hist-curr-tag">${escapeHtml(curr)}</span>`
+                : '';
+
+              const opBadgeHtml = isSell
+                ? `<span class="hist-op-badge is-sell">🔴 Продаж</span>`
+                : `<span class="hist-op-badge is-buy">🟢 Купівля</span>`;
 
               return `
-                <tr>
+                <tr class="${isSell ? 'hist-row-sell' : ''}">
                   <td>
                     <div class="dual-val-primary">${formatDateUkrainian(item.date)}</div>
-                    <div class="dual-val-sub mono">${escapeHtml(item.date || '')}</div>
+                    <div class="dual-val-sub" style="display:flex; align-items:center; gap:5px; margin-top:2px;">
+                      ${opBadgeHtml}
+                      <span class="mono" style="opacity:0.75;">${escapeHtml(item.date || '')}</span>
+                    </div>
                   </td>
                   <td>
                     <div class="asset-cell">
@@ -13607,10 +13896,10 @@ html.balance-hidden #hero-annual-passive {
                         class="ticker-badge hist-row-asset-btn"
                         data-hist-asset-chip="${escapeHtml(assetMeta.key)}"
                         style="border-left: 3px solid ${catInfo.color};"
-                        title="${historyAssetFilter === assetMeta.key ? 'Показати всі активи' : 'Показати тільки покупки цього активу'}"
-                      >${escapeHtml(item.ticker || 'АКТИВ')}</button>
+                        title="${historyAssetFilter === assetMeta.key ? 'Показати всі активи' : `Показати всі операції по ${assetMeta.shortLabel}`}"
+                      >${escapeHtml(item.ticker || (item.category === 'ovdp' ? 'ОВДП' : 'АКТИВ'))}</button>
                       <div>
-                        <div class="asset-name-primary">${escapeHtml(item.name || item.ticker || 'Актив')}</div>
+                        <div class="asset-name-primary">${escapeHtml(item.name || item.ticker || 'Актив')} ${ovdpCurrTag}</div>
                         <div class="asset-name-sub">${linkedStatusHtml}${item.notes ? ` · ${escapeHtml(item.notes)}` : ''}</div>
                       </div>
                     </div>
@@ -13620,17 +13909,18 @@ html.balance-hidden #hero-annual-passive {
                     <div class="dual-val-sub">${escapeHtml(item.platform || 'Особистий рахунок')}</div>
                   </td>
                   <td class="text-right">
-                    <div class="dual-val-primary" style="color:var(--positive); font-weight:700;">${qtyDisplay}</div>
+                    <div class="dual-val-primary" style="color:${isSell ? 'var(--negative)' : 'var(--positive)'}; font-weight:700;">${qtyDisplay}</div>
                   </td>
                   <td class="text-right">${lotPerformanceHtml}</td>
                   <td class="text-right">
-                    <div class="dual-val-primary">${isUsdPrimary ? fmtUsd(totUsd) : fmtUah(totUah)}</div>
+                    <div class="dual-val-primary" style="color:${isSell ? 'var(--negative)' : 'var(--text-primary)'};">${isUsdPrimary ? fmtUsd(totUsd) : fmtUah(totUah)}</div>
                     <div class="dual-val-sub">${isUsdPrimary ? fmtUah(totUah) : fmtUsd(totUsd)}</div>
                   </td>
                   <td class="text-right">
                     <div class="row-actions">
                       ${linkedPos ? `<button type="button" class="btn btn-ghost" data-hist-topup="${linkedPos.id}" title="Докупити ще цей актив" style="color:var(--positive); font-weight:800;">➕</button>` : ''}
-                      <button type="button" class="btn btn-ghost" data-hist-del="${item.id}" title="Видалити запис із історії покупок" style="color:var(--negative);">✕</button>
+                      ${linkedPos ? `<button type="button" class="btn btn-ghost" data-hist-sell-pos="${linkedPos.id}" title="Зафіксувати продаж цього активу" style="color:var(--negative);">💸</button>` : ''}
+                      <button type="button" class="btn btn-ghost" data-hist-del="${item.id}" title="Видалити запис із історії" style="color:var(--negative);">✕</button>
                     </div>
                   </td>
                 </tr>
@@ -13641,11 +13931,232 @@ html.balance-hidden #hero-annual-passive {
       </div>
     `;
 
+    // Wire up inline Sale form logic if open
+    const saleForm = sectionEl.querySelector('#form-hist-sale');
+    if (saleForm) {
+      const targetSel = saleForm.querySelector('#hist-sale-target');
+      const customNameInp = saleForm.querySelector('#hist-sale-custom-name');
+      const qtyInp = saleForm.querySelector('#hist-sale-qty');
+      const priceInp = saleForm.querySelector('#hist-sale-price');
+      const currSel = saleForm.querySelector('#hist-sale-curr');
+      const deductChk = saleForm.querySelector('#hist-sale-deduct');
+      const previewEl = saleForm.querySelector('#hist-sale-preview');
+
+      const syncSaleFormFields = () => {
+        const val = targetSel?.value || '';
+        const isCustom = val.startsWith('custom_');
+        const pos = !isCustom ? posById[val] : null;
+        const cat = isCustom ? val.replace('custom_', '') : (pos?.category || 'crypto');
+        const isMarket = cat === 'crypto' || cat === 'stocks';
+
+        if (customNameInp) {
+          customNameInp.style.display = isCustom ? '' : 'none';
+          customNameInp.required = isCustom;
+          if (isCustom && cat === 'ovdp' && !customNameInp.value) {
+            customNameInp.placeholder = 'Назва випуску ОВДП (напр. ОВДП 2026)';
+          } else if (isCustom) {
+            customNameInp.placeholder = isMarket ? 'Тікер (напр. BTC, VOO)' : 'Назва активу';
+          }
+        }
+        if (deductChk) {
+          deductChk.disabled = isCustom;
+          if (isCustom) deductChk.checked = false;
+        }
+        if (currSel) {
+          currSel.style.display = isMarket ? 'none' : '';
+          if (pos && pos.nativeCurrency) currSel.value = pos.nativeCurrency;
+        }
+        if (qtyInp && priceInp) {
+          if (isMarket) {
+            qtyInp.style.display = '';
+            qtyInp.required = true;
+            qtyInp.placeholder = pos ? `Кількість (макс. ${pos.quantity})` : 'Кількість (шт.)';
+            priceInp.placeholder = 'Ціна продажу ($ за 1 шт.)';
+            if (pos && pos.livePriceUsd > 0 && !priceInp.value) {
+              priceInp.value = Number(pos.livePriceUsd.toFixed(4));
+            }
+          } else if (cat === 'ovdp') {
+            qtyInp.style.display = '';
+            qtyInp.required = true;
+            qtyInp.placeholder = pos ? `Облігацій (є ${pos.bondsCount || 1})` : 'К-ть облігацій';
+            priceInp.placeholder = 'Отримана сума (тіло / продаж)';
+          } else {
+            qtyInp.style.display = 'none';
+            qtyInp.required = false;
+            qtyInp.value = '1';
+            priceInp.placeholder = 'Сума зняття / закриття';
+          }
+        }
+        updateSalePreview();
+      };
+
+      const updateSalePreview = () => {
+        if (!previewEl) return;
+        const val = targetSel?.value || '';
+        const isCustom = val.startsWith('custom_');
+        const pos = !isCustom ? posById[val] : null;
+        const cat = isCustom ? val.replace('custom_', '') : (pos?.category || 'crypto');
+        const isMarket = cat === 'crypto' || cat === 'stocks';
+        const q = parseFloat(qtyInp?.value) || 0;
+        const p = parseFloat(priceInp?.value) || 0;
+        const c = isMarket ? 'USD' : (currSel?.value || pos?.nativeCurrency || 'UAH');
+
+        if (isMarket && q > 0 && p > 0) {
+          const tot = q * p;
+          const avgBuy = pos ? (Number(pos.buyPriceUsd) || 0) : 0;
+          const pnl = avgBuy > 0 ? (p - avgBuy) * q : null;
+          previewEl.innerHTML = `Сума продажу: <strong style="color:var(--text-primary);">${fmtUsd(tot)}</strong> (${fmtUah(tot * rates.USD_UAH)})${pnl !== null ? ` · Орієнтовний результат до сер. ціни (${fmtUsd(avgBuy)}): <strong style="color:${pnl >= 0 ? 'var(--positive)' : 'var(--negative)'};">${fmtUsd(pnl, true)}</strong>` : ''}`;
+        } else if (!isMarket && p > 0) {
+          const usdEq = toUsd(p, c);
+          previewEl.innerHTML = `Сума операції: <strong style="color:var(--text-primary);">${fmtCurr(p, c)}</strong> (≈ ${fmtUsd(usdEq)})`;
+        } else {
+          previewEl.textContent = 'Вкажіть параметри продажу або погашення — запис з’явиться в історії обраного активу.';
+        }
+      };
+
+      targetSel?.addEventListener('change', () => {
+        if (priceInp) priceInp.value = '';
+        if (qtyInp) qtyInp.value = '';
+        syncSaleFormFields();
+      });
+      [qtyInp, priceInp, currSel].forEach(el => el?.addEventListener('input', updateSalePreview));
+      currSel?.addEventListener('change', updateSalePreview);
+      syncSaleFormFields();
+
+      saleForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const val = targetSel?.value || '';
+        const isCustom = val.startsWith('custom_');
+        const posObj = !isCustom ? state.positions.find(p => p.id === val) : null;
+        const posEval = !isCustom ? posById[val] : null;
+        const cat = isCustom ? val.replace('custom_', '') : (posObj?.category || 'crypto');
+        const isMarket = cat === 'crypto' || cat === 'stocks';
+        const saleDate = saleForm.querySelector('#hist-sale-date')?.value || todayStr;
+        const note = (saleForm.querySelector('#hist-sale-note')?.value || '').trim();
+        const shouldDeduct = Boolean(deductChk?.checked && posObj);
+
+        const qtyVal = isMarket || cat === 'ovdp' ? (parseFloat(qtyInp?.value) || 0) : 1;
+        const priceOrAmt = parseFloat(priceInp?.value) || 0;
+        if (priceOrAmt <= 0 || (isMarket && qtyVal <= 0)) return;
+
+        ensurePurchaseHistorySeeded();
+
+        if (isMarket) {
+          const ticker = isCustom
+            ? (customNameInp?.value || 'ASSET').toUpperCase().trim()
+            : (posObj.ticker || '').toUpperCase();
+          const name = isCustom
+            ? ticker
+            : (posObj.name || ticker);
+          const totalUsd = Number((qtyVal * priceOrAmt).toFixed(2));
+          const avgBuy = posObj ? (Number(posObj.buyPriceUsd) || 0) : 0;
+          const realizedPnlUsd = avgBuy > 0 ? Number(((priceOrAmt - avgBuy) * qtyVal).toFixed(2)) : 0;
+
+          if (shouldDeduct && posObj) {
+            const remQty = Number(Math.max(0, (Number(posObj.quantity) || 0) - qtyVal).toFixed(8));
+            if (remQty <= 1e-8) {
+              state.positions = state.positions.filter(p => p.id !== posObj.id);
+            } else {
+              posObj.quantity = remQty;
+            }
+          }
+
+          recordPurchaseEntry({
+            opType: 'sell',
+            date: saleDate,
+            category: cat,
+            posId: posObj ? posObj.id : '',
+            ticker,
+            name,
+            platform: posObj?.platform || '',
+            quantity: qtyVal,
+            priceUsd: priceOrAmt,
+            totalUsd,
+            realizedPnlUsd,
+            currency: 'USD',
+            nativeAmount: totalUsd,
+            notes: note || (shouldDeduct ? `Продаж ${ticker}` : `Архівний продаж ${ticker}`)
+          });
+        } else {
+          const curr = (currSel?.value || posObj?.currency || 'UAH').toUpperCase();
+          const totalUsd = Number(toUsd(priceOrAmt, curr).toFixed(2));
+          const bondsSold = cat === 'ovdp' ? Math.max(1, Math.round(qtyVal)) : 1;
+          const ticker = cat === 'ovdp' ? 'ОВДП' : (cat === 'deposits' ? 'ДЕП' : curr);
+          const name = isCustom
+            ? ((customNameInp?.value || '').trim() || (cat === 'ovdp' ? `ОВДП (${curr})` : ticker))
+            : (posObj.name || ticker);
+
+          if (shouldDeduct && posObj) {
+            if (cat === 'cash') {
+              const rem = Math.max(0, (Number(posObj.amount) || 0) - priceOrAmt);
+              if (rem <= 0.01) state.positions = state.positions.filter(p => p.id !== posObj.id);
+              else posObj.amount = Number(rem.toFixed(2));
+            } else {
+              const remPrin = Math.max(0, (Number(posObj.principalAmount) || 0) - priceOrAmt);
+              if (cat === 'ovdp') {
+                posObj.bondsCount = Math.max(0, (Number(posObj.bondsCount) || 0) - bondsSold);
+              }
+              if (remPrin <= 0.01 || (cat === 'ovdp' && posObj.bondsCount <= 0)) {
+                state.positions = state.positions.filter(p => p.id !== posObj.id);
+              } else {
+                posObj.principalAmount = Number(remPrin.toFixed(2));
+              }
+            }
+          }
+
+          recordPurchaseEntry({
+            opType: 'sell',
+            date: saleDate,
+            category: cat,
+            posId: posObj ? posObj.id : '',
+            ticker,
+            name,
+            platform: posObj?.platform || posObj?.bank || posObj?.location || '',
+            quantity: bondsSold,
+            priceUsd: bondsSold > 0 ? Number((totalUsd / bondsSold).toFixed(2)) : totalUsd,
+            totalUsd,
+            currency: curr,
+            nativeAmount: priceOrAmt,
+            notes: note || (cat === 'ovdp' ? `Продаж / погашення ОВДП (${curr})` : 'Продаж / зняття')
+          });
+        }
+
+        historySaleFormOpen = false;
+        historySalePreselectPosId = '';
+        await persistPortfolio();
+        renderAll();
+      });
+    }
+
     // Wire up handlers inside Purchase History section
+    sectionEl.querySelector('#btn-history-toggle-sale')?.addEventListener('click', () => {
+      historySaleFormOpen = !historySaleFormOpen;
+      if (historySaleFormOpen && !historySalePreselectPosId && historyAssetFilter !== 'all') {
+        if (historyAssetFilter.startsWith('pos:')) {
+          historySalePreselectPosId = historyAssetFilter.slice(4);
+        } else if (historyAssetFilter === 'type:ovdp') {
+          const firstOvdp = (allEvaluated || []).find(p => p.category === 'ovdp');
+          historySalePreselectPosId = firstOvdp ? firstOvdp.id : 'custom_ovdp';
+        } else if (historyAssetFilter.startsWith('tk:')) {
+          const parts = historyAssetFilter.split(':');
+          const match = (allEvaluated || []).find(p => p.category === parts[1] && (p.ticker || '').toUpperCase() === parts[2]);
+          if (match) historySalePreselectPosId = match.id;
+        }
+      }
+      renderPurchaseHistorySection(allEvaluated);
+    });
+
     sectionEl.querySelector('#btn-history-add-purchase')?.addEventListener('click', () => {
       let preselectId = null;
       if (historyAssetFilter.startsWith('pos:')) {
         preselectId = historyAssetFilter.slice(4);
+      } else if (historyAssetFilter === 'type:ovdp') {
+        const firstOvdp = (allEvaluated || []).find(p => p.category === 'ovdp');
+        if (firstOvdp) preselectId = firstOvdp.id;
+      } else if (historyAssetFilter.startsWith('tk:')) {
+        const parts = historyAssetFilter.split(':');
+        const match = (allEvaluated || []).find(p => p.category === parts[1] && (p.ticker || '').toUpperCase() === parts[2]);
+        if (match) preselectId = match.id;
       }
       openPositionModal(null, preselectId);
     });
@@ -13654,6 +14165,13 @@ html.balance-hidden #hero-annual-passive {
       btn.addEventListener('click', () => {
         historyCategoryFilter = btn.dataset.histCat || 'all';
         historyAssetFilter = 'all';
+        renderPurchaseHistorySection(allEvaluated);
+      });
+    });
+
+    sectionEl.querySelectorAll('[data-hist-op]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        historyOpTypeFilter = btn.dataset.histOp || 'all';
         renderPurchaseHistorySection(allEvaluated);
       });
     });
@@ -13698,6 +14216,15 @@ html.balance-hidden #hero-annual-passive {
       });
     });
 
+    sectionEl.querySelectorAll('[data-hist-sell-pos]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        historySalePreselectPosId = btn.dataset.histSellPos || '';
+        historySaleFormOpen = true;
+        renderPurchaseHistorySection(allEvaluated);
+        sectionEl.querySelector('#hist-sale-qty')?.focus();
+      });
+    });
+
     sectionEl.querySelectorAll('[data-hist-del]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const hId = btn.dataset.histDel;
@@ -13705,7 +14232,7 @@ html.balance-hidden #hero-annual-passive {
         if (!item) return;
 
         const linked = item.posId ? state.positions.find(p => p.id === item.posId) : null;
-        if (linked && (linked.category === 'crypto' || linked.category === 'stocks') && Number(item.quantity) > 0 && Number(linked.quantity) > Number(item.quantity)) {
+        if (getOpType(item) === 'buy' && linked && (linked.category === 'crypto' || linked.category === 'stocks') && Number(item.quantity) > 0 && Number(linked.quantity) > Number(item.quantity)) {
           const shouldDeduct = window.confirm(
             `Видалити запис про покупку ${item.quantity} шт. ${item.ticker || item.name}?\n\nНатисніть «ОК», щоб також відняти цю кількість (${item.quantity} шт.) від активу та перерахувати середню ціну (або «Скасувати», щоб видалити лише сам запис з історії).`
           );
