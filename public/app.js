@@ -7803,26 +7803,53 @@
       }
     });
 
+    // Unified asset identity resolver (prevents splitting old ticker-only and posId-linked records)
+    const getHistoryAssetMeta = (h) => {
+      const linked = (h.posId && posById[h.posId]) || posByCatTicker[`${h.category}:${(h.ticker || '').toUpperCase()}`] || null;
+      const key = linked
+        ? `pos:${linked.id}`
+        : `tk:${h.category}:${(h.ticker || h.name || '').toUpperCase()}`;
+      const shortTicker = (linked?.ticker || h.ticker || '').trim();
+      const displayName = (linked?.displayName || h.name || shortTicker || 'Актив').trim();
+      const shortLabel = shortTicker || (displayName.length > 18 ? displayName.slice(0, 17) + '…' : displayName);
+      const fullLabel = shortTicker && displayName.toUpperCase() !== shortTicker.toUpperCase()
+        ? `${shortTicker} — ${displayName}`
+        : displayName;
+      const sortKey = (shortTicker || displayName).toLowerCase();
+      return { linked, key, shortLabel, fullLabel, sortKey };
+    };
+
     // Filter by category
     const catFiltered = historyCategoryFilter === 'all'
       ? allHistory
       : allHistory.filter(h => h && h.category === historyCategoryFilter);
 
-    // Build distinct assets list for current category filter
+    // Build distinct sorted assets list (with purchase count & total USD per asset) for current category filter
     const assetOptionsMap = new Map();
     catFiltered.forEach(h => {
       if (!h) return;
-      const key = h.posId && posById[h.posId]
-        ? `pos:${h.posId}`
-        : `tk:${h.category}:${(h.ticker || h.name || '').toUpperCase()}`;
-      if (!assetOptionsMap.has(key)) {
-        const linked = (h.posId && posById[h.posId]) || posByCatTicker[`${h.category}:${(h.ticker || '').toUpperCase()}`];
-        const label = linked
-          ? `${linked.ticker ? linked.ticker + ' — ' : ''}${linked.displayName}`
-          : `${h.ticker ? h.ticker + ' — ' : ''}${h.name || 'Актив'}`;
-        assetOptionsMap.set(key, label);
+      const m = getHistoryAssetMeta(h);
+      const existing = assetOptionsMap.get(m.key);
+      const amtUsd = Number(h.totalUsd) || 0;
+      if (!existing) {
+        assetOptionsMap.set(m.key, {
+          key: m.key,
+          label: m.fullLabel,
+          shortLabel: m.shortLabel,
+          sortKey: m.sortKey,
+          category: h.category,
+          count: 1,
+          totalUsd: amtUsd
+        });
+      } else {
+        existing.count += 1;
+        existing.totalUsd += amtUsd;
       }
     });
+
+    const sortedAssetOptions = Array.from(assetOptionsMap.values()).sort((a, b) =>
+      a.sortKey.localeCompare(b.sortKey, 'uk')
+    );
 
     if (historyAssetFilter !== 'all' && !assetOptionsMap.has(historyAssetFilter)) {
       historyAssetFilter = 'all';
@@ -7831,13 +7858,7 @@
     // Filter by specific asset if selected
     const filtered = historyAssetFilter === 'all'
       ? catFiltered
-      : catFiltered.filter(h => {
-          if (!h) return false;
-          const key = h.posId && posById[h.posId]
-            ? `pos:${h.posId}`
-            : `tk:${h.category}:${(h.ticker || h.name || '').toUpperCase()}`;
-          return key === historyAssetFilter;
-        });
+      : catFiltered.filter(h => h && getHistoryAssetMeta(h).key === historyAssetFilter);
 
     // Sort filtered history
     const sorted = [...filtered].sort((a, b) => {
@@ -7847,25 +7868,56 @@
       const amtB = Number(b.totalUsd) || 0;
       const catA = String(CATEGORY_META[a.category]?.shortName || a.category || '');
       const catB = String(CATEGORY_META[b.category]?.shortName || b.category || '');
-      const nameA = String(a.ticker || a.name || '');
-      const nameB = String(b.ticker || b.name || '');
+      const metaA = getHistoryAssetMeta(a);
+      const metaB = getHistoryAssetMeta(b);
+      const assetTotalA = assetOptionsMap.get(metaA.key)?.totalUsd || 0;
+      const assetTotalB = assetOptionsMap.get(metaB.key)?.totalUsd || 0;
 
       switch (historySortMode) {
         case 'date_asc':
           return dateA.localeCompare(dateB);
         case 'amount_desc':
-          return amtB - amtA;
+          return amtB - amtA || dateB.localeCompare(dateA);
         case 'amount_asc':
-          return amtA - amtB;
+          return amtA - amtB || dateB.localeCompare(dateA);
         case 'category_asc':
-          return catA.localeCompare(catB, 'uk') || nameA.localeCompare(nameB, 'uk') || dateB.localeCompare(dateA);
+          return catA.localeCompare(catB, 'uk') || metaA.sortKey.localeCompare(metaB.sortKey, 'uk') || dateB.localeCompare(dateA);
+        case 'category_desc':
+          return catB.localeCompare(catA, 'uk') || metaA.sortKey.localeCompare(metaB.sortKey, 'uk') || dateB.localeCompare(dateA);
         case 'asset_asc':
-          return nameA.localeCompare(nameB, 'uk') || dateB.localeCompare(dateA);
+          return metaA.sortKey.localeCompare(metaB.sortKey, 'uk') || dateB.localeCompare(dateA);
+        case 'asset_desc':
+          return metaB.sortKey.localeCompare(metaA.sortKey, 'uk') || dateB.localeCompare(dateA);
+        case 'asset_total_desc':
+          return (assetTotalB - assetTotalA) || metaA.sortKey.localeCompare(metaB.sortKey, 'uk') || dateB.localeCompare(dateA);
         case 'date_desc':
         default:
           return dateB.localeCompare(dateA);
       }
     });
+
+    const getSortHeaderMeta = (col) => {
+      if (col === 'date') {
+        if (historySortMode === 'date_desc') return { active: true, arrow: '↓' };
+        if (historySortMode === 'date_asc') return { active: true, arrow: '↑' };
+      } else if (col === 'asset') {
+        if (historySortMode === 'asset_asc') return { active: true, arrow: '↑' };
+        if (historySortMode === 'asset_desc') return { active: true, arrow: '↓' };
+        if (historySortMode === 'asset_total_desc') return { active: true, arrow: '💰↓' };
+      } else if (col === 'category') {
+        if (historySortMode === 'category_asc') return { active: true, arrow: '↑' };
+        if (historySortMode === 'category_desc') return { active: true, arrow: '↓' };
+      } else if (col === 'amount') {
+        if (historySortMode === 'amount_desc') return { active: true, arrow: '↓' };
+        if (historySortMode === 'amount_asc') return { active: true, arrow: '↑' };
+      }
+      return { active: false, arrow: '↕' };
+    };
+
+    const thDate = getSortHeaderMeta('date');
+    const thAsset = getSortHeaderMeta('asset');
+    const thCat = getSortHeaderMeta('category');
+    const thAmt = getSortHeaderMeta('amount');
 
     // Compute totals for current filtered purchases
     const totalPurchasedUsd = sorted.reduce((s, h) => s + (Number(h.totalUsd) || 0), 0);
@@ -7886,7 +7938,7 @@
         <div>
           <div class="panel-title">📜 Історія покупок та поповнень активів</div>
           <div class="panel-subtitle">
-            Усі ваші покупки з фільтрацією та сортуванням за категоріями. Нові покупки автоматично додаються до обраного активу та перераховують середню ціну.
+            Усі ваші покупки з фільтрацією та сортуванням за активом, датою, сумою і категорією. Нові покупки автоматично перераховують середню ціну.
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -7897,7 +7949,7 @@
       </div>
 
       <!-- Category Filter Pills + Asset Filter + Sort Selector -->
-      <div class="dynamics-chart-toolbar" style="margin-bottom:12px;">
+      <div class="dynamics-chart-toolbar" style="margin-bottom:${sortedAssetOptions.length > 1 ? '8px' : '12px'};">
         <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;" role="group" aria-label="Фільтр категорії історії покупок">
           ${catPillsOrder.map(cp => {
             const isAct = historyCategoryFilter === cp.key;
@@ -7913,23 +7965,46 @@
         </div>
 
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <select class="form-select" id="history-asset-filter" style="font-size:12px; padding:5px 10px; width:auto; min-width:170px;" title="Фільтр за конкретним активом">
+          <select class="form-select" id="history-asset-filter" style="font-size:12px; padding:5px 10px; width:auto; min-width:185px;" title="Фільтр за конкретним активом">
             <option value="all">🎯 Усі активи (${catFiltered.length})</option>
-            ${Array.from(assetOptionsMap.entries()).map(([k, lbl]) => `
-              <option value="${escapeHtml(k)}" ${historyAssetFilter === k ? 'selected' : ''}>${escapeHtml(lbl)}</option>
+            ${sortedAssetOptions.map(opt => `
+              <option value="${escapeHtml(opt.key)}" ${historyAssetFilter === opt.key ? 'selected' : ''}>${escapeHtml(opt.label)} (${opt.count})</option>
             `).join('')}
           </select>
 
-          <select class="form-select" id="history-sort-mode" style="font-size:12px; padding:5px 10px; width:auto; min-width:210px;" title="Сортування історії покупок">
-            <option value="date_desc" ${historySortMode === 'date_desc' ? 'selected' : ''}>📅 Сортування: Дата (спочатку нові ↓)</option>
-            <option value="date_asc" ${historySortMode === 'date_asc' ? 'selected' : ''}>📅 Сортування: Дата (спочатку старі ↑)</option>
-            <option value="amount_desc" ${historySortMode === 'amount_desc' ? 'selected' : ''}>💰 Сортування: Сума (від найбільшої ↓)</option>
-            <option value="amount_asc" ${historySortMode === 'amount_asc' ? 'selected' : ''}>💰 Сортування: Сума (від найменшої ↑)</option>
-            <option value="category_asc" ${historySortMode === 'category_asc' ? 'selected' : ''}>🗂️ Сортування: За категорією (А–Я)</option>
-            <option value="asset_asc" ${historySortMode === 'asset_asc' ? 'selected' : ''}>🔤 Сортування: За активом / тікером (А–Я)</option>
+          <select class="form-select" id="history-sort-mode" style="font-size:12px; padding:5px 10px; width:auto; min-width:225px;" title="Сортування історії покупок">
+            <option value="date_desc" ${historySortMode === 'date_desc' ? 'selected' : ''}>📅 Дата (спочатку нові ↓)</option>
+            <option value="date_asc" ${historySortMode === 'date_asc' ? 'selected' : ''}>📅 Дата (спочатку старі ↑)</option>
+            <option value="asset_asc" ${historySortMode === 'asset_asc' ? 'selected' : ''}>🔤 Актив / тікер (А–Я ↑)</option>
+            <option value="asset_desc" ${historySortMode === 'asset_desc' ? 'selected' : ''}>🔤 Актив / тікер (Я–А ↓)</option>
+            <option value="asset_total_desc" ${historySortMode === 'asset_total_desc' ? 'selected' : ''}>📊 Актив (за сумою вкладень ↓)</option>
+            <option value="amount_desc" ${historySortMode === 'amount_desc' ? 'selected' : ''}>💰 Сума покупки (найбільша ↓)</option>
+            <option value="amount_asc" ${historySortMode === 'amount_asc' ? 'selected' : ''}>💰 Сума покупки (найменша ↑)</option>
+            <option value="category_asc" ${historySortMode === 'category_asc' ? 'selected' : ''}>🗂️ Категорія (А–Я ↑)</option>
+            <option value="category_desc" ${historySortMode === 'category_desc' ? 'selected' : ''}>🗂️ Категорія (Я–А ↓)</option>
           </select>
         </div>
       </div>
+
+      ${sortedAssetOptions.length > 1 ? `
+        <!-- Quick Clickable Asset Filter Chips -->
+        <div class="history-asset-chips" role="group" aria-label="Швидкий фільтр за активом">
+          <button type="button" class="history-asset-chip ${historyAssetFilter === 'all' ? 'active' : ''}" data-hist-asset-chip="all">
+            Усі активи <span class="history-asset-chip-cnt">${catFiltered.length}</span>
+          </button>
+          ${sortedAssetOptions.map(opt => {
+            const catClr = CATEGORY_META[opt.category]?.color || 'var(--accent-primary)';
+            const isAct = historyAssetFilter === opt.key;
+            return `
+              <button type="button" class="history-asset-chip ${isAct ? 'active' : ''}" data-hist-asset-chip="${escapeHtml(opt.key)}" title="${escapeHtml(opt.label)} · ${opt.count} опер.">
+                <span class="history-asset-chip-dot" style="background:${catClr};"></span>
+                <span>${escapeHtml(opt.shortLabel)}</span>
+                <span class="history-asset-chip-cnt">${opt.count}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      ` : ''}
 
       <!-- Summary KPI Strip for Filtered Purchases -->
       <div class="dynamics-summary-strip" style="margin-bottom:12px;">
@@ -7955,12 +8030,12 @@
         <table class="positions-table">
           <thead>
             <tr>
-              <th style="cursor:pointer;" data-hist-sort-col="date">Дата покупки ↕</th>
-              <th style="cursor:pointer;" data-hist-sort-col="asset">Актив (Куди зараховано) ↕</th>
-              <th style="cursor:pointer;" data-hist-sort-col="category">Категорія / Платформа ↕</th>
+              <th class="hist-sort-th ${thDate.active ? 'is-sorted' : ''}" data-hist-sort-col="date">Дата покупки <span class="hist-sort-arrow">${thDate.arrow}</span></th>
+              <th class="hist-sort-th ${thAsset.active ? 'is-sorted' : ''}" data-hist-sort-col="asset">Актив (Куди зараховано) <span class="hist-sort-arrow">${thAsset.arrow}</span></th>
+              <th class="hist-sort-th ${thCat.active ? 'is-sorted' : ''}" data-hist-sort-col="category">Категорія / Платформа <span class="hist-sort-arrow">${thCat.arrow}</span></th>
               <th class="text-right">Куплена кількість</th>
               <th class="text-right">Ціна покупки → Зараз</th>
-              <th class="text-right" style="cursor:pointer;" data-hist-sort-col="amount">Сума покупки ↕</th>
+              <th class="text-right hist-sort-th ${thAmt.active ? 'is-sorted' : ''}" data-hist-sort-col="amount">Сума покупки <span class="hist-sort-arrow">${thAmt.arrow}</span></th>
               <th class="text-right">Дії</th>
             </tr>
           </thead>
@@ -7973,7 +8048,8 @@
               </tr>
             ` : sorted.map(item => {
               const catInfo = CATEGORY_META[item.category] || CATEGORY_META.all;
-              const linkedPos = (item.posId && posById[item.posId]) || posByCatTicker[`${item.category}:${(item.ticker || '').toUpperCase()}`];
+              const assetMeta = getHistoryAssetMeta(item);
+              const linkedPos = assetMeta.linked;
               const isMarket = item.category === 'crypto' || item.category === 'stocks';
               const buyPriceUsd = Number(item.priceUsd) || 0;
               const qty = Number(item.quantity) || 0;
@@ -8019,7 +8095,13 @@
                   </td>
                   <td>
                     <div class="asset-cell">
-                      <span class="ticker-badge" style="border-left: 3px solid ${catInfo.color}">${escapeHtml(item.ticker || 'АКТИВ')}</span>
+                      <button
+                        type="button"
+                        class="ticker-badge hist-row-asset-btn"
+                        data-hist-asset-chip="${escapeHtml(assetMeta.key)}"
+                        style="border-left: 3px solid ${catInfo.color};"
+                        title="${historyAssetFilter === assetMeta.key ? 'Показати всі активи' : 'Показати тільки покупки цього активу'}"
+                      >${escapeHtml(item.ticker || 'АКТИВ')}</button>
                       <div>
                         <div class="asset-name-primary">${escapeHtml(item.name || item.ticker || 'Актив')}</div>
                         <div class="asset-name-sub">${linkedStatusHtml}${item.notes ? ` · ${escapeHtml(item.notes)}` : ''}</div>
@@ -8069,6 +8151,14 @@
       });
     });
 
+    sectionEl.querySelectorAll('[data-hist-asset-chip]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.histAssetChip || 'all';
+        historyAssetFilter = (key !== 'all' && historyAssetFilter === key) ? 'all' : key;
+        renderPurchaseHistorySection(allEvaluated);
+      });
+    });
+
     sectionEl.querySelector('#history-asset-filter')?.addEventListener('change', (e) => {
       historyAssetFilter = e.target.value || 'all';
       renderPurchaseHistorySection(allEvaluated);
@@ -8087,9 +8177,9 @@
         } else if (col === 'amount') {
           historySortMode = historySortMode === 'amount_desc' ? 'amount_asc' : 'amount_desc';
         } else if (col === 'category') {
-          historySortMode = 'category_asc';
+          historySortMode = historySortMode === 'category_asc' ? 'category_desc' : 'category_asc';
         } else if (col === 'asset') {
-          historySortMode = 'asset_asc';
+          historySortMode = historySortMode === 'asset_asc' ? 'asset_desc' : 'asset_asc';
         }
         renderPurchaseHistorySection(allEvaluated);
       });
